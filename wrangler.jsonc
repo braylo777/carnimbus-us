@@ -1,0 +1,11 @@
+{
+  // Cloudflare Workers config — serves the Next.js static export in ./out
+  // as a static-assets-only Worker (no server code). Deployed by `npx wrangler deploy`.
+  "name": "carnimbus-com",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./out",
+    // Next.js `output: export` emits a 404.html — serve it for unknown paths.
+    "not_found_handling": "404-page"
+  }
+}
