@@ -55,12 +55,19 @@ async function waitlist(request, env) {
   }
 
   // 2) Parse + size guard.
-  let email, lang, token, consent;
+  let email, lang, token, consent, hp, t;
   try {
     const body = await request.json();
-    ({ email, lang, token, consent } = body || {});
+    ({ email, lang, token, consent, hp, t } = body || {});
   } catch {
     return json({ ok: false, error: "bad_request" }, 400);
+  }
+
+  // 2b) Bot heuristics: honeypot filled → silently "accept" (don't teach the bot);
+  //     sub-1.5s submits after page load are not human.
+  if (hp) return json({ ok: true }, 200);
+  if (typeof t === "number" && t >= 0 && t < 1500) {
+    return json({ ok: false, error: "captcha" }, 403);
   }
 
   const ip = request.headers.get("CF-Connecting-IP") || "0.0.0.0";
