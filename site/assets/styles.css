@@ -219,3 +219,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,.navlink:focus-visible{
   .btn.lg{padding:12px 16px}                                                            /* tap targets */
   .wl-form [style*="display:flex"]{flex-wrap:wrap}                                      /* email+button stack */
 }
+/* ===== waitlist flow states ===== */
+.wl-msg{font:600 12px Manrope;color:#ff8f8f;margin-top:9px;text-align:left}
+.pill.invalid{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.15)}
+.consent.invalid{color:#ff8f8f}
+.consent.invalid a{color:#ff8f8f}
+@keyframes wl-shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.wl-shake{animation:wl-shake .18s 2}
+.btn.loading{pointer-events:none;opacity:.85}
+.btn.ghost{background:transparent;border:1px solid rgba(24,200,255,.4);color:#18C8FF}
+.btn.ghost:hover{background:rgba(24,200,255,.1)}
+.wl-done{display:flex;flex-direction:column;align-items:center;gap:8px;padding:22px 18px;border:1px solid rgba(57,217,138,.35);border-radius:16px;background:rgba(57,217,138,.07);animation:wl-pop .35s cubic-bezier(.22,1.4,.36,1);outline:none}
+.wl-done-h{font:700 20px 'Space Grotesk',sans-serif;color:#fff}
+.wl-done-p{font:500 13px/1.5 Manrope;color:#aebfdf;text-align:center;max-width:380px}
+.wl-done-row{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+@keyframes wl-pop{from{transform:scale(.92);opacity:0}}
+.cf-turnstile{min-height:65px}
+.pill:focus{border-color:#18C8FF;box-shadow:0 0 0 3px rgba(24,200,255,.18)}

@@ -55,10 +55,10 @@ async function waitlist(request, env) {
   }
 
   // 2) Parse + size guard.
-  let email, lang, token, consent, hp, t;
+  let phone, email, lang, token, consent, hp, t;
   try {
     const body = await request.json();
-    ({ email, lang, token, consent, hp, t } = body || {});
+    ({ phone, email, lang, token, consent, hp, t } = body || {});
   } catch {
     return json({ ok: false, error: "bad_request" }, 400);
   }
@@ -90,41 +90,34 @@ async function waitlist(request, env) {
     if (!ok) return json({ ok: false, error: "captcha" }, 403);
   }
 
-  // 5) Validate.
+  // 5) Validate — phone-first: phone required (US), email optional.
+  phone = String(phone || "").replace(/\D/g, "");
+  if (phone.length === 11 && phone[0] === "1") phone = phone.slice(1);
+  if (!/^[2-9]\d{9}$/.test(phone)) return json({ ok: false, error: "invalid_phone" }, 422);
+  phone = "+1" + phone;
   email = String(email || "").trim().toLowerCase();
-  if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) {
     return json({ ok: false, error: "invalid_email" }, 422);
   }
   if (consent !== true) {
     return json({ ok: false, error: "consent_required" }, 422);
   }
 
-  // 6) Insert (new schema; falls back to the original columns pre-migration).
+  // 6) Insert — phone is the dedup key (migration 0003 schema).
   const now = new Date().toISOString();
   const ua = request.headers.get("user-agent") || "";
   const l = String(lang || "en").slice(0, 5);
   try {
     const r = await env.DB
       .prepare(
-        "INSERT INTO waitlist (email, lang, created_at, user_agent, ip, sms_consent) " +
-          "VALUES (?,?,?,?,?,1) ON CONFLICT(email) DO NOTHING"
+        "INSERT INTO waitlist (phone, email, lang, created_at, user_agent, ip, sms_consent) " +
+          "VALUES (?,?,?,?,?,?,1) ON CONFLICT(phone) DO NOTHING"
       )
-      .bind(email, l, now, ua, ip)
+      .bind(phone, email || null, l, now, ua, ip)
       .run();
     return json({ ok: true, already: r.meta.changes === 0 });
-  } catch (_) {
-    try {
-      const r = await env.DB
-        .prepare(
-          "INSERT INTO waitlist (email, lang, created_at, user_agent) " +
-            "VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING"
-        )
-        .bind(email, l, now, ua)
-        .run();
-      return json({ ok: true, already: r.meta.changes === 0 });
-    } catch (e) {
-      return json({ ok: false, error: "server_error" }, 500);
-    }
+  } catch (e) {
+    return json({ ok: false, error: "server_error" }, 500);
   }
 }
 

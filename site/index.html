@@ -54,12 +54,14 @@
           <div style="font:500 16px/1.5 Manrope;color:#cbd5e1;margin:18px 0 0;max-width:445px">Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.</div>
           <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px">
             <form class="wl-form" data-src="hero">
-              <div style="display:flex;gap:9px">
-                <label class="vh" for="wl-email-hero">Email address</label>
-                <input id="wl-email-hero" type="email" class="pill" required placeholder="you@email.com" style="flex:1;height:48px">
+              <div class="wl-fields" style="display:flex;gap:9px">
+                <label class="vh" for="wl-phone-hero">Mobile number</label>
+                <input id="wl-phone-hero" type="tel" name="phone" class="pill" required placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel" style="flex:1;height:48px">
                 <button type="submit" class="btn primary lg">Get early access</button>
               </div>
-              <label class="consent"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a> and to receive email/SMS updates — msg&amp;data rates may apply, reply STOP to opt out.</label>
+              <label class="vh" for="wl-email-hero">Email (optional)</label>
+              <input id="wl-email-hero" type="email" name="email" class="pill" placeholder="Email (optional — for your receipt)" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" style="width:100%;margin-top:9px">
+              <label class="consent"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a> and to receive the launch text + occasional updates — msg&amp;data rates may apply, reply STOP to opt out.</label>
           <input type="text" name="website" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true">
               <!-- Bot protection: paste your Cloudflare Turnstile sitekey and uncomment to enable -->
               <!-- <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITEKEY"></div> -->
@@ -309,12 +311,14 @@
         <div class="disp" style="font-size:34px;font-weight:600">Be first in line.</div>
         <div style="font:500 14px Manrope;color:#aebfdf;margin:9px 0 22px;max-width:460px">Join the waitlist and we’ll text you the day CarNimbus is ready to use.</div>
         <form class="wl-form" data-src="footer-cta" style="width:100%;max-width:460px">
-          <div style="display:flex;gap:9px">
-            <label class="vh" for="wl-email-cta">Email address</label>
-            <input id="wl-email-cta" type="email" class="pill" required placeholder="you@email.com" style="flex:1">
+          <div class="wl-fields" style="display:flex;gap:9px">
+            <label class="vh" for="wl-phone-cta">Mobile number</label>
+            <input id="wl-phone-cta" type="tel" name="phone" class="pill" required placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel" style="flex:1">
             <button type="submit" class="btn primary lg">Join Waitlist</button>
           </div>
-          <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a> and to receive email/SMS updates — reply STOP to opt out.</label>
+          <label class="vh" for="wl-email-cta">Email (optional)</label>
+          <input id="wl-email-cta" type="email" name="email" class="pill" placeholder="Email (optional — for your receipt)" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" style="width:100%;margin-top:9px">
+          <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a> and to receive the launch text + occasional updates — msg&amp;data rates may apply, reply STOP to opt out.</label>
           <input type="text" name="website" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true">
           <!-- <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITEKEY"></div> -->
         </form>

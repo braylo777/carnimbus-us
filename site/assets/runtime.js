@@ -151,7 +151,18 @@
 "Please agree to the Privacy Policy to continue.": "Acepta la Política de Privacidad para continuar.",
 "Too many attempts — please try again later.": "Demasiados intentos: inténtalo más tarde.",
 "Bot check failed — please retry.": "Falló la verificación anti-bots: reintenta.",
-"Request blocked. Refresh and try again.": "Solicitud bloqueada. Recarga e inténtalo de nuevo."} };
+"Request blocked. Refresh and try again.": "Solicitud bloqueada. Recarga e inténtalo de nuevo.",
+"Mobile number":"Número de celular",
+"Email (optional — for your receipt)":"Correo (opcional — para tu comprobante)",
+"That number doesn't look right — 10 digits, US for now.":"Ese número no se ve bien: 10 dígitos, EE.UU. por ahora.",
+"No spam. One text when we launch. Reply STOP anytime.":"Sin spam. Un mensaje cuando lancemos. Responde STOP cuando quieras.",
+"and to receive the launch text + occasional updates — msg&data rates may apply, reply STOP to opt out.":"y recibir el mensaje de lanzamiento + novedades ocasionales — pueden aplicar tarifas; responde STOP para salir.",
+"You're in. One text at launch.":"¡Estás dentro! Un mensaje al lanzar.",
+"We'll text you the day CarNimbus goes live in LA. That's it — reply STOP anytime.":"Te mandamos un mensaje el día que CarNimbus llegue a LA. Eso es todo — responde STOP cuando quieras.",
+"Browse the cars →":"Explora los autos →",
+"Share with a friend":"Comparte con un amigo",
+"Copied ✓":"Copiado ✓",
+"Connection hiccup — check your signal and try again.":"Falló la conexión: revisa tu señal e inténtalo de nuevo."} };
   var CUR="en", ORIG=new WeakMap(), BOOT=Date.now();
   function L(s){ return CUR==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
@@ -175,22 +186,54 @@
     var g=ev.target.closest("[data-cngo]"); if(g){ ev.preventDefault(); go(g.dataset.cngo); } }); }
   function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
     if(f.dataset.wired) return; f.dataset.wired="1";
+    // returning visitor: show joined card instead of the form
+    var joined; try{ joined=localStorage.cn_joined; }catch(_){ }
+    if(joined){ renderDone(f,true,false); return; }
     f.addEventListener("submit", async function(e){ e.preventDefault();
-      var input=f.querySelector('input[type=email]'), email=(input&&input.value||"").trim();
+      var pEl=f.querySelector('input[type=tel]'), eEl=f.querySelector('input[type=email]');
+      var phone=(pEl&&pEl.value||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1);
+      var email=(eEl&&eEl.value||"").trim();
       var consentEl=f.querySelector(".wl-consent"), consent=consentEl?consentEl.checked===true:true;
+      clearErr(f);
+      if(!/^[2-9]\d{9}$/.test(phone)){ return err(f,pEl,L("That number doesn't look right — 10 digits, US for now.")); }
+      if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ return err(f,eEl,L("Please enter a valid email")); }
+      if(consentEl && !consent){ var cl=consentEl.closest(".consent"); if(cl)cl.classList.add("invalid"); consentEl.focus();
+        return err(f,null,L("Please agree to the Privacy Policy to continue.")); }
       var token=(f.querySelector('[name=cf-turnstile-response]')||{}).value||"";
-      var btn=f.querySelector("button,.btn");
-      if(consentEl && !consent){ alert(L("Please agree to the Privacy Policy to continue.")); return; }
-      if(btn){ btn.dataset.orig=btn.dataset.orig||btn.textContent; btn.disabled=true; btn.textContent=L("Joining…"); }
-      var ERR={invalid_email:"Please enter a valid email",consent_required:"Please agree to the Privacy Policy to continue.",rate_limited:"Too many attempts — please try again later.",captcha:"Bot check failed — please retry.",forbidden:"Request blocked. Refresh and try again."};
+      var hp=(f.querySelector('[name=website]')||{}).value||"";
+      var btn=f.querySelector("button[type=submit]");
+      if(btn){ btn.dataset.orig=btn.dataset.orig||btn.textContent; btn.disabled=true; btn.classList.add("loading"); btn.textContent=L("Joining…"); }
+      var ERR={invalid_phone:"That number doesn't look right — 10 digits, US for now.",invalid_email:"Please enter a valid email",consent_required:"Please agree to the Privacy Policy to continue.",rate_limited:"Too many attempts — please try again later.",captcha:"Bot check failed — please retry.",forbidden:"Request blocked. Refresh and try again."};
       try{
-        var hp=(f.querySelector('[name=website]')||{}).value||"";
-        var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:email,lang:CUR,consent:consent,token:token,hp:hp,t:Date.now()-BOOT})});
+        var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},
+          body:JSON.stringify({phone:"+1"+phone,email:email,lang:CUR,consent:consent,token:token,hp:hp,t:Date.now()-BOOT})});
         var d=await res.json();
-        f.innerHTML='<div class="badge '+(d.ok?"green":"red")+'" role="status" aria-live="polite" style="padding:12px 16px;font:600 12px Manrope">'+
-          (d.ok?(d.already?L("You're already on the list ✓"):L("You're on the list ✓")):L(ERR[d.error]||"Something went wrong — try again."))+'</div>';
-      }catch(_){ if(btn){btn.disabled=false;btn.textContent=btn.dataset.orig||"Join Waitlist";} alert(L("Something went wrong — try again.")); }
-    }); }); }
+        if(d.ok){ try{localStorage.cn_joined="1";}catch(_){ } renderDone(f,!!d.already,true); }
+        else { reset(btn); err(f, d.error==="invalid_email"?eEl:pEl, L(ERR[d.error]||"Something went wrong — try again.")); }
+      }catch(_){ reset(btn); err(f,null,L("Connection hiccup — check your signal and try again.")); }
+    });
+    function reset(btn){ if(btn){btn.disabled=false;btn.classList.remove("loading");btn.textContent=btn.dataset.orig||"Join Waitlist";} }
+    function clearErr(f2){ var m=f2.querySelector(".wl-msg"); if(m)m.remove();
+      f2.querySelectorAll(".invalid").forEach(function(x){x.classList.remove("invalid");}); }
+    function err(f2,input,msg){ clearErr(f2);
+      if(input){ input.classList.add("invalid"); input.classList.add("wl-shake");
+        setTimeout(function(){input.classList.remove("wl-shake");},400); input.focus(); }
+      var m=document.createElement("div"); m.className="wl-msg"; m.setAttribute("role","alert"); m.textContent=msg;
+      f2.appendChild(m); }
+    function renderDone(f2,already,focus){
+      f2.innerHTML='<div class="wl-done" role="status" aria-live="polite" tabindex="-1">'+
+        '<div class="wl-done-h">'+(already?L("You're already on the list ✓"):L("You're in. One text at launch."))+'</div>'+
+        '<div class="wl-done-p">'+L("We'll text you the day CarNimbus goes live in LA. That's it — reply STOP anytime.")+'</div>'+
+        '<div class="wl-done-row"><a class="btn ghost sm" href="/browse" style="text-decoration:none">'+L("Browse the cars →")+'</a>'+
+        '<button type="button" class="btn ghost sm wl-share">'+L("Share with a friend")+'</button></div></div>';
+      var card=f2.querySelector(".wl-done"); if(card&&focus)card.focus();
+      var sh=f2.querySelector(".wl-share"); if(sh)sh.addEventListener("click",function(){
+        var txt="Skip the dealership games — carnimbus.com";
+        if(navigator.share){ navigator.share({text:txt,url:"https://carnimbus.com"}).catch(function(){}); }
+        else { try{navigator.clipboard.writeText(txt+" https://carnimbus.com"); sh.textContent=L("Copied ✓");}catch(_){} }
+      });
+    }
+  }); }
   function applyLang(lang){
     CUR=lang; try{localStorage.cn_lang=lang;}catch(_){}
     document.documentElement.lang=lang;
@@ -212,6 +255,8 @@
   function initI18n(){ var s; try{s=localStorage.cn_lang;}catch(_){}
     setLang(s || ((navigator.language||"en").slice(0,2)==="es"?"es":"en")); }
   (function boot(){ var t=0, iv=setInterval(function(){
-    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n(); } },30); })();
+    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n();
+      if(location.pathname.replace(/\/$/,"")==="/waitlist"&&matchMedia("(pointer:fine)").matches){var pi=document.querySelector("input[type=tel]");if(pi)pi.focus();}
+    } },30); })();
 
 })();
