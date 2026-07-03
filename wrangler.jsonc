@@ -1,0 +1,22 @@
+{
+  // CarNimbus — static marketing site (Assets) + waitlist API Worker (D1).
+  // Assets served from ./site; POST /api/waitlist handled by worker.js → D1.
+  "name": "carnimbus-com",
+  "compatibility_date": "2025-01-01",
+  "main": "worker.js",
+  "routes": [
+    { "pattern": "carnimbus.com", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "carnimbus-waitlist",
+      "database_id": "43d0dc1a-96c1-49dd-98da-e4f865b7a013"
+    }
+  ]
+}
