@@ -162,7 +162,13 @@
 "Browse the cars →":"Explora los autos →",
 "Share with a friend":"Comparte con un amigo",
 "Copied ✓":"Copiado ✓",
-"Connection hiccup — check your signal and try again.":"Falló la conexión: revisa tu señal e inténtalo de nuevo."} };
+"Connection hiccup — check your signal and try again.":"Falló la conexión: revisa tu señal e inténtalo de nuevo.",
+"Join the wait list and we'll text you.":"Únete a la lista y te mandamos un mensaje.",
+"You're already on the list. We'll text you.":"Ya estás en la lista. Te mandaremos un mensaje.",
+"I agree to the":"Acepto la",
+"I agree to receive recurring marketing & waitlist texts from CarNimbus at the number provided (up to 4 msgs/mo). Consent is not a condition of purchase. Msg&data rates may apply. Reply STOP to cancel, HELP for help.":"Acepto recibir mensajes recurrentes de marketing y de la lista de espera de CarNimbus al número indicado (hasta 4 msjs/mes). El consentimiento no es condición de compra. Pueden aplicar tarifas. Responde STOP para cancelar, HELP para ayuda.",
+"Please check the SMS consent box — that's how we text you.":"Marca la casilla de consentimiento SMS: así te enviamos mensajes.",
+"No spam. One text when we launch. Reply STOP anytime.":"Sin spam. Un mensaje cuando lancemos. Responde STOP cuando quieras."} };
   var CUR="en", ORIG=new WeakMap(), BOOT=Date.now();
   function L(s){ return CUR==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
@@ -190,26 +196,27 @@
     var joined; try{ joined=localStorage.cn_joined; }catch(_){ }
     if(joined){ renderDone(f,true,false); return; }
     f.addEventListener("submit", async function(e){ e.preventDefault();
-      var pEl=f.querySelector('input[type=tel]'), eEl=f.querySelector('input[type=email]');
+      var pEl=f.querySelector('input[type=tel]');
       var phone=(pEl&&pEl.value||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1);
-      var email=(eEl&&eEl.value||"").trim();
       var consentEl=f.querySelector(".wl-consent"), consent=consentEl?consentEl.checked===true:true;
+      var privEl=f.querySelector(".wl-privacy"), priv=privEl?privEl.checked===true:true;
       clearErr(f);
       if(!/^[2-9]\d{9}$/.test(phone)){ return err(f,pEl,L("That number doesn't look right — 10 digits, US for now.")); }
-      if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ return err(f,eEl,L("Please enter a valid email")); }
-      if(consentEl && !consent){ var cl=consentEl.closest(".consent"); if(cl)cl.classList.add("invalid"); consentEl.focus();
+      if(privEl && !priv){ var pl=privEl.closest(".consent"); if(pl)pl.classList.add("invalid"); privEl.focus();
         return err(f,null,L("Please agree to the Privacy Policy to continue.")); }
+      if(consentEl && !consent){ var cl=consentEl.closest(".consent"); if(cl)cl.classList.add("invalid"); consentEl.focus();
+        return err(f,null,L("Please check the SMS consent box — that's how we text you.")); }
       var token=(f.querySelector('[name=cf-turnstile-response]')||{}).value||"";
       var hp=(f.querySelector('[name=website]')||{}).value||"";
       var btn=f.querySelector("button[type=submit]");
       if(btn){ btn.dataset.orig=btn.dataset.orig||btn.textContent; btn.disabled=true; btn.classList.add("loading"); btn.textContent=L("Joining…"); }
-      var ERR={invalid_phone:"That number doesn't look right — 10 digits, US for now.",invalid_email:"Please enter a valid email",consent_required:"Please agree to the Privacy Policy to continue.",rate_limited:"Too many attempts — please try again later.",captcha:"Bot check failed — please retry.",forbidden:"Request blocked. Refresh and try again."};
+      var ERR={invalid_phone:"That number doesn't look right — 10 digits, US for now.",consent_required:"Please agree to the Privacy Policy to continue.",rate_limited:"Too many attempts — please try again later.",captcha:"Bot check failed — please retry.",forbidden:"Request blocked. Refresh and try again."};
       try{
         var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},
-          body:JSON.stringify({phone:"+1"+phone,email:email,lang:CUR,consent:consent,token:token,hp:hp,t:Date.now()-BOOT})});
+          body:JSON.stringify({phone:"+1"+phone,lang:CUR,consent:consent,privacy:priv,token:token,hp:hp,t:Date.now()-BOOT})});
         var d=await res.json();
         if(d.ok){ try{localStorage.cn_joined="1";}catch(_){ } renderDone(f,!!d.already,true); }
-        else { reset(btn); err(f, d.error==="invalid_email"?eEl:pEl, L(ERR[d.error]||"Something went wrong — try again.")); }
+        else { reset(btn); err(f, pEl, L(ERR[d.error]||"Something went wrong — try again.")); }
       }catch(_){ reset(btn); err(f,null,L("Connection hiccup — check your signal and try again.")); }
     });
     function reset(btn){ if(btn){btn.disabled=false;btn.classList.remove("loading");btn.textContent=btn.dataset.orig||"Join Waitlist";} }
@@ -222,7 +229,7 @@
       f2.appendChild(m); }
     function renderDone(f2,already,focus){
       f2.innerHTML='<div class="wl-done" role="status" aria-live="polite" tabindex="-1">'+
-        '<div class="wl-done-h">'+(already?L("You're already on the list ✓"):L("You're in. One text at launch."))+'</div>'+
+        '<div class="wl-done-h">'+(already?L("You're already on the list. We'll text you."):L("You're in. One text at launch."))+'</div>'+
         '<div class="wl-done-p">'+L("We'll text you the day CarNimbus goes live in LA. That's it — reply STOP anytime.")+'</div>'+
         '<div class="wl-done-row"><a class="btn ghost sm" href="/browse" style="text-decoration:none">'+L("Browse the cars →")+'</a>'+
         '<button type="button" class="btn ghost sm wl-share">'+L("Share with a friend")+'</button></div></div>';

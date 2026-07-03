@@ -37,3 +37,9 @@ Goal is full `'self'`. Allowed third parties and why; remove when the reason dis
 - No NPM/packages (2026-06 supply-chain incident). Vanilla only.
 - Never commit secrets; Turnstile secret lives in Worker secrets.
 - Waitlist PII (email/ip/consent) stays in D1; see `/privacy`.
+
+## Branch rules (BRAY-502)
+- `main` — Brandon's vibe-code deploys ONLY; wrangler auto-deploy pins here. Never force-push.
+- `linux-js-migration` — Jono's secured Linux.js rebuild. Private until reviewed.
+- Cross-merges ONLY via reviewed PR (both operators approve). No direct commits to the other's branch.
+- Remote pending: `gh repo create carnimbus-com-site --private --source=. --push` (Brandon runs).

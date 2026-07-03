@@ -44,16 +44,15 @@
     <div class="z col" style="align-items:center;text-align:center;padding:78px 30px 60px;gap:15px">
       <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow">Early access</x-import>
       <h1 class="hero-h1" style="font-size:clamp(34px,5vw,52px)">Be first in line.</h1>
-      <div style="font:500 15px/1.5 Manrope;color:#aebfdf;max-width:440px">Join the waitlist and we'll text you the day CarNimbus is ready to use.</div>
+      <div style="font:500 15px/1.5 Manrope;color:#aebfdf;max-width:440px">Join the wait list and we'll text you.</div>
       <form class="wl-form" data-src="waitlist" style="width:100%;max-width:440px;margin-top:10px">
         <div class="wl-fields" style="display:flex;gap:9px">
           <label class="vh" for="wl-phone-page">Mobile number</label>
           <input id="wl-phone-page" type="tel" name="phone" class="pill" required placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel" style="flex:1">
-          <button type="submit" class="btn primary lg">Join Waitlist</button>
+          <button type="submit" class="btn primary">Join Waitlist</button>
         </div>
-        <label class="vh" for="wl-email-page">Email (optional)</label>
-        <input id="wl-email-page" type="email" name="email" class="pill" placeholder="Email (optional — for your receipt)" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" style="width:100%;margin-top:9px">
-        <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a> and to receive the launch text + occasional updates — msg&amp;data rates may apply, reply STOP to opt out.</label>
+        <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-privacy" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a>.</label>
+        <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-consent" required> I agree to receive recurring marketing &amp; waitlist texts from CarNimbus at the number provided (up to 4 msgs/mo). Consent is not a condition of purchase. Msg&amp;data rates may apply. Reply STOP to cancel, HELP for help.</label>
           <input type="text" name="website" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true">
         <!-- <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITEKEY"></div> -->
       </form>
