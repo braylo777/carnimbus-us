@@ -198,3 +198,13 @@ textarea.field{padding:14px 16px;height:auto;min-height:110px;resize:vertical}
   [style*="grid-template-columns:repeat(4"]{grid-template-columns:1fr!important}
   [style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
 }
+/* visually-hidden (screen-reader-only) labels */
+.vh{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* SMS/marketing consent row */
+.consent{display:flex;gap:8px;align-items:flex-start;font:500 11px/1.45 Manrope;color:#9fb4dd;margin-top:11px;text-align:left}
+.consent input{margin-top:2px;flex:0 0 auto}
+.consent a{color:#18C8FF}
+/* visible keyboard focus for interactive elements */
+a:focus-visible,button:focus-visible,input:focus-visible,.navlink:focus-visible{outline:2px solid #18C8FF;outline-offset:2px;border-radius:4px}
+/* honor reduced-motion */
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}

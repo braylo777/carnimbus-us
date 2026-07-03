@@ -152,13 +152,18 @@
     if(f.dataset.wired) return; f.dataset.wired="1";
     f.addEventListener("submit", async function(e){ e.preventDefault();
       var input=f.querySelector('input[type=email]'), email=(input&&input.value||"").trim();
-      var btn=f.querySelector("button,.btn"); if(btn){ btn.disabled=true; btn.textContent=L("Joining…"); }
+      var consentEl=f.querySelector(".wl-consent"), consent=consentEl?consentEl.checked===true:true;
+      var token=(f.querySelector('[name=cf-turnstile-response]')||{}).value||"";
+      var btn=f.querySelector("button,.btn");
+      if(consentEl && !consent){ alert(L("Please agree to the Privacy Policy to continue.")); return; }
+      if(btn){ btn.dataset.orig=btn.dataset.orig||btn.textContent; btn.disabled=true; btn.textContent=L("Joining…"); }
+      var ERR={invalid_email:"Please enter a valid email",consent_required:"Please agree to the Privacy Policy to continue.",rate_limited:"Too many attempts — please try again later.",captcha:"Bot check failed — please retry.",forbidden:"Request blocked. Refresh and try again."};
       try{
-        var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:email,lang:CUR})});
+        var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:email,lang:CUR,consent:consent,token:token})});
         var d=await res.json();
-        f.innerHTML='<div class="badge '+(d.ok?"green":"red")+'" style="padding:12px 16px;font:600 12px Manrope">'+
-          (d.ok?(d.already?L("You're already on the list ✓"):L("You're on the list ✓")):L("Please enter a valid email"))+'</div>';
-      }catch(_){ if(btn){btn.disabled=false;btn.textContent="Get early access";} alert(L("Something went wrong — try again.")); }
+        f.innerHTML='<div class="badge '+(d.ok?"green":"red")+'" role="status" aria-live="polite" style="padding:12px 16px;font:600 12px Manrope">'+
+          (d.ok?(d.already?L("You're already on the list ✓"):L("You're on the list ✓")):L(ERR[d.error]||"Something went wrong — try again."))+'</div>';
+      }catch(_){ if(btn){btn.disabled=false;btn.textContent=btn.dataset.orig||"Join Waitlist";} alert(L("Something went wrong — try again.")); }
     }); }); }
   function applyLang(lang){
     CUR=lang; try{localStorage.cn_lang=lang;}catch(_){}

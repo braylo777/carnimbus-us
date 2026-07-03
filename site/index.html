@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="canonical" href="https://carnimbus.com/">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/logo.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#06163b">
 <title>CarNimbus — The power's in your hands</title>
 <meta name="description" content="Buy your dream car on your terms. Talk to the car you actually want, get pre-qualified with zero FICO impact, and just drive.">
 <meta property="og:type" content="website">
@@ -19,35 +24,47 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/styles.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"CarNimbus","url":"https://carnimbus.com","logo":"https://carnimbus.com/assets/logo.png","description":"AI-powered digital dealership — get pre-qualified with zero FICO impact, talk to the car you want, and just drive.","address":{"@type":"PostalAddress","addressLocality":"Los Angeles","addressRegion":"CA","addressCountry":"US"},"sameAs":["https://instagram.com/nimbusbros"]}</script>
 </head>
 <body>
+<noscript><div style="max-width:640px;margin:0 auto;padding:40px 24px;font-family:system-ui,sans-serif;color:#e2e9f2;background:#06163b;text-align:center">
+<h1 style="font-size:28px">CarNimbus — the power's in your hands</h1>
+<p>Buy your dream car on your terms: get pre-qualified with zero FICO impact, talk to the car you actually want, and just drive.</p>
+<p>This experience needs JavaScript. To reach us now, email <a style="color:#18C8FF" href="mailto:hello@carnimbus.com">hello@carnimbus.com</a>.</p>
+</div></noscript>
 
-<div class="stage">
+<main class="stage">
 <div style="padding:0 20px 40px"><div class="bw cv" data-screen-label="Marketing landing">
     <div class="bwbar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div><div class="bwurl"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>carnimbus.com</div></div>
     <div style="position:relative;background:#06163b">
       <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:520px;height:520px;background:rgba(24,200,255,.16);top:-120px;right:-60px"></div><div class="glow" style="width:360px;height:360px;background:rgba(11,99,229,.18);top:380px;left:-120px"></div><div class="cine-vig"></div></div>
 
       <!-- nav -->
-      <div class="z row" style="height:64px;align-items:center;padding:0 30px;border-bottom:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.55);backdrop-filter:blur(18px)">
-        <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="19" mark="true" mark-src="{{ logoUrl }}" hint-size="150px,30px"></x-import>
-        <div class="row" style="gap:28px;margin-left:36px"><span class="navlink">How it works</span><span class="navlink">Browse</span></div>
+      <header class="z row" style="height:64px;align-items:center;padding:0 30px;border-bottom:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.55);backdrop-filter:blur(18px)">
+        <a href="/" aria-label="CarNimbus home" style="display:inline-flex"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="19" mark="true" mark-src="{{ logoUrl }}" hint-size="150px,30px"></x-import></a>
+        <nav aria-label="Primary" class="row" style="gap:28px;margin-left:36px"><a class="navlink" href="/#how-it-works">How it works</a><a class="navlink" href="/browse.html">Browse</a></nav>
         <div class="row" style="margin-left:auto;align-items:center;gap:14px">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Join Waitlist</x-import>
         </div>
-      </div>
+      </header>
 
       <!-- hero -->
       <div class="z" style="display:grid;grid-template-columns:1.08fr .92fr;gap:42px;padding:50px 30px 44px;align-items:center">
         <div>
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">Your personal AI superagent</x-import>
-          <div class="hero-h1">Buy your dream car <span class="cy">on your terms.</span></div>
+          <h1 class="hero-h1">Buy your dream car <span class="cy">on your terms.</span></h1>
           <div style="font:500 16px/1.5 Manrope;color:#cbd5e1;margin:18px 0 0;max-width:445px">Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.</div>
           <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px">
-            <form class="wl-form" data-src="hero" style="display:flex;gap:9px">
-              <input type="email" class="pill" required placeholder="you@email.com" style="flex:1;height:48px">
-              <button type="submit" class="btn primary lg">Get early access</button>
+            <form class="wl-form" data-src="hero">
+              <div style="display:flex;gap:9px">
+                <label class="vh" for="wl-email-hero">Email address</label>
+                <input id="wl-email-hero" type="email" class="pill" required placeholder="you@email.com" style="flex:1;height:48px">
+                <button type="submit" class="btn primary lg">Get early access</button>
+              </div>
+              <label class="consent"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy.html">Privacy&nbsp;Policy</a> and to receive email/SMS updates — msg&amp;data rates may apply, reply STOP to opt out.</label>
+              <!-- Bot protection: paste your Cloudflare Turnstile sitekey and uncomment to enable -->
+              <!-- <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITEKEY"></div> -->
             </form>
             <div class="row" style="align-items:center;gap:8px;margin-top:11px;font:600 12px Manrope;color:#9fb4dd"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>Trusted &amp; secured data storage.</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px 22px;margin-top:15px;padding-top:15px;border-top:1px solid rgba(24,200,255,.16);font:600 12.5px Manrope;color:#e2e9f2">
@@ -269,21 +286,29 @@
       <div class="z col" style="align-items:center;text-align:center;padding:50px 30px 42px">
         <div class="disp" style="font-size:34px;font-weight:600">Be first in line.</div>
         <div style="font:500 14px Manrope;color:#aebfdf;margin:9px 0 22px;max-width:460px">Join the waitlist and we’ll text you the day CarNimbus is ready to use.</div>
-        <form class="wl-form" data-src="footer-cta" style="display:flex;gap:9px;width:100%;max-width:460px"><input type="email" class="pill" required placeholder="you@email.com" style="flex:1"><button type="submit" class="btn primary lg">Join Waitlist</button></form>
+        <form class="wl-form" data-src="footer-cta" style="width:100%;max-width:460px">
+          <div style="display:flex;gap:9px">
+            <label class="vh" for="wl-email-cta">Email address</label>
+            <input id="wl-email-cta" type="email" class="pill" required placeholder="you@email.com" style="flex:1">
+            <button type="submit" class="btn primary lg">Join Waitlist</button>
+          </div>
+          <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-consent" required> I agree to the <a href="/privacy.html">Privacy&nbsp;Policy</a> and to receive email/SMS updates — reply STOP to opt out.</label>
+          <!-- <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITEKEY"></div> -->
+        </form>
       </div>
 
       <!-- footer (one page) -->
-      <div class="z row" style="padding:24px 30px;gap:30px;align-items:center;border-top:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.6)">
+      <footer class="z row" style="padding:24px 30px;gap:30px;align-items:center;border-top:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.6)">
         <div style="flex:1">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="15" mark="true" mark-src="{{ logoUrl }}" hint-size="130px,26px"></x-import>
           <div style="font:600 11px Manrope;color:#18C8FF;margin-top:8px">Your personal AI superagent.</div>
           <div style="font:500 11px Manrope;color:#7f93b8;margin-top:4px">© 2026 CarNimbus, Inc. · Los Angeles, California</div>
         </div>
-        <div class="row" style="gap:22px;font:600 11px Manrope;color:#aebfdf"><span>How it works</span><span>Browse</span><span>About</span><span>Contact</span></div>
-      </div>
+        <nav aria-label="Footer" class="row" style="gap:18px;flex-wrap:wrap;font:600 11px Manrope;color:#aebfdf"><a href="/#how-it-works">How it works</a><a href="/browse.html">Browse</a><a href="/about.html">About</a><a href="/contact.html">Contact</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav>
+      </footer>
     </div>
   </div></div>
-</div>
+</main>
 <script src="/assets/runtime.js" defer></script>
 </body>
 </html>

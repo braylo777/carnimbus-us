@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="canonical" href="https://carnimbus.com/browse.html">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/logo.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#06163b">
 <title>CarNimbus — Drive Now inventory</title>
 <meta name="description" content="Browse LA's Drive Now inventory. Talk to the car when you're ready — pre-qualify with a soft pull, 0 FICO impact.">
 <meta property="og:type" content="website">
@@ -22,18 +27,18 @@
 </head>
 <body>
 
-<div class="stage">
+<main class="stage">
 <div style="padding:0 20px 40px"><div class="bw cv" data-screen-label="Web marketing browse">
     <div class="bwbar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div><div class="bwurl"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>carnimbus.com/browse</div></div>
     <div style="position:relative;background:#06163b;height:600px">
       <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
       <div class="z row" style="height:58px;align-items:center;padding:0 24px;border-bottom:1px solid rgba(24,200,255,.12);gap:20px">
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="16" mark="true" mark-src="{{ logoUrl }}" hint-size="140px,28px"></x-import>
-        <span class="navlink">How it works</span><span class="navlink" style="color:#18C8FF">Browse</span>
+        <a class="navlink" href="/#how-it-works">How it works</a><a class="navlink" href="/browse.html" aria-current="page" style="color:#18C8FF">Browse</a>
         <div class="row" style="margin-left:auto"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Join Waitlist</x-import></div>
       </div>
       <div class="z col" style="padding:20px 24px;gap:14px">
-        <div><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">Drive Now inventory · Los Angeles</x-import><div class="disp" style="font-size:24px;font-weight:600;margin-top:5px">Browse the cars. Talk when you’re ready.</div></div>
+        <div><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">Drive Now inventory · Los Angeles</x-import><h1 class="disp" style="font-size:24px;font-weight:600;margin-top:5px">Browse the cars. Talk when you’re ready.</h1></div>
         <div class="row" style="gap:10px;align-items:center"><div style="flex:1"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SearchBar" placeholder="Search make, model, ZIP" hint-size="100%,38px"></x-import></div><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Badge" tone="cyan" hint-size="auto,24px">Sedan</x-import><span style="font:600 11px Manrope;color:#8ca0c4;padding:5px 11px;border:1px solid rgba(24,200,255,.18);border-radius:999px">SUV</span><span style="font:600 11px Manrope;color:#8ca0c4;padding:5px 11px;border:1px solid rgba(24,200,255,.18);border-radius:999px">EV</span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2024" make="BMW" model="330i" trim="M Sport" price-per-mo="487" miles="14k" drivetrain="RWD" certified="true" best-match="true" cta="" image="https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/2019_BMW_330i_M_Sport_2.0_Front.jpg/960px-2019_BMW_330i_M_Sport_2.0_Front.jpg" hint-size="100%,215px"></x-import>
@@ -44,7 +49,7 @@
       </div>
     </div>
   </div></div>
-</div>
+</main>
 <script src="/assets/runtime.js" defer></script>
 </body>
 </html>

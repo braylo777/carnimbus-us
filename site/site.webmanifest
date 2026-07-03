@@ -1,0 +1,13 @@
+{
+  "name": "CarNimbus",
+  "short_name": "CarNimbus",
+  "description": "AI-powered digital dealership — get pre-qualified, talk to the car you want, and just drive.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06163b",
+  "theme_color": "#06163b",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/assets/logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
