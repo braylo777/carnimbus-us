@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS waitlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  lang TEXT,
+  created_at TEXT,
+  user_agent TEXT
+);
