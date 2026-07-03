@@ -1,11 +1,12 @@
 {
-  // Cloudflare Workers config — serves the Next.js static export in ./out
+  // Cloudflare Workers config — serves the committed static landing page in ./site
   // as a static-assets-only Worker (no server code). Deployed by `npx wrangler deploy`.
+  // NOTE: temporarily pointed at ./site (hand-authored landing page) instead of the
+  // Next.js export ./out — flip back to "./out" once the page is reimplemented in Next.
   "name": "carnimbus-com",
   "compatibility_date": "2025-01-01",
   "assets": {
-    "directory": "./out",
-    // Next.js `output: export` emits a 404.html — serve it for unknown paths.
+    "directory": "./site",
     "not_found_handling": "404-page"
   }
 }
