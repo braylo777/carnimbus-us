@@ -126,99 +126,40 @@
   if(document.readyState!=='loading')upgrade();else document.addEventListener('DOMContentLoaded',upgrade);
 
   /* ===== CarNimbus interactivity + i18n ===== */
-  var I18N = { es: {
-   "How it works":"Cómo funciona","Browse":"Explorar","About":"Nosotros","Contact":"Contacto",
-   "Join Waitlist":"Unirme a la lista","Get early access":"Acceso anticipado","Joining…":"Enviando…",
-   "You're on the list ✓":"¡Estás en la lista ✓","You're already on the list ✓":"Ya estás en la lista ✓",
-   "Please enter a valid email":"Ingresa un correo válido","Something went wrong — try again.":"Algo salió mal, inténtalo de nuevo.",
-   "Your personal AI superagent":"Tu superagente de IA personal","Your personal AI superagent.":"Tu superagente de IA personal.",
-   "Buy your dream car":"Compra el auto de tus sueños","on your terms.":"en tus términos.",
-   "Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.":"Precalifica y habla con el auto que realmente quieres. Sin regateos, llega preaprobado y solo maneja.",
-   "Trusted & secured data storage.":"Almacenamiento de datos seguro y confiable.",
-   "$1,000 saved per car":"$1,000 ahorrados por auto","3 hours of your day, saved":"3 horas de tu día, ahorradas",
-   "<10 min to book a drive":"<10 min para agendar","0 hard credit pulls":"0 consultas duras de crédito",
-   "I don't do speed limits. Period.":"No respeto límites de velocidad. Punto.",
-   "how fast can you actually go?":"¿qué tan rápido puedes ir realmente?","As fast as you want me to be 😏":"Tan rápido como quieras 😏",
-   "could you lose a cop? 😏":"¿podrías perder a un policía? 😏",
-   "0–60 in 5 seconds. Hypothetically. I don't judge. 😏":"0–100 en 5 segundos. Hipotéticamente. No juzgo. 😏",
-   "ok, you're trouble. am I approved?":"ok, eres un problema. ¿estoy aprobado?",
-   "30-sec soft check, no strings.":"Consulta suave de 30 seg, sin compromiso.",
-   "BOOK A TEST DRIVE CENTER NEAR YOU — ACROSS LA COUNTY":"AGENDA UNA PRUEBA DE MANEJO CERCA DE TI — EN TODO EL CONDADO DE LA",
-   "Three steps from scroll to keys":"Tres pasos: del scroll a las llaves",
-   "1 · Talk to the car":"1 · Habla con el auto","2 · Get pre-qualified":"2 · Precalifica","3 · Show up & drive":"3 · Llega y maneja",
-   "Every car has an AI personality. Ask it anything — it answers straight and sizes you up casually in chat.":"Cada auto tiene personalidad de IA. Pregúntale lo que sea: te responde directo y te evalúa en el chat.",
-   "A soft pull returns a real monthly range in seconds. Zero FICO impact — no human, no pressure.":"Una consulta suave te da un rango mensual real en segundos. Cero impacto FICO, sin humanos, sin presión.",
-   "We book you at a test drive center nearby. Walk in expected, terms already set. No 4-hour ordeal.":"Te agendamos en un centro de prueba cercano. Llegas esperado, con términos listos. Sin trámites de 4 horas.",
-   "The shift":"El cambio","The old way vs. the CarNimbus way":"El método viejo vs. el método CarNimbus",
-   "THE OLD WAY":"EL MÉTODO VIEJO","THE CARNIMBUS WAY":"EL MÉTODO CARNIMBUS",
-   "Harassed the second you walk in":"Acosado apenas entras",
-   "Surprise hard pull dings your credit":"Consulta dura sorpresa que daña tu crédito",
-   "Murky numbers, 4-hour haggle":"Números turbios, regateo de 4 horas","Overpay $2,000–$4,000":"Pagas de más $2,000–$4,000",
-   "Talk to the car — zero pressure":"Habla con el auto, sin presión","Soft pull — 0 FICO impact":"Consulta suave, 0 impacto FICO",
-   "Clear monthly, set before you go":"Mensualidad clara, fijada antes de ir",
-   "Save ~$1,000 — minutes, not hours":"Ahorra ~$1,000, en minutos, no horas",
-   "Drive Now inventory":"Inventario Drive Now","Matched to your budget":"A la medida de tu presupuesto",
-   "View all →":"Ver todo →","Certified":"Certificado","Best match":"Mejor opción","Drive this":"Maneja este",
-   "Be first in line.":"Sé el primero en la fila.",
-   "Join the waitlist and we'll text you the day CarNimbus is ready to use.":"Únete a la lista y te avisamos por mensaje el día que CarNimbus esté listo.",
-   "Drive Now inventory · Los Angeles":"Inventario Drive Now · Los Ángeles",
-   "Browse the cars. Talk when you're ready.":"Explora los autos. Habla cuando estés listo.",
-   "Sedan":"Sedán","SUV":"SUV","EV":"Eléctrico",
-   "Our story":"Nuestra historia","Power, back to the people.":"El poder, de vuelta a la gente.",
-   "The buyer always had the least power in the room. We built CarNimbus to flip that.":"El comprador siempre tuvo el menor poder en la sala. Creamos CarNimbus para cambiarlo.",
-   "Founder & CEO":"Fundador y CEO","Co-Founder & CMO":"Cofundador y CMO","Co-Founder & CTO":"Cofundador y CTO","THE TEAM":"EL EQUIPO",
-   "Top Porsche rep":"Top vendedor Porsche","#3 U.S. Subaru rep":"#3 vendedor Subaru EE.UU.","Built 1M+ YouTube channel":"Creó canal de 1M+ en YouTube","2x serial entrepreneur":"Emprendedor en serie 2x",
-   "Get in touch":"Contáctanos","We're in Los Angeles.":"Estamos en Los Ángeles.",
-   "Questions, press, partnerships — we read everything.":"Dudas, prensa, alianzas: lo leemos todo.",
-   "Are you a dealer?":"¿Eres concesionario?","Email the team":"Escríbenos",
-   "you@email.com":"tu@correo.com","Search make, model, ZIP":"Busca marca, modelo, código postal"
-  }};
+  var I18N = { es: {"#3 U.S. Subaru rep": "#3 vendedor Subaru en EE.UU.", "$1,000 saved per car": "$1,000 ahorrados por auto", "0 hard credit pulls": "0 consultas duras de crédito", "0–60 in 5 seconds. Hypothetically. I don’t judge. 🏁": "0–100 en 5 segundos. Hipotéticamente. No juzgo.", "1 · Talk to the car": "1 · Habla con el auto", "2 · Get pre-qualified": "2 · Precalifica", "2x serial entrepreneur": "Emprendedor en serie 2x", "3 hours of your day, saved": "3 horas de tu día, ahorradas", "3 · Show up & drive": "3 · Llega y maneja", "30-sec soft check, no strings.": "Consulta suave de 30 seg, sin compromiso.", "<10 min to book a drive": "<10 min para agendar", "A soft pull returns a real monthly range in seconds. Zero FICO impact — no human, no pressure.": "Una consulta suave te da un rango mensual real en segundos. Cero impacto en tu FICO, sin humanos, sin presión.", "APPROVED": "APROBADO", "About": "Nosotros", "Are you a dealer?": "¿Eres concesionario?", "As fast as you want me to be 😉": "Tan rápido como quieras que sea", "Back to CarNimbus": "Volver a CarNimbus", "Be first in line.": "Sé el primero en la fila.", "Browse": "Explorar", "Browse the cars. Talk when you’re ready.": "Explora los autos. Habla cuando estés listo.", "Built 1M+ YouTube channel": "Creó un canal de 1M+ en YouTube", "Buy your dream car": "Compra el auto de tus sueños", "COMING TO A TEST DRIVE CENTER NEAR YOU — ACROSS LA COUNTY": "PRÓXIMAMENTE EN UN CENTRO DE PRUEBA DE MANEJO CERCA DE TI — EN TODO EL CONDADO DE LA", "CarNimbus is buyer-first. If you run an independent rooftop and want vetted, pre-qualified buyers routed to you, email us — we’ll connect your inventory by API.": "CarNimbus prioriza al comprador. Si tienes un concesionario independiente y quieres recibir compradores verificados y precalificados, escríbenos: conectamos tu inventario por API.", "CarNimbus started with Cid. His first-ever video — a viral Audi commercial over a decade ago — grew into a 1M+ YouTube channel. When that chapter ended, he got into selling cars — and saw fast how rigged the game is: people walked in excited and left": "CarNimbus empezó con Cid. Su primer video —un comercial viral de Audi hace más de una década— se convirtió en un canal de más de 1M en YouTube. Cuando ese capítulo terminó, se metió a vender autos y vio rápido lo amañado que está el juego: la gente entraba emocionada y salía", "Clear monthly, set before you go": "Mensualidad clara, fijada antes de ir", "Co-Founder & CMO": "Cofundador y CMO", "Co-Founder & CTO": "Cofundador y CTO", "Contact": "Contacto", "DEALER": "CONCESIONARIO", "Drive Now inventory": "Inventario Drive Now", "Drive Now inventory · Los Angeles": "Inventario Drive Now · Los Ángeles", "Drive this": "Maneja este", "EV": "Eléctrico", "Early access": "Acceso anticipado", "Email the team": "Escríbenos", "Every car has an AI personality. Ask it anything — it answers straight and sizes you up casually in chat.": "Cada auto tiene una personalidad de IA. Pregúntale lo que sea: te responde directo y te evalúa de forma casual en el chat.", "Founder & CEO": "Fundador y CEO", "Get early access": "Acceso anticipado", "Get in touch": "Contáctanos", "Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.": "Precalifica y luego habla con el auto que realmente quieres. Olvídate del regateo, llega preaprobado y solo maneja.", "Harassed the second you walk in": "Te acosan apenas entras", "How it works": "Cómo funciona", "Join Waitlist": "Unirme a la lista", "Join the waitlist": "Únete a la lista", "Join the waitlist and we'll text you the day CarNimbus is ready to use.": "Únete a la lista y te avisamos por mensaje el día que CarNimbus esté listo.", "Join the waitlist and we’ll text you the day CarNimbus is ready to use.": "Únete a la lista y te avisamos por mensaje el día que CarNimbus esté listo.", "Lost a wheel.": "Se soltó una llanta.", "Matched to your budget": "A la medida de tu presupuesto", "Murky numbers, 4-hour haggle": "Números turbios, regateo de 4 horas", "No spam. One text when we launch.": "Sin spam. Un solo mensaje cuando lancemos.", "Our story": "Nuestra historia", "Overpay $2,000–$4,000": "Pagas de más $2,000–$4,000", "Power, back to the people.": "El poder, de vuelta a la gente.", "Questions, press, partnerships — we read everything.": "Dudas, prensa, alianzas: lo leemos todo.", "SUV": "SUV", "Save ~$1,000 — minutes, not hours": "Ahorra ~$1,000, en minutos, no horas", "Search make, model, ZIP": "Busca marca, modelo o código postal", "Sedan": "Sedán", "So he built the fix the industry never would —": "Así que construyó la solución que la industria nunca haría:", "Soft pull — 0 FICO impact": "Consulta suave, 0 impacto en FICO", "Surprise hard pull dings your credit": "Una consulta dura sorpresa daña tu crédito", "THE CARNIMBUS WAY": "EL MÉTODO CARNIMBUS", "THE OLD WAY": "EL MÉTODO VIEJO", "THE TEAM": "EL EQUIPO", "Talk to the car — zero pressure": "Habla con el auto, sin presión", "That page took a wrong turn. Let's get you back on the road.": "Esa página tomó un desvío. Volvamos al camino.", "The old way vs. the CarNimbus way": "El método viejo vs. el método CarNimbus", "The shift": "El cambio", "Three steps from scroll to keys": "Tres pasos: del scroll a las llaves", "Top Porsche rep": "Top vendedor Porsche", "Trusted & secured data storage.": "Almacenamiento de datos seguro y confiable.", "View all →": "Ver todo", "Want to talk to one?": "¿Quieres hablar con uno?", "We book you at a test drive center nearby. Walk in expected, terms already set. No 4-hour ordeal.": "Te agendamos en un centro de prueba cercano. Llegas esperado y con los términos ya listos. Sin trámites de 4 horas.", "We’re in Los Angeles.": "Estamos en Los Ángeles.", "Your personal AI superagent": "Tu superagente de IA personal", "Your personal AI superagent.": "Tu superagente de IA personal.", "could you lose a cop? 👀": "¿podrías perder a un policía?", "give power back to the people.": "devolverle el poder a la gente.", "hard-pulled and overcharged $2,000–$4,000 a car.": "con consultas duras y pagando de más $2,000–$4,000 por auto.", "how fast can you actually go?": "¿qué tan rápido puedes ir realmente?", "ok, you’re trouble. am I approved?": "ok, eres un problema. ¿estoy aprobado?", "on your terms.": "en tus términos.", "© 2026 CarNimbus, Inc. · Los Angeles, California": "© 2026 CarNimbus, Inc. · Los Ángeles, California", "— pre-qualify with a soft pull, 0 FICO impact.": "— precalifica con una consulta suave, 0 impacto en FICO.", "“I don’t do speed limits. Period.”": "\"No respeto los límites de velocidad. Punto.\"", "“The buyer always had the least power in the room. We built CarNimbus to flip that.”": "\"El comprador siempre tuvo el menor poder en la sala. Creamos CarNimbus para cambiar eso.\"", "Joining…": "Enviando…", "You're on the list ✓": "¡Estás en la lista! ✓", "You're already on the list ✓": "Ya estás en la lista ✓", "Please enter a valid email": "Ingresa un correo válido", "Something went wrong — try again.": "Algo salió mal, inténtalo de nuevo.", "Certified": "Certificado", "Best match": "Mejor opción"} };
   var CUR="en", ORIG=new WeakMap();
   function L(s){ return CUR==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
   function norm(t){ return (t||"").replace(/\s+/g," ").trim().toLowerCase().replace(/[→»]/g,"").trim(); }
-  var NAV = { "how it works":"/index.html#how-it-works","browse":"/browse.html","about":"/about.html","contact":"/contact.html" };
+  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact" };
   var CTA_WAIT = ["join waitlist","get early access","be first in line","join the waitlist"];
-
   function destFor(el){
     if(el.closest(".wl-form")) return null;
     var t=norm(el.textContent);
     if(NAV[t]) return NAV[t];
-    if(CTA_WAIT.indexOf(t)>=0) return "/waitlist.html";
-    if(t==="view all" || el.classList.contains("vcta")) return "/browse.html";
+    if(CTA_WAIT.indexOf(t)>=0) return "/waitlist";
+    if(t==="view all" || el.classList.contains("vcta")) return "/browse";
     if(t==="email the team") return "mailto:partner@carnimbus.com";
     return null;
   }
-  function stampNav(){ // stamp BEFORE translation so routing is language-independent
-    document.querySelectorAll(".navlink,.btn,.vcta,span,a").forEach(function(el){
-      if(el.dataset.cngo) return;
-      var d=destFor(el); if(d) el.dataset.cngo=d;
-    });
-  }
-  function wireNav(){
-    document.body.addEventListener("click", function(ev){
-      var seg=ev.target.closest(".seg button");
-      if(seg){ setLang(norm(seg.textContent)==="es"?"es":"en"); return; }
-      var g=ev.target.closest("[data-cngo]");
-      if(g){ ev.preventDefault(); go(g.dataset.cngo); }
-    });
-  }
-  function wireForms(){
-    document.querySelectorAll(".wl-form").forEach(function(f){
-      if(f.dataset.wired) return; f.dataset.wired="1";
-      f.addEventListener("submit", async function(e){
-        e.preventDefault();
-        var input=f.querySelector('input[type=email]'), email=(input&&input.value||"").trim();
-        var btn=f.querySelector("button,.btn"); if(btn){ btn.disabled=true; btn.textContent=L("Joining…"); }
-        try{
-          var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:email,lang:CUR})});
-          var d=await res.json();
-          f.innerHTML='<div class="badge '+(d.ok?"green":"red")+'" style="padding:12px 16px;font:600 12px Manrope">'+
-            (d.ok?(d.already?L("You're already on the list ✓"):L("You're on the list ✓")):L("Please enter a valid email"))+'</div>';
-        }catch(_){ if(btn){btn.disabled=false;btn.textContent="Get early access";} alert(L("Something went wrong — try again.")); }
-      });
-    });
-  }
+  function stampNav(){ document.querySelectorAll(".navlink,.btn,.vcta,span,a").forEach(function(el){
+    if(el.dataset.cngo) return; var d=destFor(el); if(d) el.dataset.cngo=d; }); }
+  function wireNav(){ document.body.addEventListener("click", function(ev){
+    var seg=ev.target.closest(".seg button");
+    if(seg){ setLang(norm(seg.textContent)==="es"?"es":"en"); return; }
+    var g=ev.target.closest("[data-cngo]"); if(g){ ev.preventDefault(); go(g.dataset.cngo); } }); }
+  function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
+    if(f.dataset.wired) return; f.dataset.wired="1";
+    f.addEventListener("submit", async function(e){ e.preventDefault();
+      var input=f.querySelector('input[type=email]'), email=(input&&input.value||"").trim();
+      var btn=f.querySelector("button,.btn"); if(btn){ btn.disabled=true; btn.textContent=L("Joining…"); }
+      try{
+        var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:email,lang:CUR})});
+        var d=await res.json();
+        f.innerHTML='<div class="badge '+(d.ok?"green":"red")+'" style="padding:12px 16px;font:600 12px Manrope">'+
+          (d.ok?(d.already?L("You're already on the list ✓"):L("You're on the list ✓")):L("Please enter a valid email"))+'</div>';
+      }catch(_){ if(btn){btn.disabled=false;btn.textContent="Get early access";} alert(L("Something went wrong — try again.")); }
+    }); }); }
   function applyLang(lang){
     CUR=lang; try{localStorage.cn_lang=lang;}catch(_){}
     document.documentElement.lang=lang;
@@ -235,16 +176,11 @@
       var o=ORIG.get(el); el.setAttribute("placeholder",(lang==="es"&&I18N.es[o])?I18N.es[o]:o);
     });
   }
-  function setLang(l){
-    applyLang(l);
-    document.querySelectorAll(".seg button").forEach(function(b){ b.classList.toggle("on", norm(b.textContent)===(l==="es"?"es":"en")); });
-  }
-  function initI18n(){
-    var saved; try{saved=localStorage.cn_lang;}catch(_){}
-    setLang(saved || ((navigator.language||"en").slice(0,2)==="es"?"es":"en"));
-  }
+  function setLang(l){ applyLang(l);
+    document.querySelectorAll(".seg button").forEach(function(b){ b.classList.toggle("on", norm(b.textContent)===(l==="es"?"es":"en")); }); }
+  function initI18n(){ var s; try{s=localStorage.cn_lang;}catch(_){}
+    setLang(s || ((navigator.language||"en").slice(0,2)==="es"?"es":"en")); }
   (function boot(){ var t=0, iv=setInterval(function(){
-    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n(); }
-  },30); })();
+    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n(); } },30); })();
 
 })();
