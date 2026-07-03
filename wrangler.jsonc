@@ -5,6 +5,10 @@
   // Next.js export ./out — flip back to "./out" once the page is reimplemented in Next.
   "name": "carnimbus-com",
   "compatibility_date": "2025-01-01",
+  "routes": [
+    { "pattern": "carnimbus.com", "custom_domain": true },
+    { "pattern": "www.carnimbus.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./site",
     "not_found_handling": "404-page"
