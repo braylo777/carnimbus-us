@@ -168,7 +168,16 @@
 "I agree to the":"Acepto la",
 "I agree to receive recurring marketing & waitlist texts from CarNimbus at the number provided (up to 4 msgs/mo). Consent is not a condition of purchase. Msg&data rates may apply. Reply STOP to cancel, HELP for help.":"Acepto recibir mensajes recurrentes de marketing y de la lista de espera de CarNimbus al número indicado (hasta 4 msjs/mes). El consentimiento no es condición de compra. Pueden aplicar tarifas. Responde STOP para cancelar, HELP para ayuda.",
 "Please check the SMS consent box — that's how we text you.":"Marca la casilla de consentimiento SMS: así te enviamos mensajes.",
-"No spam. One text when we launch. Reply STOP anytime.":"Sin spam. Un mensaje cuando lancemos. Responde STOP cuando quieras."} };
+"No spam. One text when we launch. Reply STOP anytime.":"Sin spam. Un mensaje cuando lancemos. Responde STOP cuando quieras.",
+"Ask me anything — I answer straight.":"Pregúntame lo que sea: respondo directo.",
+"Send":"Enviar",
+"Hey — I'm the":"Hola, soy el",
+"Ask me anything, or tell me when you want to drive.":"Pregúntame lo que sea, o dime cuándo quieres manejar.",
+"Sign in first so I remember you —":"Inicia sesión primero para recordarte:",
+"create your profile":"crea tu perfil",
+"Your Drive Now pass is ready →":"Tu pase Drive Now está listo →",
+"Static on the line — try that again.":"Se cortó la señal: inténtalo de nuevo.",
+"Your matches. Talk when you’re ready.":"Tus matches. Habla cuando estés listo."} };
   var CUR="en", ORIG=new WeakMap(), BOOT=Date.now();
   function L(s){ return CUR==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
@@ -261,8 +270,68 @@
     document.querySelectorAll(".seg button").forEach(function(b){ b.classList.toggle("on", norm(b.textContent)===(l==="es"?"es":"en")); }); }
   function initI18n(){ var s; try{s=localStorage.cn_lang;}catch(_){}
     setLang(s || ((navigator.language||"en").slice(0,2)==="es"?"es":"en")); }
+  /* ===== CNMB-302/305: matched feed + car-personality chat ===== */
+  function wireFeed(){
+    var feedEl=document.getElementById("feed"); if(!feedEl) return;
+    var empty=document.getElementById("feed-empty"); if(empty)empty.style.display="block";
+    fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
+      if(empty)empty.style.display="none";
+      if(!d.ok||!d.cars||!d.cars.length){ if(empty){empty.style.display="block";empty.innerHTML='No cars yet — check back soon.';} return; }
+      if(!d.authed){ var cta=document.createElement("div");
+        cta.style.cssText="grid-column:1/-1;text-align:center;padding:10px;font:600 12px Manrope;color:#aebfdf";
+        cta.innerHTML='Showing newest cars. <a href="/app/profile.html" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
+        feedEl.appendChild(cta); }
+      d.cars.forEach(function(c){
+        var card=document.createElement("div");
+        card.className="glass"; card.style.cssText="border-radius:16px;overflow:hidden;cursor:pointer;border:1px solid rgba(24,200,255,.18)";
+        card.innerHTML=(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" alt="'+c.year+' '+c.make+' '+c.model+'" style="width:100%;height:130px;object-fit:cover;display:block">':'')+
+          '<div style="padding:11px 13px">'+
+          (c.match!=null?'<span class="badge cyan" style="float:right">'+c.match+'% match</span>':'')+
+          '<div style="font:700 13px Manrope;color:#fff">'+c.year+' '+c.make+' '+c.model+(c.trim?' '+c.trim:'')+'</div>'+
+          '<div style="font:600 11px Manrope;color:#8ca0c4;margin-top:3px">$'+c.price_mo+'/mo · '+c.miles+' mi · '+c.drivetrain+'</div>'+
+          '<div style="font:700 11px Manrope;color:#18C8FF;margin-top:7px">Talk to this car →</div></div>';
+        card.addEventListener("click",function(){openCarChat(c);});
+        feedEl.appendChild(card);
+      });
+    }).catch(function(){ if(empty){empty.style.display="block";empty.textContent="Feed unavailable — refresh to retry.";} });
+  }
+  function openCarChat(c){
+    var old=document.getElementById("cn-chat"); if(old)old.remove();
+    var wrap=document.createElement("div"); wrap.id="cn-chat";
+    wrap.style.cssText="position:fixed;inset:0;background:rgba(3,10,28,.72);z-index:60;display:flex;align-items:flex-end;justify-content:center";
+    wrap.innerHTML='<div style="width:100%;max-width:480px;max-height:82vh;background:#081b46;border:1px solid rgba(24,200,255,.3);border-radius:18px 18px 0 0;display:flex;flex-direction:column">'+
+      '<div style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(24,200,255,.14)">'+
+      '<div style="font:700 13px Manrope;color:#fff;flex:1">'+c.year+' '+c.make+' '+c.model+'</div>'+
+      '<button id="cn-chat-x" class="btn ghost sm" type="button">Close</button></div>'+
+      '<div id="cn-thread" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px"></div>'+
+      '<div style="display:flex;gap:8px;padding:12px;border-top:1px solid rgba(24,200,255,.14)">'+
+      '<label class="vh" for="cn-chat-in">Message the car</label>'+
+      '<input id="cn-chat-in" class="pill" style="flex:1" placeholder="'+L("Ask me anything — I answer straight.")+'">'+
+      '<button id="cn-chat-send" class="btn primary" type="button">'+L("Send")+'</button></div></div>';
+    document.body.appendChild(wrap);
+    var hist=[],thread=document.getElementById("cn-thread");
+    function bubble(who,txt){ var b=document.createElement("div");
+      b.style.cssText="max-width:82%;padding:9px 12px;border-radius:13px;font:500 12.5px/1.5 Manrope;"+
+        (who==="you"?"align-self:flex-end;background:#0B63E5;color:#fff":"align-self:flex-start;background:rgba(24,200,255,.12);color:#e2e9f2");
+      b.textContent=txt; thread.appendChild(b); thread.scrollTop=thread.scrollHeight; }
+    bubble("car",L("Hey — I'm the")+" "+c.year+" "+c.make+" "+c.model+". "+L("Ask me anything, or tell me when you want to drive."));
+    async function send(){ var inEl=document.getElementById("cn-chat-in"),msg=inEl.value.trim(); if(!msg)return;
+      inEl.value=""; bubble("you",msg); hist.push({role:"user",content:msg});
+      var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:c.id,messages:hist})});
+      if(r.status===401){ bubble("car",L("Sign in first so I remember you —"));
+        var a=document.createElement("a"); a.href="/app/profile.html"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
+      var d=await r.json();
+      if(d.ok){ hist.push({role:"assistant",content:d.reply}); bubble("car",d.reply);
+        if(d.pass){ var p=document.createElement("a"); p.href=d.pass; p.textContent="🎟️ "+L("Your Drive Now pass is ready →");
+          p.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(p); } }
+      else bubble("car",L("Static on the line — try that again.")); }
+    document.getElementById("cn-chat-send").addEventListener("click",send);
+    document.getElementById("cn-chat-in").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
+    document.getElementById("cn-chat-x").addEventListener("click",function(){wrap.remove();});
+  }
+
   (function boot(){ var t=0, iv=setInterval(function(){
-    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n();
+    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n(); wireFeed();
       if(location.pathname.replace(/\/$/,"")==="/waitlist"&&matchMedia("(pointer:fine)").matches){var pi=document.querySelector("input[type=tel]");if(pi)pi.focus();}
     } },30); })();
 

@@ -1,6 +1,5 @@
 {
-  // CarNimbus — static marketing site (Assets) + waitlist API Worker (D1).
-  // Assets served from ./site; POST /api/waitlist handled by worker.js → D1.
+  // CarNimbus — static site + waitlist/SMS/profile-match Worker (D1 + Vectorize + Workers AI).
   "name": "carnimbus-com",
   "compatibility_date": "2025-01-01",
   "main": "worker.js",
@@ -21,5 +20,10 @@
       "database_name": "carnimbus-waitlist",
       "database_id": "43d0dc1a-96c1-49dd-98da-e4f865b7a013"
     }
-  ]
+  ],
+  "ai": { "binding": "AI" },
+  "vectorize": [
+    { "binding": "MATCH_INDEX", "index_name": "carnimbus-match" }
+  ],
+  "triggers": { "crons": ["*/5 * * * *"] }
 }

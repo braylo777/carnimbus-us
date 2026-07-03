@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="canonical" href="https://carnimbus.com/app/profile">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/assets/favicon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Your profile</title>
+<meta name="description" content="Ten quick questions. Your matches do the rest.">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.pw{max-width:460px;margin:0 auto;padding:40px 20px;color:#e2e9f2}
+.pw h1{font:700 26px 'Space Grotesk';margin:14px 0 4px}
+.pw .sub{font:500 13px/1.5 Manrope;color:#aebfdf}
+.pw .card{margin-top:18px;border:1px solid rgba(24,200,255,.28);border-radius:18px;background:rgba(255,255,255,.03);padding:20px}
+.pw .q{font:700 15px Manrope;margin-bottom:12px}
+.pw .opts{display:flex;flex-wrap:wrap;gap:8px}
+.pw .opt{font:600 12px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:9px 14px;cursor:pointer;background:transparent}
+.pw .opt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
+.pw .nav{display:flex;justify-content:space-between;margin-top:16px;gap:10px}
+.pw .dots{display:flex;gap:5px;justify-content:center;margin-top:14px}
+.pw .dot2{width:6px;height:6px;border-radius:50%;background:rgba(24,200,255,.25)}
+.pw .dot2.on{background:#18C8FF}
+.pw input.pill{width:100%}
+.pw section{display:none}.pw section.on{display:block}
+</style>
+</head>
+<body style="background:#06163b">
+<noscript><div style="max-width:640px;margin:0 auto;padding:40px;font-family:system-ui;color:#e2e9f2;text-align:center"><h1>CarNimbus profile</h1><p>This flow needs JavaScript. Email <a style="color:#18C8FF" href="mailto:hello@carnimbus.com">hello@carnimbus.com</a>.</p></div></noscript>
+<main class="pw">
+  <a href="/" style="font:700 13px Manrope;color:#18C8FF;text-decoration:none">← CarNimbus</a>
+
+  <!-- phase 1: phone OTP -->
+  <div id="ph-auth">
+    <h1>Let's find your car.</h1>
+    <div class="sub">Sign in with your number — we text you a code. No passwords, ever.</div>
+    <div class="card">
+      <div id="au-step1">
+        <label class="vh" for="au-phone">Mobile number</label>
+        <input id="au-phone" type="tel" class="pill" placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel">
+        <button id="au-send" class="btn primary" style="width:100%;margin-top:10px">Text me a code</button>
+      </div>
+      <div id="au-step2" style="display:none">
+        <label class="vh" for="au-code">6-digit code</label>
+        <input id="au-code" type="text" class="pill" placeholder="6-digit code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <button id="au-verify" class="btn primary" style="width:100%;margin-top:10px">Verify</button>
+      </div>
+      <div class="wl-msg" id="au-msg" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- phase 2: 10-question wizard -->
+  <div id="ph-quiz" style="display:none">
+    <h1>Ten quick questions.</h1>
+    <div class="sub">Your matches do the rest — no filters, no searching.</div>
+    <form id="quiz" class="card">
+      <section data-q="q1" class="on"><div class="q">What's your monthly budget?</div><div class="opts" data-single><button type="button" class="opt" data-v="300">~$300</button><button type="button" class="opt" data-v="450">~$450</button><button type="button" class="opt" data-v="600">~$600</button><button type="button" class="opt" data-v="800">$800+</button></div></section>
+      <section data-q="q2"><div class="q">Body style?</div><div class="opts" data-single><button type="button" class="opt" data-v="sedan">Sedan</button><button type="button" class="opt" data-v="SUV">SUV</button><button type="button" class="opt" data-v="truck">Truck</button><button type="button" class="opt" data-v="EV">EV</button><button type="button" class="opt" data-v="open to anything">Surprise me</button></div></section>
+      <section data-q="q3"><div class="q">New or used?</div><div class="opts" data-single><button type="button" class="opt" data-v="new">New</button><button type="button" class="opt" data-v="used">Used</button><button type="button" class="opt" data-v="either">Either</button></div></section>
+      <section data-q="q4"><div class="q">How far do you drive daily?</div><div class="opts" data-single><button type="button" class="opt" data-v="under 10 miles">&lt;10 mi</button><button type="button" class="opt" data-v="10-30 miles">10–30 mi</button><button type="button" class="opt" data-v="30+ miles">30+ mi</button></div></section>
+      <section data-q="q5"><div class="q">How many seats do you need?</div><div class="opts" data-single><button type="button" class="opt" data-v="2">2</button><button type="button" class="opt" data-v="5">5</button><button type="button" class="opt" data-v="7">7+</button></div></section>
+      <section data-q="q6"><div class="q">Top priority?</div><div class="opts" data-single><button type="button" class="opt" data-v="fuel economy">Fuel</button><button type="button" class="opt" data-v="tech">Tech</button><button type="button" class="opt" data-v="safety">Safety</button><button type="button" class="opt" data-v="speed">Speed</button><button type="button" class="opt" data-v="looks">Looks</button></div></section>
+      <section data-q="q7"><div class="q">Trading in a car?</div><div class="opts" data-single><button type="button" class="opt" data-v="yes">Yes</button><button type="button" class="opt" data-v="no">No</button></div></section>
+      <section data-q="q8"><div class="q">When do you want keys?</div><div class="opts" data-single><button type="button" class="opt" data-v="now">Now</button><button type="button" class="opt" data-v="within 30 days">~30 days</button><button type="button" class="opt" data-v="within 90 days">~90 days</button></div></section>
+      <section data-q="q9"><div class="q">How's your credit? (soft pull only, 0 FICO impact)</div><div class="opts" data-single><button type="button" class="opt" data-v="excellent">Excellent</button><button type="button" class="opt" data-v="good">Good</button><button type="button" class="opt" data-v="building">Building</button></div></section>
+      <section data-q="q10"><div class="q">Describe your dream car in one sentence.</div><label class="vh" for="q10-in">Dream car</label><input id="q10-in" type="text" class="pill" placeholder="Fast, black, and my neighbors talk about it" maxlength="140"></section>
+      <div class="nav"><button type="button" id="qz-prev" class="btn ghost">Back</button><button type="button" id="qz-next" class="btn primary">Next</button></div>
+      <div class="dots" id="qz-dots"></div>
+      <div class="wl-msg" id="qz-msg" style="display:none"></div>
+    </form>
+  </div>
+
+  <!-- phase 3: done -->
+  <div id="ph-done" style="display:none">
+    <div class="wl-done" style="margin-top:20px"><div class="wl-done-h">Profile locked in. 🔑</div>
+    <div class="wl-done-p">Your matches are being ranked right now.</div>
+    <div class="wl-done-row"><a class="btn primary" href="/browse" style="text-decoration:none">See my matches →</a></div></div>
+  </div>
+</main>
+<script src="/assets/runtime.js" defer></script>
+<script defer>
+document.addEventListener("DOMContentLoaded",function(){
+  var A={},cur=0,secs=[].slice.call(document.querySelectorAll("#quiz section"));
+  var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
+  var phone="";
+  function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}
+  document.getElementById("au-send").addEventListener("click",async function(){
+    phone=digits(document.getElementById("au-phone").value);
+    if(!/^[2-9]\d{9}$/.test(phone))return msg(document.getElementById("au-msg"),"That number doesn't look right — 10 digits, US for now.");
+    msg(document.getElementById("au-msg"),"");
+    var r=await fetch("/api/auth/start",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone})});
+    var d=await r.json();
+    if(!d.ok)return msg(document.getElementById("au-msg"),"Couldn't send the code — try again.");
+    document.getElementById("au-step1").style.display="none";document.getElementById("au-step2").style.display="block";
+    if(d.dev)document.getElementById("au-code").value=d.dev;
+  });
+  document.getElementById("au-verify").addEventListener("click",async function(){
+    var r=await fetch("/api/auth/verify",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone,code:document.getElementById("au-code").value})});
+    var d=await r.json();
+    if(!d.ok)return msg(document.getElementById("au-msg"),"Wrong or expired code — try again.");
+    document.getElementById("ph-auth").style.display="none";document.getElementById("ph-quiz").style.display="block";dots();
+  });
+  document.querySelectorAll("#quiz .opts").forEach(function(o){o.addEventListener("click",function(e){
+    var b=e.target.closest(".opt");if(!b)return;
+    o.querySelectorAll(".opt").forEach(function(x){x.classList.remove("on");});b.classList.add("on");
+    A[o.closest("section").dataset.q]=b.dataset.v;});});
+  function dots(){var d=document.getElementById("qz-dots");d.innerHTML="";secs.forEach(function(_,i){var s=document.createElement("span");s.className="dot2"+(i===cur?" on":"");d.appendChild(s);});
+    document.getElementById("qz-prev").style.visibility=cur?"visible":"hidden";
+    document.getElementById("qz-next").textContent=(cur===secs.length-1)?"Finish":"Next";}
+  function show(i){secs[cur].classList.remove("on");cur=i;secs[cur].classList.add("on");dots();}
+  document.getElementById("qz-prev").addEventListener("click",function(){if(cur>0)show(cur-1);});
+  document.getElementById("qz-next").addEventListener("click",async function(){
+    var q=secs[cur].dataset.q;
+    if(q==="q10")A.q10=document.getElementById("q10-in").value.trim();
+    if(!A[q])return msg(document.getElementById("qz-msg"),"Pick one to keep going.");
+    msg(document.getElementById("qz-msg"),"");
+    if(cur<secs.length-1)return show(cur+1);
+    var r=await fetch("/api/profile",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({answers:A})});
+    var d=await r.json();
+    if(!d.ok)return msg(document.getElementById("qz-msg"),"Couldn't save — try again.");
+    document.getElementById("ph-quiz").style.display="none";document.getElementById("ph-done").style.display="block";
+  });
+});
+</script>
+</body>
+</html>
