@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="canonical" href="https://carnimbus.com/">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/assets/logo.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#06163b">
 <title>CarNimbus — The power's in your hands</title>
@@ -20,9 +20,7 @@
 <meta name="twitter:title" content="CarNimbus — The power's in your hands">
 <meta name="twitter:description" content="Buy your dream car on your terms. Talk to the car you actually want, get pre-qualified with zero FICO impact, and just drive.">
 <meta name="twitter:image" content="https://carnimbus.com/assets/logo.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
 <link rel="stylesheet" href="/assets/styles.css">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"CarNimbus","url":"https://carnimbus.com","logo":"https://carnimbus.com/assets/logo.png","description":"AI-powered digital dealership — get pre-qualified with zero FICO impact, talk to the car you want, and just drive.","address":{"@type":"PostalAddress","addressLocality":"Los Angeles","addressRegion":"CA","addressCountry":"US"},"sameAs":["https://instagram.com/nimbusbros"]}</script>
 </head>
@@ -35,7 +33,6 @@
 
 <main class="stage">
 <div style="padding:0 20px 40px"><div class="bw cv" data-screen-label="Marketing landing">
-    <div class="bwbar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div><div class="bwurl"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>carnimbus.com</div></div>
     <div style="position:relative;background:#06163b">
       <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:520px;height:520px;background:rgba(24,200,255,.16);top:-120px;right:-60px"></div><div class="glow" style="width:360px;height:360px;background:rgba(11,99,229,.18);top:380px;left:-120px"></div><div class="cine-vig"></div></div>
 
@@ -45,7 +42,7 @@
         <nav aria-label="Primary" class="row" style="gap:28px;margin-left:36px"><a class="navlink" href="/#how-it-works">How it works</a><a class="navlink" href="/browse">Browse</a></nav>
         <div class="row" style="margin-left:auto;align-items:center;gap:14px">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Join Waitlist</x-import>
+          <a href="/waitlist" style="text-decoration:none"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Join Waitlist</x-import></a>
         </div>
       </header>
 
@@ -78,7 +75,7 @@
         <!-- talk-to-car card -->
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" pad="false" hint-size="100%,420px">
           <div style="position:relative;height:170px">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/2019_BMW_330i_M_Sport_2.0_Front.jpg/960px-2019_BMW_330i_M_Sport_2.0_Front.jpg" loading="lazy" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:32px 32px 0 0">
+            <img src="/assets/inventory/bmw-330i.jpg" loading="lazy" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:32px 32px 0 0">
             <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,16,40,.1),rgba(6,16,40,.92));border-radius:32px 32px 0 0"></div>
             <div style="position:absolute;left:18px;right:18px;bottom:13px">
               <div class="row" style="align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#1F8A5B;box-shadow:0 0 8px #1F8A5B"></span><span class="disp" style="font-weight:600;font-size:17px">2024 BMW 330i</span></div>
@@ -275,10 +272,10 @@
       <div class="z" style="padding:0 30px 48px">
         <div class="row" style="align-items:flex-end;justify-content:space-between;margin-bottom:20px"><div><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">Drive Now inventory</x-import><div class="disp" style="font-size:26px;font-weight:600;margin-top:6px">Matched to your budget</div></div><span class="cy" style="font:600 13px Manrope">View all →</span></div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2024" make="BMW" model="330i" trim="M Sport" price-per-mo="487" miles="14k" drivetrain="RWD" certified="true" best-match="true" cta="Drive this" image="https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/2019_BMW_330i_M_Sport_2.0_Front.jpg/960px-2019_BMW_330i_M_Sport_2.0_Front.jpg" hint-size="100%,330px"></x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2025" make="Toyota" model="Camry" trim="XSE" price-per-mo="449" miles="7k" drivetrain="AWD" certified="true" cta="Drive this" image="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/2025_Toyota_Camry_Hybrid_XSE_%28United_States%29_front_view.png/960px-2025_Toyota_Camry_Hybrid_XSE_%28United_States%29_front_view.png" hint-size="100%,330px"></x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2022" make="Lexus" model="NX 350" price-per-mo="559" miles="18k" drivetrain="AWD" certified="true" cta="Drive this" image="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/2022_Lexus_NX_350%2C_front_3.7.22.jpg/960px-2022_Lexus_NX_350%2C_front_3.7.22.jpg" hint-size="100%,330px"></x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2017" make="Audi" model="Q5" trim="S Line" price-per-mo="529" miles="22k" drivetrain="AWD" certified="true" cta="Drive this" image="https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/2017_Audi_Q5_S_Line_TFSi_Quattro_2.0_Front.jpg/960px-2017_Audi_Q5_S_Line_TFSi_Quattro_2.0_Front.jpg" hint-size="100%,330px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2024" make="BMW" model="330i" trim="M Sport" price-per-mo="487" miles="14k" drivetrain="RWD" certified="true" best-match="true" cta="Drive this" image="/assets/inventory/bmw-330i.jpg" hint-size="100%,330px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2025" make="Toyota" model="Camry" trim="XSE" price-per-mo="449" miles="7k" drivetrain="AWD" certified="true" cta="Drive this" image="/assets/inventory/toyota-camry.jpg" hint-size="100%,330px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2022" make="Lexus" model="NX 350" price-per-mo="559" miles="18k" drivetrain="AWD" certified="true" cta="Drive this" image="/assets/inventory/lexus-nx350.jpg" hint-size="100%,330px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2017" make="Audi" model="Q5" trim="S Line" price-per-mo="529" miles="22k" drivetrain="AWD" certified="true" cta="Drive this" image="/assets/inventory/audi-q5.jpg" hint-size="100%,330px"></x-import>
         </div>
       </div>
 

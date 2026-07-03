@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="canonical" href="https://carnimbus.com/browse">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/assets/logo.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#06163b">
 <title>CarNimbus — Drive Now inventory</title>
@@ -20,32 +20,29 @@
 <meta name="twitter:title" content="CarNimbus — Drive Now inventory">
 <meta name="twitter:description" content="Browse LA's Drive Now inventory. Talk to the car when you're ready — pre-qualify with a soft pull, 0 FICO impact.">
 <meta name="twitter:image" content="https://carnimbus.com/assets/logo.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
 <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
 
 <main class="stage">
 <div style="padding:0 20px 40px"><div class="bw cv" data-screen-label="Web marketing browse">
-    <div class="bwbar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div><div class="bwurl"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>carnimbus.com/browse</div></div>
     <div style="position:relative;background:#06163b;height:600px">
       <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
       <div class="z row" style="height:58px;align-items:center;padding:0 24px;border-bottom:1px solid rgba(24,200,255,.12);gap:20px">
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="16" mark="true" mark-src="{{ logoUrl }}" hint-size="140px,28px"></x-import>
         <a class="navlink" href="/#how-it-works">How it works</a><a class="navlink" href="/browse" aria-current="page" style="color:#18C8FF">Browse</a>
-        <div class="row" style="margin-left:auto"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Join Waitlist</x-import></div>
+        <div class="row" style="margin-left:auto"><a href="/waitlist" style="text-decoration:none"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Join Waitlist</x-import></a></div>
       </div>
       <div class="z col" style="padding:20px 24px;gap:14px">
         <div><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">Drive Now inventory · Los Angeles</x-import><h1 class="disp" style="font-size:24px;font-weight:600;margin-top:5px">Browse the cars. Talk when you’re ready.</h1></div>
         <div class="row" style="gap:10px;align-items:center"><div style="flex:1"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SearchBar" placeholder="Search make, model, ZIP" hint-size="100%,38px"></x-import></div><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Badge" tone="cyan" hint-size="auto,24px">Sedan</x-import><span style="font:600 11px Manrope;color:#8ca0c4;padding:5px 11px;border:1px solid rgba(24,200,255,.18);border-radius:999px">SUV</span><span style="font:600 11px Manrope;color:#8ca0c4;padding:5px 11px;border:1px solid rgba(24,200,255,.18);border-radius:999px">EV</span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2024" make="BMW" model="330i" trim="M Sport" price-per-mo="487" miles="14k" drivetrain="RWD" certified="true" best-match="true" cta="" image="https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/2019_BMW_330i_M_Sport_2.0_Front.jpg/960px-2019_BMW_330i_M_Sport_2.0_Front.jpg" hint-size="100%,215px"></x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2025" make="Toyota" model="Camry" trim="XSE" price-per-mo="449" miles="7k" drivetrain="AWD" certified="true" cta="" image="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/2025_Toyota_Camry_Hybrid_XSE_%28United_States%29_front_view.png/960px-2025_Toyota_Camry_Hybrid_XSE_%28United_States%29_front_view.png" hint-size="100%,215px"></x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2022" make="Lexus" model="NX 350" price-per-mo="559" miles="18k" drivetrain="AWD" certified="true" cta="" image="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/2022_Lexus_NX_350%2C_front_3.7.22.jpg/960px-2022_Lexus_NX_350%2C_front_3.7.22.jpg" hint-size="100%,215px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2024" make="BMW" model="330i" trim="M Sport" price-per-mo="487" miles="14k" drivetrain="RWD" certified="true" best-match="true" cta="" image="/assets/inventory/bmw-330i.jpg" hint-size="100%,215px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2025" make="Toyota" model="Camry" trim="XSE" price-per-mo="449" miles="7k" drivetrain="AWD" certified="true" cta="" image="/assets/inventory/toyota-camry.jpg" hint-size="100%,215px"></x-import>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.VehicleCard" year="2022" make="Lexus" model="NX 350" price-per-mo="559" miles="18k" drivetrain="AWD" certified="true" cta="" image="/assets/inventory/lexus-nx350.jpg" hint-size="100%,215px"></x-import>
         </div>
-        <div class="row" style="align-items:center;justify-content:center;gap:8px;padding:12px;border:1px dashed rgba(24,200,255,.3);border-radius:14px;font:600 12px Manrope;color:#aebfdf"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5Z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg></span>Want to talk to one? <span class="cy">Join the waitlist</span> — pre-qualify with a soft pull, 0 FICO impact.</div>
+        <div class="row" style="align-items:center;justify-content:center;gap:8px;padding:12px;border:1px dashed rgba(24,200,255,.3);border-radius:14px;font:600 12px Manrope;color:#aebfdf"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5Z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg></span>Want to talk to one? <a class="cy" href="/waitlist">Join the waitlist</a> — pre-qualify with a soft pull, 0 FICO impact.</div>
       </div>
     </div>
   </div></div>

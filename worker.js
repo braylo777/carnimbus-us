@@ -23,14 +23,14 @@ const SEC = {
   "Permissions-Policy": "geolocation=(), microphone=(), camera=(), interest-cohort=()",
   "Content-Security-Policy": [
     "default-src 'self'",
-    "img-src 'self' data: https://upload.wikimedia.org",
+    "img-src 'self' data:",
     // 'unsafe-inline' required by the many inline style= attributes in the exported HTML.
-    // Google Fonts allowed until fonts are self-hosted (P1) — then drop the two font hosts.
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
-    "script-src 'self' https://challenges.cloudflare.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    // challenges.cloudflare.com = Turnstile; static.cloudflareinsights.com = Web Analytics beacon.
+    "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
     "frame-src https://challenges.cloudflare.com",
-    "connect-src 'self' https://challenges.cloudflare.com",
+    "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
     "base-uri 'none'",
     "form-action 'self'",
     "object-src 'none'",
