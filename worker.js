@@ -45,6 +45,7 @@ export default {
     }
     if (url.pathname === "/api/sms/inbound" && request.method === "POST") return sec(await smsInbound(request, env));
     if (url.pathname === "/api/sms/send" && request.method === "POST")    return sec(await adminOnly(request, env, smsSendRoute));
+    if (url.pathname === "/api/sms/numbers")                              return sec(await adminOnly(request, env, smsNumbers));
     if (url.pathname === "/api/vdp/ingest" && request.method === "POST")  return sec(await adminOnly(request, env, vdpIngest));
     if (url.pathname === "/api/auth/start" && request.method === "POST")  return sec(await authStart(request, env));
     if (url.pathname === "/api/auth/verify" && request.method === "POST") return sec(await authVerify(request, env));
@@ -83,6 +84,11 @@ async function sendSMS(env,to,body){ if(!env.TWILIO_ACCOUNT_SID) return {ok:fals
   return {ok:r.ok,sid:d.sid}; }
 async function smsSendRoute(request,env){ const {to,body}=await request.json().catch(()=>({}));
   if(!to||!body) return json({ok:false,error:"bad_request"},400); return json(await sendSMS(env,to,body)); }
+async function smsNumbers(request,env){ if(!env.TWILIO_ACCOUNT_SID) return json({ok:false,error:"twilio_dark"});
+  const r=await fetch(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers.json?PageSize=10`,
+    {headers:{Authorization:"Basic "+btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN)}});
+  const d=await r.json().catch(()=>({}));
+  return json({ok:r.ok,from_configured:!!env.TWILIO_FROM,numbers:(d.incoming_phone_numbers||[]).map(n=>n.phone_number),message:d.message}); }
 async function smsInbound(request,env){ const form=await request.formData().catch(()=>null);
   const from=form?String(form.get("From")||""):"", text=form?String(form.get("Body")||"").trim().toUpperCase():"";
   let reply="";
