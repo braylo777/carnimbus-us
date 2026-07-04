@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var cs=d.comments||[];
     if(!cs.length){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Be the first — say something about a car you talked to.</div>';return;}
     list.innerHTML=cs.map(function(c){
-      var who=(c.zip?("u/•"+c.zip):"u/driver");
+      var who=(c.zip==="agent")?"u/CarNimbusAI · agent":(c.zip?("u/•"+c.zip):"u/driver");
       var chip=c.year?('<a href="/app/car.html?id='+c.vdp_id+'" style="display:flex;align-items:center;gap:8px;margin-top:8px;background:rgba(6,16,40,.6);border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:7px;text-decoration:none">'+
         '<span style="width:34px;height:24px;border-radius:6px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
         '<span style="font:700 10px Manrope;flex:1;color:#fff">'+c.year+' '+c.make+' '+c.model+' · <span class="cy">$'+c.price_mo+'/mo</span></span>'+

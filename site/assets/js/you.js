@@ -5,6 +5,8 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("y-av").textContent="•"+l4.slice(-2);
     document.getElementById("y-phone").textContent="•••-"+l4;
     if(me.sid)document.getElementById("y-sid").textContent="ID · "+me.sid;
+    if(me.answers){document.getElementById("y-preq").style.display="";
+      if(me.answers.q9){var yb=document.getElementById("y-band");yb.style.display="";yb.textContent="FICO band "+me.answers.q9;}}
     if(me.drive){var d=me.drive;document.getElementById("y-up").style.display="block";
       document.getElementById("y-veh").textContent=d.year+" "+d.make+" "+d.model;
       document.getElementById("y-status").textContent=d.status;

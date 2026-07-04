@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("p-center").textContent=d.center+" Test Drive Center";
     document.getElementById("p-slot").textContent=d.slot;
     document.getElementById("p-cid").textContent="CID·"+String(d.pass_token).slice(0,8);
-    document.getElementById("p-open").href="/pass/"+d.pass_token;
+    document.getElementById("p-open").href="/app/pass.html";
     document.getElementById("p-chat").href="/app/car.html?id="+d.vdp_id;
     document.getElementById("p-status").textContent=d.status;
     var est=Math.round(d.price_mo*72*0.88/100)*100;

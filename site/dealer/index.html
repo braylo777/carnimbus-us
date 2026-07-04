@@ -10,9 +10,8 @@
 <link rel="stylesheet" href="/assets/fonts/fonts.css">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-.opt{font:600 12px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:9px 14px;cursor:pointer;background:transparent}
-.opt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
 @media(max-width:700px){[style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:1fr 1fr!important}}
+@media(max-width:900px){#dc-split{grid-template-columns:1fr!important}}
 </style>
 </head>
 <body>
@@ -20,34 +19,52 @@
 <div style="padding:0 20px 40px"><div class="bw cv">
   <div style="position:relative;background:#06163b;min-height:640px">
     <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:420px;height:420px;background:rgba(24,200,255,.1);top:-80px;right:-60px"></div><div class="cine-vig"></div></div>
-    <div class="z row" style="align-items:center;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(24,200,255,.12)">
-      <a href="/" style="display:inline-flex;align-items:center;gap:8px"><img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px 'Space Grotesk';color:#fff">CarNimbus</b></a>
+    <div class="z row" style="align-items:center;gap:16px;padding:15px 20px;border-bottom:1px solid rgba(24,200,255,.12);flex-wrap:wrap">
+      <a href="/dealer/" style="display:inline-flex;align-items:center;gap:8px"><img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px 'Space Grotesk';color:#fff">CarNimbus</b></a>
       <span id="dc-store" style="font:600 12px Manrope;color:#8ca0c4;border-left:1px solid rgba(24,200,255,.18);padding-left:16px">Console</span>
       <span id="dc-cn" class="mono" style="font-size:9px;color:#7f93b8"></span>
       <div class="row" style="margin-left:auto;align-items:center;gap:12px">
+        <span class="mono" id="dc-today" style="font-size:9px;color:#8ca0c4;letter-spacing:.14em"></span>
         <a class="btn primary sm" href="/dealer/listing.html" style="text-decoration:none">+ New listing</a>
-        <span id="dc-name" style="font:700 12px Manrope"></span>
+        <span class="avatar" id="dc-av" style="width:30px;height:30px;font-size:11px"></span>
+        <span><span id="dc-name" style="display:block;font:700 12px Manrope"></span><span id="dc-role" style="display:block;font:500 9px Manrope;color:#8ca0c4"></span></span>
       </div>
     </div>
     <div class="z" style="padding:18px 20px">
       <div id="gate401" style="display:none;text-align:center;padding:60px 20px"><div class="disp" style="font-size:20px">Sign in with your dealer number.</div><a class="btn primary md" href="/app/signin.html" style="text-decoration:none;margin-top:14px;display:inline-flex">Sign in</a></div>
       <div id="gate403" style="display:none;text-align:center;padding:60px 20px"><div class="disp" style="font-size:20px">Your access is pending.</div><div style="font:500 13px Manrope;color:#aebfdf;margin-top:6px">Your client number unlocks this console the moment your partnership is active.</div><a class="btn primary md" href="/app/signin.html" style="text-decoration:none;margin-top:14px;display:inline-flex">Request access</a></div>
       <div id="console" style="display:none">
-        <div class="row" style="align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="disp" style="font-size:26px;font-weight:700">Dashboard</div></div>
+        <div class="row" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div class="disp" style="font-size:26px;font-weight:700">Dashboard</div>
+          <span id="dc-soon" class="badge green" style="display:none"></span>
+        </div>
         <div id="do-now" class="row" style="display:none;align-items:center;gap:12px;background:rgba(24,200,255,.08);border:1px solid rgba(24,200,255,.28);border-radius:14px;padding:12px 16px;margin-top:12px">
-          <span style="width:34px;height:34px;border-radius:11px;background:rgba(24,200,255,.16);display:grid;place-items:center;color:#18C8FF" class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></span>
-          <div id="dn-txt" style="font:700 14px Manrope;color:#fff"></div>
+          <span style="width:34px;height:34px;border-radius:11px;background:rgba(24,200,255,.16);display:grid;place-items:center;color:#18C8FF" class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+          <div id="dn-txt" style="font:700 14px Manrope;color:#fff;flex:1"></div>
+          <a class="btn primary sm" href="/dealer/scan.html" style="text-decoration:none">Scan QR · check in</a>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px">
-          <div class="metric"><div class="v" id="k-routed">0</div><div class="l">Routed</div></div>
-          <div class="metric"><div class="v" id="k-booked">0</div><div class="l">Booked</div></div>
-          <div class="metric"><div class="v" id="k-showed">0</div><div class="l">Showed</div></div>
-          <div class="metric"><div class="v" id="k-closed">0</div><div class="l">Closed</div></div>
+          <div class="metric"><div class="v" id="k-routed">0</div><div class="l">Routed today</div><div class="mono" id="k-routed-sub" style="font-size:9px;color:#54d699;margin-top:4px"></div></div>
+          <div class="metric"><div class="v" id="k-booked">0</div><div class="l">Booked</div><div class="mono" id="k-booked-sub" style="font-size:9px;color:#18C8FF;margin-top:4px"></div></div>
+          <div class="metric"><div class="v" id="k-showed">0</div><div class="l">Showed</div><div class="mono" id="k-showed-sub" style="font-size:9px;color:#18C8FF;margin-top:4px"></div></div>
+          <div class="metric"><div class="v" id="k-closed">0</div><div class="l">Closed</div><div class="mono" id="k-closed-sub" style="font-size:9px;color:#18C8FF;margin-top:4px"></div></div>
         </div>
-        <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:16px 0 8px">APPOINTMENTS · ADVANCE ON ARRIVAL</div>
-        <div id="appts" class="col" style="gap:10px"></div>
-        <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:16px 0 4px">YOUR LISTINGS</div>
-        <div id="lst"></div>
+        <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-top:16px" id="dc-split">
+          <div>
+            <div class="row" style="align-items:center;justify-content:space-between"><span class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">APPOINTMENTS · SCAN QR TO ADVANCE</span><span class="mono" style="font-size:8px;color:#7f93b8">CONFIRMED → ARRIVED → SOLD</span></div>
+            <div id="appts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px"></div>
+            <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:16px 0 6px">TODAY'S SCHEDULE</div>
+            <div id="sched"></div>
+            <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:16px 0 4px">YOUR LISTINGS</div>
+            <div id="lst"></div>
+          </div>
+          <div class="glass" style="border-radius:16px;padding:14px;align-self:start">
+            <div class="row" style="align-items:center;gap:8px"><img src="/assets/logo.png" alt="" style="width:22px;height:22px"><div><div style="font:700 11px Manrope" id="dcc-head">CarNimbus AI ↔ —</div><div style="font:500 9px Manrope;color:#8ca0c4" id="dcc-sub"></div></div></div>
+            <div id="dc-chat" class="col" style="gap:8px;margin-top:12px;max-height:420px;overflow:auto"></div>
+            <div class="mono" id="dcc-cid" style="font-size:8px;color:#7f93b8;letter-spacing:.14em;margin-top:10px;text-align:center"></div>
+            <button class="btn primary md" id="dcc-open" type="button" style="width:100%;margin-top:10px">Jump into chat</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

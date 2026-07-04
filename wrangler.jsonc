@@ -7,7 +7,8 @@
     { "pattern": "carnimbus.com", "custom_domain": true },
     { "pattern": "app.carnimbus.com", "custom_domain": true },
     { "pattern": "dealer.carnimbus.com", "custom_domain": true },
-    { "pattern": "admin.carnimbus.com", "custom_domain": true }
+    { "pattern": "admin.carnimbus.com", "custom_domain": true },
+    { "pattern": "ai.carnimbus.com", "custom_domain": true }
   ],
   "assets": {
     "directory": "./site",

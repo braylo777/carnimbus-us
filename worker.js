@@ -42,7 +42,7 @@ export default {
     let url = new URL(request.url);
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
-    const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin"}[sub];
+    const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
     if(PREFIX && !url.pathname.startsWith(PREFIX) && !url.pathname.startsWith("/api/") &&
        !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") &&
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
@@ -72,6 +72,9 @@ export default {
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
     if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
+    if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
+    if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
+    if (url.pathname === "/api/ai/pulse")                                 return sec(await aiPulse(env));
     return sec(await env.ASSETS.fetch(request));
   },
   async scheduled(event, env) {
@@ -215,7 +218,13 @@ async function carChat(request,env,uid){ const {vdpId,messages}=await request.js
     await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
       .bind(u.phone,"drive-confirm",`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`,new Date().toISOString(),"none",new Date().toISOString()).run();
     pass="/pass/"+tok; }catch(_){} }
-  return json({ok:true,reply:text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").trim(),pass}); }
+  const cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").trim();
+  const lastUser=(messages||[]).slice(-1)[0];
+  if(lastUser&&lastUser.role==="user") await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
+    .bind(uid,vdpId,"user",String(lastUser.content).slice(0,500),new Date().toISOString()).run();
+  await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
+    .bind(uid,vdpId,"car",cleanReply.slice(0,500),new Date().toISOString()).run();
+  return json({ok:true,reply:cleanReply,pass}); }
 async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2]||"";
   const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,u.phone FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id WHERE td.pass_token=?").bind(tok).first();
   if(!t) return new Response("Pass not found",{status:404});
@@ -224,6 +233,7 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 <div class="wl-done" style="max-width:380px;margin:20px"><div class="wl-done-h">🎟️ Drive Now Pass</div>
 <div class="wl-done-p"><b style="color:#fff">${t.year} ${t.make} ${t.model}</b><br>${t.slot} · ${t.center} Test Drive Center<br>Rider: •••-${String(t.phone).slice(-4)} · Status: ${t.status}</div>
 <div class="wl-done-p" style="font-size:11px">Show this screen when you arrive. Terms already set — no 4-hour ordeal.</div></div></body></html>`,{headers:{"content-type":"text/html"}}); }
+function cidFor(id){ const n=100000000+(id*7919)%900000000; const s=String(n); return s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }
 async function withDealer(request,env,fn){
   const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
   const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
@@ -236,13 +246,17 @@ async function withDealer(request,env,fn){
 }
 async function dealerConsole(request,env,uid,dealer){
   const tds=await env.DB.prepare(
-    "SELECT td.id,td.center,td.slot,td.status,td.created_at,u.phone,v.year,v.make,v.model,v.trim,v.price_mo,v.photos "+
+    "SELECT td.id,td.center,td.slot,td.status,td.created_at,u.phone,u.handle,v.year,v.make,v.model,v.trim,v.price_mo,v.photos "+
     "FROM test_drives td JOIN users u ON u.id=td.user_id JOIN vdps v ON v.id=td.vdp_id ORDER BY td.id DESC LIMIT 12").all();
   const k=await env.DB.prepare("SELECT "+
     "COUNT(*) routed, SUM(CASE WHEN status IN ('requested','confirmed','arrived','sold') THEN 1 ELSE 0 END) booked, "+
     "SUM(CASE WHEN status IN ('arrived','sold') THEN 1 ELSE 0 END) showed, SUM(CASE WHEN status='sold' THEN 1 ELSE 0 END) closed FROM test_drives").first();
+  const today=new Date().toISOString().slice(0,10), yd=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const rt=await env.DB.prepare("SELECT SUM(CASE WHEN substr(created_at,1,10)=? THEN 1 ELSE 0 END) t, SUM(CASE WHEN substr(created_at,1,10)=? THEN 1 ELSE 0 END) y FROM test_drives").bind(today,yd).first();
   const ls=await env.DB.prepare("SELECT id,year,make,model,trim,price_mo,active FROM vdps ORDER BY id DESC LIMIT 20").all();
-  return json({ok:true,dealer:dealer,kpis:k,appointments:(tds.results||[]).map(t=>({...t,phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),listings:ls.results||[]});
+  return json({ok:true,dealer:dealer,kpis:k,deltas:{today:rt.t||0,yesterday:rt.y||0},
+    appointments:(tds.results||[]).map(t=>({...t,who:t.handle||("Rider •••-"+String(t.phone).slice(-4)),cid:cidFor(t.id),phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),
+    listings:ls.results||[]});
 }
 async function dealerListing(request,env,uid,dealer){
   const c=await request.json().catch(()=>({}));
@@ -257,11 +271,42 @@ async function dealerListing(request,env,uid,dealer){
   return json({ok:true});
 }
 async function dealerCheckin(request,env,uid,dealer){
-  const {driveId,status}=await request.json().catch(()=>({}));
-  if(!driveId||["confirmed","arrived","sold"].indexOf(status)<0) return json({ok:false,error:"bad_request"},400);
-  await env.DB.prepare("UPDATE test_drives SET status=? WHERE id=?").bind(status,+driveId).run();
-  return json({ok:true});
+  const {driveId,token,status}=await request.json().catch(()=>({}));
+  if(["confirmed","arrived","sold"].indexOf(status)<0) return json({ok:false,error:"bad_request"},400);
+  let id=+driveId||0;
+  if(!id&&token){ const t=String(token).replace(/[^A-Za-z0-9]/g,"");
+    const row=t.length>=20?await env.DB.prepare("SELECT id FROM test_drives WHERE pass_token=?").bind(t).first()
+      :await env.DB.prepare("SELECT id FROM test_drives WHERE pass_token LIKE ? ORDER BY id DESC LIMIT 1").bind(t.slice(0,6)+"%").first();
+    if(row) id=row.id; }
+  if(!id) return json({ok:false,error:"not_found"},404);
+  await env.DB.prepare("UPDATE test_drives SET status=? WHERE id=?").bind(status,id).run();
+  const td=await env.DB.prepare("SELECT td.id,td.status,u.handle,u.phone FROM test_drives td JOIN users u ON u.id=td.user_id WHERE td.id=?").bind(id).first();
+  return json({ok:true,drive:{id:td.id,status:td.status,who:td.handle||("Rider •••-"+String(td.phone).slice(-4))}});
 }
+async function chatList(request,env,uid){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
+  if(vdpId){ const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 100").bind(uid,vdpId).all();
+    return json({ok:true,messages:rows.results||[]}); }
+  const rows=await env.DB.prepare(
+    "SELECT c.vdp_id, MAX(c.id) mid, v.year,v.make,v.model,v.trim,v.price_mo,v.photos FROM chats c JOIN vdps v ON v.id=c.vdp_id "+
+    "WHERE c.user_id=? GROUP BY c.vdp_id ORDER BY mid DESC LIMIT 20").bind(uid).all();
+  const out=[]; for(const r of (rows.results||[])){
+    const last=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE id=?").bind(r.mid).first();
+    out.push({vdpId:r.vdp_id,year:r.year,make:r.make,model:r.model,trim:r.trim,price_mo:r.price_mo,
+      photos:JSON.parse(r.photos||"[]"),last:last?last.body:"",when:last?last.created_at:""}); }
+  return json({ok:true,threads:out}); }
+async function dealerChat(request,env,uid,dealer){ const curl=new URL(request.url); const driveId=+curl.searchParams.get("driveId")||0;
+  if(!driveId) return json({ok:false,error:"bad_request"},400);
+  const td=await env.DB.prepare("SELECT user_id,vdp_id FROM test_drives WHERE id=?").bind(driveId).first();
+  if(!td) return json({ok:false,error:"not_found"},404);
+  const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 40").bind(td.user_id,td.vdp_id).all();
+  return json({ok:true,messages:rows.results||[]}); }
+async function aiPulse(env){
+  const v=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE active=1").first();
+  const u=await env.DB.prepare("SELECT COUNT(*) c FROM users").first();
+  const t=await env.DB.prepare("SELECT COUNT(*) c FROM test_drives").first();
+  const e=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE embedding_synced=1").first();
+  const ch=await env.DB.prepare("SELECT COUNT(*) c FROM chats").first();
+  return json({ok:true,cars:v.c,riders:u.c,drives:t.c,embeddings:e.c,chats:ch.c}); }
 async function dealerActivate(request,env){ const {leadId}=await request.json().catch(()=>({}));
   if(!leadId) return json({ok:false,error:"bad_request"},400);
   const no=genCode("CN");
@@ -291,7 +336,7 @@ async function me(request,env,uid){
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
   return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,answers:p?JSON.parse(p.answers):null,
-    drive:td?{...td,photos:JSON.parse(td.photos||"[]")}:null});
+    drive:td?{...td,cid:cidFor(td.id),photos:JSON.parse(td.photos||"[]")}:null});
 }
 async function dealerLead(request,env){
   const {name,dealership,role,phone,email}=await request.json().catch(()=>({}));
@@ -307,6 +352,10 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
     const n=await env.DB.prepare("SELECT COUNT(*) c FROM comments WHERE user_id=? AND created_at>?").bind(uid,new Date(Date.now()-3600e3).toISOString()).first();
     if(n.c>=10) return json({ok:false,error:"rate_limited"},429);
     await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,created_at) VALUES (?,?,?,?,?)").bind(uid,vdpId,String(body),String(zip||""),new Date().toISOString()).run();
+    if(/qualif|price|rate|score|apr|band|approv/i.test(String(body))){
+      const reply=await llm(env,[{role:"system",content:"You are u/CarNimbusAI, the CarNimbus community agent. Reply in under 40 words, friendly expert, reference soft-pull pre-qualification and offer to find matches. No disclaimers."},{role:"user",content:String(body)}]).catch(()=>null);
+      if(reply) await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,created_at) VALUES (0,?,?,?,?)")
+        .bind(vdpId,String(reply).slice(0,400),"agent",new Date().toISOString()).run().catch(()=>{}); }
     return json({ok:true}); }
   if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,created_at FROM comments WHERE vdp_id=? ORDER BY id DESC LIMIT 50").bind(vdpId).all();
     return json({ok:true,comments:rows.results||[]}); }

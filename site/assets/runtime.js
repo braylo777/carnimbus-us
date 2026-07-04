@@ -224,12 +224,9 @@
     var here=location.pathname;
     el.innerHTML='<a href="/" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
       '<img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
-      ['<a class="navlink" href="/app/browse.html"'+(here.indexOf("browse")>-1?' style="color:#18C8FF"':'')+'>Browse</a>',
-       '<a class="navlink" href="/app/qualified.html"'+(here.indexOf("qualified")>-1?' style="color:#18C8FF"':'')+'>My Deals</a>',
-       '<a class="navlink" href="/app/profile.html">Account</a>'].join('')+
       '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
       '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
-      '<a href="/app/profile.html" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
+      '<a href="/app/you.html" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
       if(d.ok&&d.phone) document.getElementById("appnav-av").textContent="•"+String(d.phone).slice(-2);
     }).catch(function(){});
@@ -238,8 +235,9 @@
     if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
     var here=location.pathname;
     var T=[["discover","/app/discover.html",'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/>'],
-           ["browse","/app/browse.html",'<path d="M5 13l1.5-4.5A2 2 0 0 1 8.4 7h7.2a2 2 0 0 1 1.9 1.5L19 13m-14 0h14m-14 0v5m14-5v5"/>'],
            ["feed","/app/feed.html",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
+           ["talk","/app/talk.html",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
+           ["pass","/app/pass.html",'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M13 13h3v3h-3zM17 17h3v3h-3z"/>'],
            ["you","/app/you.html",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
     var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
     bar.innerHTML=T.map(function(t){ var on=here.indexOf(t[0])>-1;

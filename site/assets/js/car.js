@@ -21,7 +21,12 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("c-name").textContent=CAR.year+" "+CAR.make+" "+CAR.model;
     document.getElementById("c-tag").textContent="“"+((CAR.description||"").split(".")[0]||"Ask me anything")+".”";
     document.getElementById("c-img").src=(CAR.photos&&CAR.photos[0])||"";
-    bubble("car",CAR.model+" here. Ask me anything — or tell me when you want to drive.");
+    fetch("/api/chats?vdpId="+id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
+      var ms=(h&&h.messages)||[];
+      if(!ms.length){bubble("car",CAR.model+" here. "+(((CAR.description||"").split(".")[0])?(CAR.description.split(".")[0]+"."):"Ask me anything — or tell me when you want to drive."));return;}
+      ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body);
+        if(m.role==="user")hist.push({role:"user",content:m.body});else hist.push({role:"assistant",content:m.body});});
+    }).catch(function(){bubble("car",CAR.model+" here. Ask me anything — or tell me when you want to drive.");});
   }).catch(function(){document.getElementById("vdp").innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">Couldn’t load this car — refresh to retry. <a class="cy" href="/app/browse.html">Back to browse</a></div>';});
   async function send(){var inEl=document.getElementById("chat-in"),msg=inEl.value.trim();if(!msg||!CAR)return;
     inEl.value="";bubble("you",msg);hist.push({role:"user",content:msg});typing(true);
@@ -33,7 +38,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var d=await r.json().catch(function(){return{};});
     if(d.ok){hist.push({role:"assistant",content:d.reply});bubble("car",d.reply);
       if(d.pass){var ok=document.getElementById("approved");ok.style.display="flex";
-        var btn=document.getElementById("pass-btn");btn.style.display="inline-flex";btn.href=d.pass;}}
+        var btn=document.getElementById("pass-btn");btn.style.display="inline-flex";btn.href="/app/pass.html";btn.textContent="See your pass →";}}
     else bubble("car","Static on the line — try that again.");}
   document.getElementById("chat-send").addEventListener("click",send);
   document.getElementById("chat-in").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
