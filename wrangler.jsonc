@@ -4,7 +4,10 @@
   "compatibility_date": "2025-01-01",
   "main": "worker.js",
   "routes": [
-    { "pattern": "carnimbus.com", "custom_domain": true }
+    { "pattern": "carnimbus.com", "custom_domain": true },
+    { "pattern": "app.carnimbus.com", "custom_domain": true },
+    { "pattern": "dealer.carnimbus.com", "custom_domain": true },
+    { "pattern": "admin.carnimbus.com", "custom_domain": true }
   ],
   "assets": {
     "directory": "./site",

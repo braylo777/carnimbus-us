@@ -39,7 +39,16 @@ const SEC = {
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
+    let url = new URL(request.url);
+    // Subdomain doors: one Worker, path-prefixed surfaces.
+    const sub=url.hostname.split(".")[0];
+    const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin"}[sub];
+    if(PREFIX && !url.pathname.startsWith(PREFIX) && !url.pathname.startsWith("/api/") &&
+       !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") &&
+       url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
+      url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":"/index.html") : url.pathname);
+      request = new Request(url, request);
+    }
     if (url.pathname === "/api/waitlist" && request.method === "POST") {
       return sec(await waitlist(request, env));
     }
@@ -57,6 +66,10 @@ export default {
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
+    if (url.pathname === "/api/dealer/console")                           return sec(await withDealer(request, env, dealerConsole));
+    if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
+    if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
+    if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     return sec(await env.ASSETS.fetch(request));
   },
   async scheduled(event, env) {
@@ -204,6 +217,53 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 <div class="wl-done" style="max-width:380px;margin:20px"><div class="wl-done-h">🎟️ Drive Now Pass</div>
 <div class="wl-done-p"><b style="color:#fff">${t.year} ${t.make} ${t.model}</b><br>${t.slot} · ${t.center} Test Drive Center<br>Rider: •••-${String(t.phone).slice(-4)} · Status: ${t.status}</div>
 <div class="wl-done-p" style="font-size:11px">Show this screen when you arrive. Terms already set — no 4-hour ordeal.</div></div></body></html>`,{headers:{"content-type":"text/html"}}); }
+async function withDealer(request,env,fn){
+  const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
+  const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+  const digits=String(u&&u.phone||"").replace(/\D/g,"").slice(-10);
+  const d=await env.DB.prepare("SELECT id,name,dealership FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1")
+    .bind("%"+digits).first();
+  if(!d||!digits) return json({ok:false,error:"not_dealer"},403);
+  return fn(request,env,uid,d);
+}
+async function dealerConsole(request,env,uid,dealer){
+  const tds=await env.DB.prepare(
+    "SELECT td.id,td.center,td.slot,td.status,td.created_at,u.phone,v.year,v.make,v.model,v.trim,v.price_mo,v.photos "+
+    "FROM test_drives td JOIN users u ON u.id=td.user_id JOIN vdps v ON v.id=td.vdp_id ORDER BY td.id DESC LIMIT 12").all();
+  const k=await env.DB.prepare("SELECT "+
+    "COUNT(*) routed, SUM(CASE WHEN status IN ('requested','confirmed','arrived','sold') THEN 1 ELSE 0 END) booked, "+
+    "SUM(CASE WHEN status IN ('arrived','sold') THEN 1 ELSE 0 END) showed, SUM(CASE WHEN status='sold' THEN 1 ELSE 0 END) closed FROM test_drives").first();
+  const ls=await env.DB.prepare("SELECT id,year,make,model,trim,price_mo,active FROM vdps ORDER BY id DESC LIMIT 20").all();
+  return json({ok:true,dealer:dealer,kpis:k,appointments:(tds.results||[]).map(t=>({...t,phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),listings:ls.results||[]});
+}
+async function dealerListing(request,env,uid,dealer){
+  const c=await request.json().catch(()=>({}));
+  if(!c.year||!c.make||!c.model||!c.price_mo) return json({ok:false,error:"bad_request"},400);
+  const vin=c.vin||("DLR-"+dealer.id+"-"+Date.now());
+  await env.DB.prepare(
+    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,updated_at) "+
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?)")
+    .bind(vin,+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),+c.price_mo,
+      String(c.miles||"").slice(0,20),String(c.drivetrain||"").slice(0,20),String(c.body||"").slice(0,20),
+      JSON.stringify(c.features||[]),String(c.description||"").slice(0,500),JSON.stringify(c.photos||[]),new Date().toISOString()).run();
+  return json({ok:true});
+}
+async function dealerCheckin(request,env,uid,dealer){
+  const {driveId,status}=await request.json().catch(()=>({}));
+  if(!driveId||["confirmed","arrived","sold"].indexOf(status)<0) return json({ok:false,error:"bad_request"},400);
+  await env.DB.prepare("UPDATE test_drives SET status=? WHERE id=?").bind(status,+driveId).run();
+  return json({ok:true});
+}
+async function adminStats(request,env){
+  const w=await env.DB.prepare("SELECT COUNT(*) c FROM waitlist").first();
+  const u=await env.DB.prepare("SELECT COUNT(*) c FROM users").first();
+  const p=await env.DB.prepare("SELECT COUNT(*) c FROM profiles").first();
+  const t=await env.DB.prepare("SELECT COUNT(*) c FROM test_drives").first();
+  const v=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE active=1").first();
+  const dl=await env.DB.prepare("SELECT id,name,dealership,role,phone,email,created_at FROM dealer_leads ORDER BY id DESC LIMIT 50").all();
+  const cm=await env.DB.prepare("SELECT COUNT(*) c FROM comments").first();
+  return json({ok:true,waitlist:w.c,users:u.c,profiles:p.c,drives:t.c,activeCars:v.c,comments:cm.c,dealerLeads:dl.results||[]});
+}
 function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 async function me(request,env,uid){

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>Dealer — Add a listing</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.opt{font:600 12px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:9px 14px;cursor:pointer;background:transparent}
+.opt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
+@media(max-width:700px){[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:600px;padding:22px 22px">
+    <div class="cine"><div class="cine-grid"></div></div>
+    <div class="z row" style="align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><div class="disp" style="font-size:24px;font-weight:700">Add a listing</div><div style="font:500 12px Manrope;color:#8ca0c4;margin-top:2px">Pull it in automatically, or add one by hand. CarNimbus does the rest.</div></div>
+      <a href="/dealer/" class="btn ghost sm" style="text-decoration:none">Back</a>
+    </div>
+    <div class="z row" style="gap:12px;margin-bottom:18px;flex-wrap:wrap">
+      <div style="flex:1;min-width:160px;border:1px solid rgba(24,200,255,.3);border-radius:14px;padding:14px;text-align:center;background:rgba(24,200,255,.05)"><div style="font:700 13px Manrope">From your website</div><div style="font:500 10px Manrope;color:#8ca0c4;margin-top:3px">We scrape &amp; sync your live inventory</div><span class="badge cyan" style="margin-top:8px">Coming soon</span></div>
+      <div style="flex:1;min-width:160px;border:1px solid rgba(24,200,255,.3);border-radius:14px;padding:14px;text-align:center;background:rgba(24,200,255,.05)"><div style="font:700 13px Manrope">Upload CSV</div><div style="font:500 10px Manrope;color:#8ca0c4;margin-top:3px">Drop your DMS export</div><span class="badge cyan" style="margin-top:8px">Coming soon</span></div>
+      <div style="flex:1;min-width:160px;border:1px solid rgba(24,200,255,.3);border-radius:14px;padding:14px;text-align:center;background:rgba(24,200,255,.05)"><div style="font:700 13px Manrope">Forward GM email</div><div style="font:500 10px Manrope;color:#8ca0c4;margin-top:3px">Send new stock to add@carnimbus.com</div><span class="badge cyan" style="margin-top:8px">Coming soon</span></div>
+    </div>
+    <div class="z row" style="align-items:center;gap:12px;margin-bottom:16px"><div style="flex:1;height:1px;background:rgba(24,200,255,.12)"></div><span class="mono" style="font-size:10px;color:#7f93b8">OR ADD ONE BY HAND</span><div style="flex:1;height:1px;background:rgba(24,200,255,.12)"></div></div>
+    <div class="z" id="l-form" style="max-width:620px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">YEAR</div><input id="l-year" class="field" placeholder="2024" inputmode="numeric"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">PRICE / MO</div><input id="l-mo" class="field" placeholder="$487" inputmode="numeric"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">MAKE</div><input id="l-make" class="field" placeholder="BMW"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">MODEL</div><input id="l-model" class="field" placeholder="330i"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">TRIM</div><input id="l-trim" class="field" placeholder="M Sport"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">MILEAGE</div><input id="l-miles" class="field" placeholder="14k"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">DRIVETRAIN</div><input id="l-dt" class="field" placeholder="RWD"></div>
+        <div><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:6px">PHOTO URL</div><input id="l-photo" class="field" placeholder="https://…jpg"></div>
+      </div>
+      <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:12px 0 6px">BODY</div>
+      <div class="row" id="dl-body" style="gap:8px;flex-wrap:wrap">
+        <button type="button" class="opt" data-v="Sedan">Sedan</button><button type="button" class="opt" data-v="SUV">SUV</button><button type="button" class="opt" data-v="Truck">Truck</button><button type="button" class="opt" data-v="EV">EV</button>
+      </div>
+      <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:12px 0 6px">DESCRIPTION · GIVES THE CAR ITS PERSONALITY</div>
+      <textarea id="l-desc" class="field" placeholder="Certified. Quick, clean, confident."></textarea>
+      <div class="row" style="justify-content:flex-end;gap:10px;margin-top:16px"><a class="btn ghost md" href="/dealer/" style="text-decoration:none">Cancel</a><button id="l-pub" class="btn primary md" type="button">Publish</button></div>
+      <div class="wl-msg" id="l-msg" style="display:none"></div>
+    </div>
+    <div class="z" id="l-done" style="display:none"><div class="wl-done" style="margin-top:20px"><div class="wl-done-h">Listing live. ⚡</div><div class="wl-done-p">The AI can start selling it right now.</div></div></div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/dealer-listing.js" defer></script>
+</body>
+</html>
