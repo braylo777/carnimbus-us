@@ -238,6 +238,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,.navlink:focus-visible{
 .pill:focus{border-color:#18C8FF;box-shadow:0 0 0 3px rgba(24,200,255,.18)}
 .field{height:46px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(24,200,255,.22);color:#eef4ff;font:500 14px Manrope;padding:0 16px;width:100%;outline:none}
 .field:focus{border-color:#18C8FF;box-shadow:0 0 0 4px rgba(24,200,255,.14)}
+/* ===== app tab bar (mobile web-app shell) ===== */
+nav.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:55;display:none}
+nav.tabbar .tab{text-decoration:none}
+@media(max-width:700px){ nav.tabbar{display:flex} body:has(nav.tabbar){padding-bottom:70px} #appnav .navlink{display:none!important} }
 /* ===== mobile nav + overflow (2026-07-03 pass) ===== */
 html,body{overflow-x:hidden;max-width:100%}
 .nav-burger{display:none;width:44px;height:44px;align-items:center;justify-content:center;background:transparent;border:1px solid rgba(24,200,255,.35);border-radius:10px;color:#18C8FF;cursor:pointer;flex:0 0 auto}

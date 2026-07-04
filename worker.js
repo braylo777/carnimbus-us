@@ -56,6 +56,7 @@ export default {
     if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
+    if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
     return sec(await env.ASSETS.fetch(request));
   },
   async scheduled(event, env) {
@@ -203,6 +204,8 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 <div class="wl-done" style="max-width:380px;margin:20px"><div class="wl-done-h">🎟️ Drive Now Pass</div>
 <div class="wl-done-p"><b style="color:#fff">${t.year} ${t.make} ${t.model}</b><br>${t.slot} · ${t.center} Test Drive Center<br>Rider: •••-${String(t.phone).slice(-4)} · Status: ${t.status}</div>
 <div class="wl-done-p" style="font-size:11px">Show this screen when you arrive. Terms already set — no 4-hour ordeal.</div></div></body></html>`,{headers:{"content-type":"text/html"}}); }
+function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
+  "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 async function me(request,env,uid){
   const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
@@ -227,8 +230,12 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
     if(n.c>=10) return json({ok:false,error:"rate_limited"},429);
     await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,created_at) VALUES (?,?,?,?,?)").bind(uid,vdpId,String(body),String(zip||""),new Date().toISOString()).run();
     return json({ok:true}); }
-  const rows=await env.DB.prepare("SELECT body,zip,created_at FROM comments WHERE vdp_id=? ORDER BY id DESC LIMIT 50").bind(vdpId).all();
-  return json({ok:true,comments:rows.results||[]}); }
+  if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,created_at FROM comments WHERE vdp_id=? ORDER BY id DESC LIMIT 50").bind(vdpId).all();
+    return json({ok:true,comments:rows.results||[]}); }
+  const rows=await env.DB.prepare(
+    "SELECT c.body,c.zip,c.created_at,c.vdp_id,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
+    "LEFT JOIN vdps v ON v.id=c.vdp_id ORDER BY c.id DESC LIMIT 50").all();
+  return json({ok:true,comments:(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[]}))}); }
 
 async function waitlist(request, env) {
   // 1) CSRF: reject cross-site POSTs (allow same-site / no-Origin server-to-server).

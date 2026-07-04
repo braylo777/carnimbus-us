@@ -178,7 +178,8 @@
 "Your Drive Now pass is ready →":"Tu pase Drive Now está listo →",
 "Static on the line — try that again.":"Se cortó la señal: inténtalo de nuevo.",
 "Your matches. Talk when you’re ready.":"Tus matches. Habla cuando estés listo.",
-"Sign in":"Iniciar sesión","I'm buying a car":"Quiero comprar un auto","I'm a dealer":"Soy concesionario","Request access":"Solicitar acceso","Welcome to CarNimbus.":"Bienvenido a CarNimbus.","Buyers and dealers both drive here.":"Aquí manejan compradores y concesionarios.","Talk to this car →":"Habla con este auto →","My Deals":"Mis tratos","Account":"Cuenta","matches":"resultados","No Drive Now pass yet.":"Aún no tienes pase Drive Now.","Browse your matches":"Explora tus matches","Open full pass":"Abrir pase completo","Reschedule in chat":"Reagendar en el chat","Pre-qualified":"Precalificado","0 FICO impact":"0 impacto en FICO"} };
+"Sign in":"Iniciar sesión","I'm buying a car":"Quiero comprar un auto","I'm a dealer":"Soy concesionario","Request access":"Solicitar acceso","Welcome to CarNimbus.":"Bienvenido a CarNimbus.","Buyers and dealers both drive here.":"Aquí manejan compradores y concesionarios.","Talk to this car →":"Habla con este auto →","My Deals":"Mis tratos","Account":"Cuenta","matches":"resultados","No Drive Now pass yet.":"Aún no tienes pase Drive Now.","Browse your matches":"Explora tus matches","Open full pass":"Abrir pase completo","Reschedule in chat":"Reagendar en el chat","Pre-qualified":"Precalificado","0 FICO impact":"0 impacto en FICO"
+,"Following":"Siguiendo","For You":"Para ti","Browse all →":"Ver todo →","Talk to it":"Háblale","Post":"Publicar","Sign out":"Cerrar sesión","UPCOMING":"PRÓXIMO","YOUR MATCHES":"TUS MATCHES","Edit my 10 answers":"Editar mis 10 respuestas","Be the first — say something about a car you talked to.":"Sé el primero: comenta sobre un auto con el que hablaste.","Ask the community or an AI agent…":"Pregunta a la comunidad o a un agente de IA…","Sign in to see your account.":"Inicia sesión para ver tu cuenta.","Open pass":"Abrir pase","Reschedule":"Reagendar","Feed":"Comunidad","Hot":"Popular","New":"Nuevo"} };
   var langS=(typeof signal==="function"?signal:function(v){var f=function(x){if(arguments.length)v=x;return v;};return f;})("en");
   var effectFn=(typeof effect==="function"?effect:function(fn){fn();});   // graceful fallback if signals.js absent
   var ORIG=new WeakMap(), BOOT=Date.now();
@@ -232,6 +233,18 @@
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
       if(d.ok&&d.phone) document.getElementById("appnav-av").textContent="•"+String(d.phone).slice(-2);
     }).catch(function(){});
+  }
+  function wireTabbar(){
+    if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
+    var here=location.pathname;
+    var T=[["discover","/app/discover.html",'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/>'],
+           ["browse","/app/browse.html",'<path d="M5 13l1.5-4.5A2 2 0 0 1 8.4 7h7.2a2 2 0 0 1 1.9 1.5L19 13m-14 0h14m-14 0v5m14-5v5"/>'],
+           ["feed","/app/feed.html",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
+           ["you","/app/you.html",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
+    var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
+    bar.innerHTML=T.map(function(t){ var on=here.indexOf(t[0])>-1;
+      return '<a class="tab'+(on?' on':'')+'" href="'+t[1]+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+t[2]+'</svg>'+t[0]+'</a>'; }).join('');
+    document.body.appendChild(bar);
   }
   function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
     if(f.dataset.wired) return; f.dataset.wired="1";
@@ -366,7 +379,7 @@
   }
 
   (function boot(){ var t=0, iv=setInterval(function(){
-    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireBurger(); wireAppNav(); wireForms(); initI18n(); wireFeed();
+    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireBurger(); wireAppNav(); wireTabbar(); wireForms(); initI18n(); wireFeed();
       if(location.pathname.replace(/\/$/,"")==="/waitlist"&&matchMedia("(pointer:fine)").matches){var pi=document.querySelector("input[type=tel]");if(pi)pi.focus();}
     } },30); })();
 

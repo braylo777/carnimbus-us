@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Feed</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+@media(max-width:700px){.app-rail{display:none!important}.app-split{flex-direction:column!important}.app-split>*{border-right:none!important}}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:600px">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+    <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
+    <div class="z col" style="min-height:548px">
+      <div class="row" style="align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(24,200,255,.12)">
+        <div class="disp" style="font-size:18px;font-weight:600">Feed</div>
+        <div class="row" style="gap:12px;font:700 11px Manrope;color:#8ca0c4"><span class="cy">Hot</span><span>New</span></div>
+      </div>
+      <div id="posts" style="flex:1"></div>
+      <div class="row" style="gap:8px;padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)">
+        <label class="vh" for="post-in">Post to the community</label>
+        <input id="post-in" class="pill" style="flex:1;height:44px" placeholder="Ask the community or an AI agent…" maxlength="500">
+        <button id="post-send" class="btn primary md" type="button">Post</button>
+      </div>
+      <div class="wl-msg" id="post-msg" style="display:none;padding:0 16px 10px"></div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script defer>
+document.addEventListener("DOMContentLoaded",function(){
+  var list=document.getElementById("posts");
+  function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(s<3600)return Math.max(1,Math.round(s/60))+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d";}
+  function load(){fetch("/api/comments").then(function(r){return r.json();}).then(function(d){
+    var cs=d.comments||[];
+    if(!cs.length){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Be the first — say something about a car you talked to.</div>';return;}
+    list.innerHTML=cs.map(function(c){
+      var who=(c.zip?("u/•"+c.zip):"u/driver");
+      var chip=c.year?('<a href="/app/car.html?id='+c.vdp_id+'" style="display:flex;align-items:center;gap:8px;margin-top:8px;background:rgba(6,16,40,.6);border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:7px;text-decoration:none">'+
+        '<span style="width:34px;height:24px;border-radius:6px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
+        '<span style="font:700 10px Manrope;flex:1;color:#fff">'+c.year+' '+c.make+' '+c.model+' · <span class="cy">$'+c.price_mo+'/mo</span></span>'+
+        '<span style="font:700 9px Manrope;color:#18C8FF">View</span></a>'):'';
+      return '<div class="post" style="padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+
+        '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:18px;height:18px;border-radius:50%;background:#3a4a63;display:grid;place-items:center;font:700 8px Manrope;color:#fff">'+who.slice(2,3).toUpperCase()+'</span>'+who+' · '+rel(c.created_at)+'</div>'+
+        '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+chip+'</div>';
+    }).join('');
+    var bodies=list.querySelectorAll(".post-body");
+    cs.forEach(function(c,idx){ if(bodies[idx]) bodies[idx].textContent=c.body; });
+  });}
+  load();
+  document.getElementById("post-send").addEventListener("click",async function(){
+    var inEl=document.getElementById("post-in"),body=inEl.value.trim();if(!body)return;
+    var r=await fetch("/api/comments?vdpId=0",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({body:body})});
+    if(r.status===401){document.getElementById("post-msg").innerHTML='Sign in to post — <a class="cy" href="/app/signin.html">sign in →</a>';document.getElementById("post-msg").style.display="block";return;}
+    var d=await r.json().catch(function(){return{};});
+    if(d.ok){inEl.value="";document.getElementById("post-msg").style.display="none";load();}
+  });
+});
+</script>
+</body>
+</html>
