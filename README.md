@@ -1,9 +1,14 @@
-# carnimbus-com-site
+# carnimbus-com — framework-free (Linux JS conventions)
 
-Source of the **live carnimbus.com** — static marketing site + Cloudflare Worker.
+Source of the **live carnimbus.com** — a Cloudflare Worker serving a vanilla HTML/JS/CSS site.
+**No React, no Next.js, no npm, no build step** — it already delivers the Linux JS goals (tiny
+runtime, direct DOM, signal-based state, near-native performance). See **[LINUX-JS.md](LINUX-JS.md)**
+for the architecture, the `linux.config.js` route map, the signals model, and the migration path if
+a real JSX→WASM compiler ever ships.
 
-- `site/` — static pages (vanilla HTML/JS/CSS; **NPM is banned** in this codebase — no packages, no build step).
-  Pages use `<x-import>` design-system placeholders that `site/assets/runtime.js` renders client-side.
+- `site/` — page-per-file routing (the Linux JS `appDir`; vanilla HTML/JS/CSS). Pages use
+  `<x-import>` design-system placeholders that `site/assets/runtime.js` renders client-side, with
+  `site/assets/signals.js` providing reactive state.
 - `worker.js` — serves assets (`run_worker_first`) with security headers; `POST /api/waitlist` → D1.
 - `migrations/` — D1 schema for the `carnimbus-waitlist` database (id `43d0dc1a-96c1-49dd-98da-e4f865b7a013`).
 - `wrangler.jsonc` — Worker config; custom domain `carnimbus.com`.

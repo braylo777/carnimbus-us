@@ -178,8 +178,11 @@
 "Your Drive Now pass is ready →":"Tu pase Drive Now está listo →",
 "Static on the line — try that again.":"Se cortó la señal: inténtalo de nuevo.",
 "Your matches. Talk when you’re ready.":"Tus matches. Habla cuando estés listo."} };
-  var CUR="en", ORIG=new WeakMap(), BOOT=Date.now();
-  function L(s){ return CUR==="es" && I18N.es[s] ? I18N.es[s] : s; }
+  var langS=(typeof signal==="function"?signal:function(v){var f=function(x){if(arguments.length)v=x;return v;};return f;})("en");
+  var effectFn=(typeof effect==="function"?effect:function(fn){fn();});   // graceful fallback if signals.js absent
+  var ORIG=new WeakMap(), BOOT=Date.now();
+  function CUR(){ return langS(); }
+  function L(s){ return CUR()==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
   function norm(t){ return (t||"").replace(/\s+/g," ").trim().toLowerCase().replace(/[→»]/g,"").trim(); }
   var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact" };
@@ -237,7 +240,7 @@
       var ERR={invalid_phone:"That number doesn't look right — 10 digits, US for now.",consent_required:"Please agree to the Privacy Policy to continue.",rate_limited:"Too many attempts — please try again later.",captcha:"Bot check failed — please retry.",forbidden:"Request blocked. Refresh and try again."};
       try{
         var res=await fetch("/api/waitlist",{method:"POST",headers:{"content-type":"application/json"},
-          body:JSON.stringify({phone:"+1"+phone,lang:CUR,consent:consent,privacy:priv,token:token,hp:hp,t:Date.now()-BOOT})});
+          body:JSON.stringify({phone:"+1"+phone,lang:CUR(),consent:consent,privacy:priv,token:token,hp:hp,t:Date.now()-BOOT})});
         var d=await res.json();
         if(d.ok){ try{localStorage.cn_joined="1";}catch(_){ } renderDone(f,!!d.already,true); }
         else { reset(btn); err(f, pEl, L(ERR[d.error]||"Something went wrong — try again.")); }
@@ -266,7 +269,7 @@
     }
   }); }
   function applyLang(lang){
-    CUR=lang; try{localStorage.cn_lang=lang;}catch(_){}
+    try{localStorage.cn_lang=lang;}catch(_){}
     document.documentElement.lang=lang;
     var walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null,false), nodes=[], n;
     while((n=walk.nextNode())) nodes.push(n);
@@ -280,11 +283,12 @@
       if(!ORIG.has(el)) ORIG.set(el, el.getAttribute("placeholder"));
       var o=ORIG.get(el); el.setAttribute("placeholder",(lang==="es"&&I18N.es[o])?I18N.es[o]:o);
     });
+    document.querySelectorAll(".seg button").forEach(function(b){ b.classList.toggle("on", norm(b.textContent)===(lang==="es"?"es":"en")); });
   }
-  function setLang(l){ applyLang(l);
-    document.querySelectorAll(".seg button").forEach(function(b){ b.classList.toggle("on", norm(b.textContent)===(l==="es"?"es":"en")); }); }
+  function setLang(l){ langS(l==="es"?"es":"en"); }         // write signal → effect re-patches DOM
   function initI18n(){ var s; try{s=localStorage.cn_lang;}catch(_){}
-    setLang(s || ((navigator.language||"en").slice(0,2)==="es"?"es":"en")); }
+    langS(s || ((navigator.language||"en").slice(0,2)==="es"?"es":"en"));
+    effectFn(function(){ applyLang(langS()); }); }           // signal-driven; runs once + on every change
   /* ===== CNMB-302/305: matched feed + car-personality chat ===== */
   function wireFeed(){
     var feedEl=document.getElementById("feed"); if(!feedEl) return;
