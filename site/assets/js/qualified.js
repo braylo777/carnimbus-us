@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("fico").textContent=band;
     fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
       var c=(f.cars||[]).filter(function(x){return x.id===d.vdp_id;})[0];
-      var v=(c&&c.match!=null)?c.match:92;
+      var v=(c&&c.match!=null)?c.match:92; // 92 = MOCK fallback match % (B-04)
       document.getElementById("m-val").textContent=v;
       var arc=document.querySelector(".meter .arc");
       requestAnimationFrame(function(){arc.style.strokeDashoffset=arc.getAttribute("data-c")*(1-v/100);});

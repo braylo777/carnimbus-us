@@ -20,7 +20,7 @@ const SEC = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "geolocation=(), microphone=(), camera=(), interest-cohort=()",
+  "Permissions-Policy": "geolocation=(), microphone=(), camera=(self), interest-cohort=()",
   "Content-Security-Policy": [
     "default-src 'self'",
     "img-src 'self' data:",
