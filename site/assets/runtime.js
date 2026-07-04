@@ -199,6 +199,21 @@
     var seg=ev.target.closest(".seg button");
     if(seg){ setLang(norm(seg.textContent)==="es"?"es":"en"); return; }
     var g=ev.target.closest("[data-cngo]"); if(g){ ev.preventDefault(); go(g.dataset.cngo); } }); }
+  function wireBurger(){
+    var hdr=document.querySelector("header")||document.querySelector(".z.row"); if(!hdr||document.querySelector(".nav-burger")) return;
+    var right=hdr.querySelector('[style*="margin-left:auto"]')||hdr;
+    var b=document.createElement("button"); b.className="nav-burger"; b.setAttribute("aria-label","Menu"); b.setAttribute("aria-expanded","false");
+    b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+    right.appendChild(b);
+    var d=document.createElement("div"); d.className="nav-drawer";
+    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="btn primary" data-cngo="/waitlist" style="text-decoration:none">'+L("Join Waitlist")+'</a>';
+    document.body.appendChild(d);
+    function close(){ d.classList.remove("open"); b.setAttribute("aria-expanded","false"); }
+    b.addEventListener("click",function(e){ e.stopPropagation(); var o=d.classList.toggle("open"); b.setAttribute("aria-expanded",o?"true":"false"); });
+    d.addEventListener("click",function(){ setTimeout(close,50); });
+    document.addEventListener("click",function(e){ if(!d.contains(e.target)&&e.target!==b) close(); });
+    document.addEventListener("keydown",function(e){ if(e.key==="Escape") close(); });
+  }
   function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
     if(f.dataset.wired) return; f.dataset.wired="1";
     // returning visitor: show joined card instead of the form
@@ -331,7 +346,7 @@
   }
 
   (function boot(){ var t=0, iv=setInterval(function(){
-    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireForms(); initI18n(); wireFeed();
+    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireBurger(); wireForms(); initI18n(); wireFeed();
       if(location.pathname.replace(/\/$/,"")==="/waitlist"&&matchMedia("(pointer:fine)").matches){var pi=document.querySelector("input[type=tel]");if(pi)pi.focus();}
     } },30); })();
 
