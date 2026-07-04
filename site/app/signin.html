@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Sign in</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.opt{font:600 12px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:9px 14px;cursor:pointer;background:transparent}
+.opt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:600px">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+    <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
+    <div class="z" style="max-width:460px;margin:0 auto;padding:40px 20px;color:#e2e9f2">
+      <div id="choice">
+        <h1 class="disp" style="font-size:26px;margin:14px 0 4px">Welcome to CarNimbus.</h1>
+        <div style="font:500 13px/1.5 Manrope;color:#aebfdf">Buyers and dealers both drive here.</div>
+        <div class="col" style="gap:12px;margin-top:18px">
+          <button type="button" id="pick-buyer" class="glass pd hoverable" style="text-align:left;cursor:pointer;color:#fff;border-radius:18px"><div class="disp" style="font-size:16px">🚗 I'm buying a car</div><div style="font:500 11.5px Manrope;color:#8ca0c4;margin-top:4px">Ten quick questions, then your ranked matches.</div></button>
+          <button type="button" id="pick-dealer" class="glass pd hoverable" style="text-align:left;cursor:pointer;color:#fff;border-radius:18px"><div class="disp" style="font-size:16px">🏢 I'm a dealer</div><div style="font:500 11.5px Manrope;color:#8ca0c4;margin-top:4px">GM, manager, sales — everyone. Get Drive Now for your store.</div></button>
+        </div>
+      </div>
+      <div id="buyer" style="display:none">
+        <h1 class="disp" style="font-size:24px;margin:14px 0 4px">Sign in with your number.</h1>
+        <div style="font:500 13px/1.5 Manrope;color:#aebfdf">We text you a code. No passwords, ever.</div>
+        <div class="glass pd" style="margin-top:16px;border-radius:18px">
+          <div id="au-step1"><label class="vh" for="au-phone">Mobile number</label><input id="au-phone" type="tel" class="pill" placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel"><button id="au-send" class="btn primary md" style="width:100%;margin-top:10px">Text me a code</button></div>
+          <div id="au-step2" style="display:none"><label class="vh" for="au-code">6-digit code</label><input id="au-code" type="text" class="pill" placeholder="6-digit code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"><button id="au-verify" class="btn primary md" style="width:100%;margin-top:10px">Verify</button></div>
+          <div class="wl-msg" id="au-msg" style="display:none"></div>
+        </div>
+      </div>
+      <div id="dealer" style="display:none">
+        <h1 class="disp" style="font-size:24px;margin:14px 0 4px">Drive Now for your store.</h1>
+        <div style="font:500 13px/1.5 Manrope;color:#aebfdf">Tell us who you are — we'll reach out.</div>
+        <div class="glass pd col" style="margin-top:16px;border-radius:18px;gap:10px">
+          <div class="row" id="roles" style="flex-wrap:wrap;gap:8px"><button type="button" class="opt" data-v="GM">GM</button><button type="button" class="opt" data-v="Manager">Manager</button><button type="button" class="opt" data-v="Sales">Sales</button><button type="button" class="opt" data-v="Owner">Owner</button></div>
+          <label class="vh" for="dl-name">Your name</label><input id="dl-name" class="field" placeholder="Your name">
+          <label class="vh" for="dl-store">Dealership</label><input id="dl-store" class="field" placeholder="Dealership name">
+          <label class="vh" for="dl-phone">Phone</label><input id="dl-phone" class="field" type="tel" placeholder="Phone" inputmode="tel">
+          <label class="vh" for="dl-email">Email</label><input id="dl-email" class="field" type="email" placeholder="Email">
+          <button id="dl-send" class="btn primary md" style="width:100%">Request access</button>
+          <div class="wl-msg" id="dl-msg" style="display:none"></div>
+        </div>
+      </div>
+      <div id="dealer-done" style="display:none"><div class="wl-done" style="margin-top:20px"><div class="wl-done-h">You're on the list. 🤝</div><div class="wl-done-p">We'll reach out about Drive Now for your store.</div><div class="wl-done-row"><a class="btn primary" href="/" style="text-decoration:none">Back to CarNimbus</a></div></div></div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script defer>
+document.addEventListener("DOMContentLoaded",function(){
+  function step(id){["choice","buyer","dealer","dealer-done"].forEach(function(x){document.getElementById(x).style.display=(x===id?"":"none");});}
+  document.getElementById("pick-buyer").addEventListener("click",function(){step("buyer");});
+  document.getElementById("pick-dealer").addEventListener("click",function(){step("dealer");});
+  var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
+  var phone="";
+  function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}
+  document.getElementById("au-send").addEventListener("click",async function(){
+    phone=digits(document.getElementById("au-phone").value);
+    if(!/^[2-9]\d{9}$/.test(phone))return msg(document.getElementById("au-msg"),"That number doesn't look right — 10 digits, US for now.");
+    msg(document.getElementById("au-msg"),"");
+    var r=await fetch("/api/auth/start",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone})});
+    var d=await r.json();
+    if(!d.ok)return msg(document.getElementById("au-msg"),"Couldn't send the code — try again.");
+    document.getElementById("au-step1").style.display="none";document.getElementById("au-step2").style.display="block";
+    if(d.dev)document.getElementById("au-code").value=d.dev;
+  });
+  document.getElementById("au-verify").addEventListener("click",async function(){
+    var r=await fetch("/api/auth/verify",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone,code:document.getElementById("au-code").value})});
+    var d=await r.json();
+    if(!d.ok)return msg(document.getElementById("au-msg"),"Wrong or expired code — try again.");
+    var me=await fetch("/api/me").then(function(x){return x.json();}).catch(function(){return{};});
+    location.href=(me.ok&&me.answers)?"/app/browse.html":"/app/profile.html";
+  });
+  var role="";
+  document.querySelectorAll("#roles .opt").forEach(function(b){b.addEventListener("click",function(){
+    document.querySelectorAll("#roles .opt").forEach(function(x){x.classList.remove("on");});
+    b.classList.add("on");role=b.dataset.v;});});
+  document.getElementById("dl-send").addEventListener("click",async function(){
+    var name=document.getElementById("dl-name").value.trim(),dealership=document.getElementById("dl-store").value.trim();
+    if(!name||!dealership)return msg(document.getElementById("dl-msg"),"Name and dealership are required.");
+    var r=await fetch("/api/dealer",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({name:name,dealership:dealership,role:role,phone:document.getElementById("dl-phone").value.trim(),email:document.getElementById("dl-email").value.trim()})});
+    var d=await r.json().catch(function(){return{};});
+    if(!d.ok)return msg(document.getElementById("dl-msg"),"Couldn't send — try again.");
+    step("dealer-done");
+  });
+});
+</script>
+</body>
+</html>

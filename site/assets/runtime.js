@@ -177,7 +177,8 @@
 "create your profile":"crea tu perfil",
 "Your Drive Now pass is ready →":"Tu pase Drive Now está listo →",
 "Static on the line — try that again.":"Se cortó la señal: inténtalo de nuevo.",
-"Your matches. Talk when you’re ready.":"Tus matches. Habla cuando estés listo."} };
+"Your matches. Talk when you’re ready.":"Tus matches. Habla cuando estés listo.",
+"Sign in":"Iniciar sesión","I'm buying a car":"Quiero comprar un auto","I'm a dealer":"Soy concesionario","Request access":"Solicitar acceso","Welcome to CarNimbus.":"Bienvenido a CarNimbus.","Buyers and dealers both drive here.":"Aquí manejan compradores y concesionarios.","Talk to this car →":"Habla con este auto →","My Deals":"Mis tratos","Account":"Cuenta","matches":"resultados","No Drive Now pass yet.":"Aún no tienes pase Drive Now.","Browse your matches":"Explora tus matches","Open full pass":"Abrir pase completo","Reschedule in chat":"Reagendar en el chat","Pre-qualified":"Precalificado","0 FICO impact":"0 impacto en FICO"} };
   var langS=(typeof signal==="function"?signal:function(v){var f=function(x){if(arguments.length)v=x;return v;};return f;})("en");
   var effectFn=(typeof effect==="function"?effect:function(fn){fn();});   // graceful fallback if signals.js absent
   var ORIG=new WeakMap(), BOOT=Date.now();
@@ -185,7 +186,7 @@
   function L(s){ return CUR()==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
   function norm(t){ return (t||"").replace(/\s+/g," ").trim().toLowerCase().replace(/[→»]/g,"").trim(); }
-  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact" };
+  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact","sign in":"/app/signin.html" };
   var CTA_WAIT = ["join waitlist","get early access","be first in line","join the waitlist"];
   function destFor(el){
     if(el.closest(".wl-form")) return null;
@@ -209,13 +210,28 @@
     b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
     right.appendChild(b);
     var d=document.createElement("div"); d.className="nav-drawer";
-    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="btn primary" data-cngo="/waitlist" style="text-decoration:none">'+L("Join Waitlist")+'</a>';
+    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="btn primary" data-cngo="/app/signin.html" style="text-decoration:none">'+L("Sign in")+'</a>';
     document.body.appendChild(d);
     function close(){ d.classList.remove("open"); b.setAttribute("aria-expanded","false"); }
     b.addEventListener("click",function(e){ e.stopPropagation(); var o=d.classList.toggle("open"); b.setAttribute("aria-expanded",o?"true":"false"); });
     d.addEventListener("click",function(){ setTimeout(close,50); });
     document.addEventListener("click",function(e){ if(!d.contains(e.target)&&e.target!==b) close(); });
     document.addEventListener("keydown",function(e){ if(e.key==="Escape") close(); });
+  }
+  function wireAppNav(){
+    var el=document.getElementById("appnav"); if(!el) return;
+    var here=location.pathname;
+    el.innerHTML='<a href="/" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
+      '<img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
+      ['<a class="navlink" href="/app/browse.html"'+(here.indexOf("browse")>-1?' style="color:#18C8FF"':'')+'>Browse</a>',
+       '<a class="navlink" href="/app/qualified.html"'+(here.indexOf("qualified")>-1?' style="color:#18C8FF"':'')+'>My Deals</a>',
+       '<a class="navlink" href="/app/profile.html">Account</a>'].join('')+
+      '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
+      '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
+      '<a href="/app/profile.html" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
+    fetch("/api/me").then(function(r){return r.json();}).then(function(d){
+      if(d.ok&&d.phone) document.getElementById("appnav-av").textContent="•"+String(d.phone).slice(-2);
+    }).catch(function(){});
   }
   function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
     if(f.dataset.wired) return; f.dataset.wired="1";
@@ -350,7 +366,7 @@
   }
 
   (function boot(){ var t=0, iv=setInterval(function(){
-    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireBurger(); wireForms(); initI18n(); wireFeed();
+    if(!document.querySelector("x-import") || t++>150){ clearInterval(iv); stampNav(); wireNav(); wireBurger(); wireAppNav(); wireForms(); initI18n(); wireFeed();
       if(location.pathname.replace(/\/$/,"")==="/waitlist"&&matchMedia("(pointer:fine)").matches){var pi=document.querySelector("input[type=tel]");if(pi)pi.focus();}
     } },30); })();
 

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Talk to the car</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.tdots{display:inline-flex;gap:4px;align-items:center;height:12px}
+.tdots i{width:6px;height:6px;border-radius:50%;background:#9fb4dd;animation:tblink 1s infinite}
+.tdots i:nth-child(2){animation-delay:.15s}.tdots i:nth-child(3){animation-delay:.3s}
+@keyframes tblink{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+@media(max-width:700px){.app-rail{display:none!important}.app-split{flex-direction:column!important}.app-split>*{border-right:none!important}}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:600px">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(11,99,229,.16);top:-60px;left:-40px"></div><div class="cine-vig"></div></div>
+    <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
+    <div class="z row app-split" style="min-height:548px" id="vdp">
+      <div style="flex:1.1;padding:16px;border-right:1px solid rgba(24,200,255,.12);min-width:0">
+        <div style="border-radius:14px;overflow:hidden;max-height:220px"><img id="v-img" src="" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"></div>
+        <div class="disp" id="v-title" style="font-size:18px;font-weight:600;margin-top:13px"></div>
+        <div class="cy" id="v-price" style="font:700 17px Manrope;margin:2px 0"></div>
+        <div id="v-meta" style="font:500 10px Manrope;color:#8ca0c4"></div>
+        <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-top:14px">WHY IT FITS YOU</div>
+        <div class="row" style="gap:9px;margin-top:9px;flex-wrap:wrap">
+          <div class="glass pd" style="flex:1;min-width:140px;padding:12px"><div class="row" style="align-items:center;gap:6px;font:700 10px Manrope"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></span>In budget</div><div id="fit-budget" style="font:500 9px Manrope;color:#8ca0c4;margin-top:4px"></div></div>
+          <div class="glass pd" id="fit-match" style="flex:1;min-width:140px;padding:12px"><div class="row" style="align-items:center;gap:6px;font:700 10px Manrope"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/></svg></span><b></b></div><div style="font:500 9px Manrope;color:#8ca0c4;margin-top:4px">Top pick for your profile.</div></div>
+        </div>
+      </div>
+      <div class="col" style="flex:1;min-width:0">
+        <div class="row" style="align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(24,200,255,.12)">
+          <span style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex:none;border:1px solid rgba(24,200,255,.3)"><img id="c-img" src="" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"></span>
+          <div style="flex:1;min-width:0"><div id="c-name" style="font:700 11px Manrope"></div><div id="c-tag" style="font:600 8px Manrope;color:#cfe0ff;font-style:italic"></div></div>
+        </div>
+        <div class="col" id="thread" style="flex:1;padding:13px 14px;gap:8px;overflow-y:auto;min-height:280px;max-height:420px"></div>
+        <div id="approved" style="display:none;margin:0 14px;border:1px solid rgba(31,138,91,.5);background:rgba(31,138,91,.1);border-radius:12px;padding:9px 11px;align-items:center;gap:9px"><span class="ic-sm" style="color:#54d699"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></span><div style="flex:1"><div style="font:700 11px Manrope;color:#fff">Drive booked · pass ready</div><div style="font:500 9px Manrope;color:#9fd9b8">Soft check · 0 credit hit</div></div></div>
+        <div style="padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)" class="row">
+          <label class="vh" for="chat-in">Message the car</label>
+          <input id="chat-in" class="pill" style="flex:1;height:44px" placeholder="Ask me anything — I answer straight.">
+          <button id="chat-send" class="btn primary md" type="button" style="margin-left:8px">Send</button>
+          <a id="pass-btn" class="btn primary md" style="display:none;margin-left:8px;text-decoration:none">See your pass →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script defer>
+document.addEventListener("DOMContentLoaded",function(){
+  var id=+(new URLSearchParams(location.search).get("id")||0),CAR=null,hist=[];
+  var thread=document.getElementById("thread");
+  function bubble(who,txt){var m=document.createElement("div");m.className="msg "+who;
+    m.innerHTML=(who==="car"?'<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span>':'')+'<div class="bubble '+who+'"></div>';
+    m.querySelector(".bubble").textContent=txt;thread.appendChild(m);thread.scrollTop=thread.scrollHeight;return m;}
+  function typing(on){var t=thread.querySelector(".typing");if(t)t.remove();
+    if(on){var m=document.createElement("div");m.className="msg car typing";
+      m.innerHTML='<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span><div class="bubble car"><span class="tdots"><i></i><i></i><i></i></span></div>';
+      thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
+  fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
+    CAR=(d.cars||[]).filter(function(c){return c.id===id;})[0];
+    if(!CAR){document.getElementById("vdp").innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">Car not found. <a class="cy" href="/app/browse.html">Back to browse</a></div>';return;}
+    document.getElementById("v-img").src=(CAR.photos&&CAR.photos[0])||"";
+    document.getElementById("v-title").textContent=CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:"");
+    document.getElementById("v-price").textContent="$"+CAR.price_mo+"/mo";
+    document.getElementById("v-meta").textContent=CAR.miles+" mi · "+CAR.drivetrain+" · Certified · Los Angeles, CA";
+    document.getElementById("fit-budget").textContent="$"+CAR.price_mo+"/mo fits your range.";
+    var fm=document.getElementById("fit-match");
+    fm.querySelector("b").textContent=(CAR.match!=null?CAR.match+"% match":"Fresh listing");
+    document.getElementById("c-name").textContent=CAR.year+" "+CAR.make+" "+CAR.model;
+    document.getElementById("c-tag").textContent="“"+((CAR.description||"").split(".")[0]||"Ask me anything")+".”";
+    document.getElementById("c-img").src=(CAR.photos&&CAR.photos[0])||"";
+    bubble("car",CAR.model+" here. Ask me anything — or tell me when you want to drive.");
+  }).catch(function(){document.getElementById("vdp").innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">Couldn’t load this car — refresh to retry. <a class="cy" href="/app/browse.html">Back to browse</a></div>';});
+  async function send(){var inEl=document.getElementById("chat-in"),msg=inEl.value.trim();if(!msg||!CAR)return;
+    inEl.value="";bubble("you",msg);hist.push({role:"user",content:msg});typing(true);
+    var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,messages:hist})});
+    typing(false);
+    if(r.status===401){bubble("car","Sign in first so I remember you.");
+      var a=document.createElement("a");a.href="/app/signin.html";a.textContent="Sign in →";
+      a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope;margin-left:34px";thread.appendChild(a);return;}
+    var d=await r.json().catch(function(){return{};});
+    if(d.ok){hist.push({role:"assistant",content:d.reply});bubble("car",d.reply);
+      if(d.pass){var ok=document.getElementById("approved");ok.style.display="flex";
+        var btn=document.getElementById("pass-btn");btn.style.display="inline-flex";btn.href=d.pass;}}
+    else bubble("car","Static on the line — try that again.");}
+  document.getElementById("chat-send").addEventListener("click",send);
+  document.getElementById("chat-in").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
+});
+</script>
+</body>
+</html>

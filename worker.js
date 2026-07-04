@@ -54,6 +54,8 @@ export default {
     if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
     if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
+    if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
+    if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     return sec(await env.ASSETS.fetch(request));
   },
   async scheduled(event, env) {
@@ -201,6 +203,23 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 <div class="wl-done" style="max-width:380px;margin:20px"><div class="wl-done-h">🎟️ Drive Now Pass</div>
 <div class="wl-done-p"><b style="color:#fff">${t.year} ${t.make} ${t.model}</b><br>${t.slot} · ${t.center} Test Drive Center<br>Rider: •••-${String(t.phone).slice(-4)} · Status: ${t.status}</div>
 <div class="wl-done-p" style="font-size:11px">Show this screen when you arrive. Terms already set — no 4-hour ordeal.</div></div></body></html>`,{headers:{"content-type":"text/html"}}); }
+async function me(request,env,uid){
+  const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+  const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
+  const td=await env.DB.prepare(
+    "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
+    "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
+  return json({ok:true,phone:u?u.phone:null,answers:p?JSON.parse(p.answers):null,
+    drive:td?{...td,photos:JSON.parse(td.photos||"[]")}:null});
+}
+async function dealerLead(request,env){
+  const {name,dealership,role,phone,email}=await request.json().catch(()=>({}));
+  if(!name||!dealership) return json({ok:false,error:"bad_request"},400);
+  await env.DB.prepare("INSERT INTO dealer_leads (name,dealership,role,phone,email,created_at) VALUES (?,?,?,?,?,?)")
+    .bind(String(name).slice(0,80),String(dealership).slice(0,120),String(role||"").slice(0,40),
+      String(phone||"").slice(0,20),String(email||"").slice(0,120),new Date().toISOString()).run();
+  return json({ok:true});
+}
 async function comments(request,env){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
   if(request.method==="POST"){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
     const {body,zip}=await request.json().catch(()=>({})); if(!body||String(body).length>500) return json({ok:false,error:"bad_request"},400);
