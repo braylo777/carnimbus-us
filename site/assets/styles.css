@@ -244,16 +244,16 @@ nav.tabbar .tab{text-decoration:none}
 @media(max-width:700px){ nav.tabbar{display:flex} body:has(nav.tabbar){padding-bottom:70px} #appnav .navlink{display:none!important} }
 /* ===== mobile nav + overflow (2026-07-03 pass) ===== */
 html,body{overflow-x:hidden;max-width:100%}
-.nav-burger{display:none;width:44px;height:44px;align-items:center;justify-content:center;background:transparent;border:1px solid rgba(24,200,255,.35);border-radius:10px;color:#18C8FF;cursor:pointer;flex:0 0 auto}
+.nav-burger{display:inline-flex;width:44px;height:44px;align-items:center;justify-content:center;background:transparent;border:1px solid rgba(24,200,255,.35);border-radius:10px;color:#18C8FF;cursor:pointer;flex:0 0 auto}
 .nav-drawer{position:fixed;top:64px;right:0;z-index:60;width:min(300px,86vw);padding:18px;display:flex;flex-direction:column;gap:6px;background:rgba(6,16,40,.97);backdrop-filter:blur(18px);border-left:1px solid rgba(24,200,255,.15);border-bottom:1px solid rgba(24,200,255,.15);border-radius:0 0 0 18px;transform:translateX(105%);transition:transform .28s var(--ease)}
 .nav-drawer.open{transform:none}
 .nav-drawer .navlink{display:block;padding:14px 10px;font-size:15px;border-bottom:1px solid rgba(24,200,255,.08)}
 .nav-drawer .btn{margin-top:10px;text-align:center}
 @media(max-width:700px){
   header nav[aria-label="Primary"]{display:none}
+  header .seg,header x-import[options*="langOpts"]{display:none!important}
   header a[href="/waitlist"]{display:none}
   .z.row>.navlink{display:none}
-  .nav-burger{display:inline-flex}
   header.z.row,div.z.row[style*="height:58px"]{padding-left:16px!important;padding-right:16px!important}
   [style*="padding:50px 30px 44px"]{padding:28px 18px 32px!important}
   [style*="padding:0 20px 40px"]{padding:0 10px 28px!important}

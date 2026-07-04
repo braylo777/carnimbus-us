@@ -42,9 +42,7 @@
         <a href="/" aria-label="CarNimbus home" style="display:inline-flex"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="19" mark="true" mark-src="{{ logoUrl }}" hint-size="150px,30px"></x-import></a>
         <nav aria-label="Primary" class="row" style="gap:28px;margin-left:36px"><a class="navlink" href="/#how-it-works">How it works</a><a class="navlink" href="/browse">Browse</a></nav>
         <div class="row" style="margin-left:auto;align-items:center;gap:14px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>
-          <a href="/app/signin.html" style="text-decoration:none"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Button" variant="primary" size="sm" hint-size="auto,36px">Sign in</x-import></a>
-        </div>
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>        </div>
       </header>
 
       <!-- hero -->
@@ -58,7 +56,7 @@
               <div class="wl-fields" style="display:flex;gap:9px">
                 <label class="vh" for="wl-phone-hero">Mobile number</label>
                 <input id="wl-phone-hero" type="tel" name="phone" class="pill" required placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel" style="flex:1;height:48px">
-                <button type="submit" class="btn primary lg">Get early access</button>
+                <button type="submit" class="btn primary lg">Sign Up</button>
               </div>
               <label class="consent"><input type="checkbox" class="wl-privacy" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a>.</label>
               <label class="consent"><input type="checkbox" class="wl-consent" required> I agree to receive recurring marketing &amp; waitlist texts from CarNimbus at the number provided (up to 4 msgs/mo). Consent is not a condition of purchase. Msg&amp;data rates may apply. Reply STOP to cancel, HELP for help.</label>
@@ -304,23 +302,6 @@
           <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">What happens to my data?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">Your email and pre-qual info stay with us — never sold. See the <a href="/privacy" style="color:#18C8FF">Privacy Policy</a> for the plain-English version.</p></details>
           <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">When do you launch?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">We're rolling out across LA County first. Join the waitlist — you'll get exactly one text the day it's ready.</p></details>
         </div>
-      </div>
-
-      <!-- final CTA · waitlist -->
-      <div class="z col" style="align-items:center;text-align:center;padding:50px 30px 42px">
-        <div class="disp" style="font-size:34px;font-weight:600">Be first in line.</div>
-        <div style="font:500 14px Manrope;color:#aebfdf;margin:9px 0 22px;max-width:460px">Join the wait list and we'll text you.</div>
-        <form class="wl-form" data-src="footer-cta" style="width:100%;max-width:460px">
-          <div class="wl-fields" style="display:flex;gap:9px">
-            <label class="vh" for="wl-phone-cta">Mobile number</label>
-            <input id="wl-phone-cta" type="tel" name="phone" class="pill" required placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel" style="flex:1">
-            <button type="submit" class="btn primary">Join Waitlist</button>
-          </div>
-          <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-privacy" required> I agree to the <a href="/privacy">Privacy&nbsp;Policy</a>.</label>
-          <label class="consent" style="justify-content:center"><input type="checkbox" class="wl-consent" required> I agree to receive recurring marketing &amp; waitlist texts from CarNimbus at the number provided (up to 4 msgs/mo). Consent is not a condition of purchase. Msg&amp;data rates may apply. Reply STOP to cancel, HELP for help.</label>
-          <input type="text" name="website" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true">
-          <!-- <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITEKEY"></div> -->
-        </form>
       </div>
 
       <!-- footer (one page) -->

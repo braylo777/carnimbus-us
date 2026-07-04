@@ -7,7 +7,17 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("d-talk").href="/app/car.html?id="+c.id;
     document.getElementById("d-likes").textContent=(3+((c.id*7)%9))+"."+((c.id*3)%10)+"K";
     document.getElementById("d-match").textContent=(c.match!=null?c.match+"%":"NEW");}
-  fetch("/api/feed").then(function(r){return r.json();}).then(function(d){CARS=d.cars||[];show();});
+  function dEmpty(t,retry){var e=document.getElementById("d-empty");if(!e)return;
+    e.textContent=t;e.style.display="grid";
+    if(retry)e.onclick=function(){e.style.display="none";e.onclick=null;retry();};}
+  function loadFeed(){
+    fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
+      CARS=d.cars||[];
+      if(!CARS.length)return dEmpty("No cars in your area yet — we're onboarding dealers now. 🚗");
+      show();
+    }).catch(function(){dEmpty("Couldn't load the feed — tap to retry.",loadFeed);});
+  }
+  loadFeed();
   function step(n){if(!CARS.length)return;i=(i+n+CARS.length)%CARS.length;show();}
   document.getElementById("d-prev").addEventListener("click",function(){step(-1);});
   document.getElementById("d-next").addEventListener("click",function(){step(1);});

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>NIMBUS — Live Ops</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.045);opacity:1}}
+.wallwrap{position:fixed;inset:0;background:#06163b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4vh;overflow:hidden}
+.wgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:2vw;width:min(92vw,1700px);position:relative;z-index:2}
+.wtile{backdrop-filter:blur(14px);background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.22);border-radius:22px;padding:3vh 2vw;text-align:center}
+.wv{font:700 clamp(40px,7vw,110px) 'Space Grotesk';color:#18C8FF;line-height:1}
+.wl{font:700 12px Manrope;color:#8ca0c4;letter-spacing:.22em;margin-top:8px}
+@media(max-width:700px){.wgrid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wallwrap">
+  <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:50vw;height:50vw;background:rgba(24,200,255,.08);top:20%;left:25%"></div><div class="cine-vig"></div></div>
+  <div style="text-align:center;position:relative;z-index:2">
+    <img src="/assets/logo.png" alt="" style="width:12vw;min-width:80px;animation:pulse 6s ease-in-out infinite;filter:drop-shadow(0 0 40px rgba(24,200,255,.5))">
+    <div class="disp" style="font-size:3vw;letter-spacing:.3em;margin-top:1vh">NIMBUS</div>
+  </div>
+  <div class="wgrid">
+    <div class="wtile"><div class="wv" id="w-waitlist">–</div><div class="wl">WAITLIST</div></div>
+    <div class="wtile"><div class="wv" id="w-users">–</div><div class="wl">RIDERS</div></div>
+    <div class="wtile"><div class="wv" id="w-profiles">–</div><div class="wl">PROFILES</div></div>
+    <div class="wtile"><div class="wv" id="w-drives">–</div><div class="wl">DRIVES</div></div>
+    <div class="wtile"><div class="wv" id="w-activeCars">–</div><div class="wl">LIVE CARS</div></div>
+    <div class="wtile"><div class="wv" id="w-comments">–</div><div class="wl">POSTS</div></div>
+  </div>
+  <div class="mono" style="font-size:11px;color:#7f93b8;letter-spacing:.28em;position:relative;z-index:2">CARNIMBUS · LIVE OPS · <span id="w-time"></span></div>
+</div>
+<script src="/assets/js/wall.js" defer></script>
+</body>
+</html>

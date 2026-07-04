@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded",function(){
   }).then(function(d){ show("console");
     document.getElementById("dc-store").textContent=d.dealer.dealership;
     document.getElementById("dc-name").textContent=d.dealer.name;
+    if(d.dealer.client_no)document.getElementById("dc-cn").textContent="CN · ••••-"+String(d.dealer.client_no).slice(-4);
     var K=d.kpis||{};["routed","booked","showed","closed"].forEach(function(k){document.getElementById("k-"+k).textContent=K[k]||0;});
     var next=(d.appointments||[]).filter(function(a){return a.status!=="sold";})[0];
     document.getElementById("do-now").style.display=next?"flex":"none";

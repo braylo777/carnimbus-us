@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded",function(){
     }).join('');
     var bodies=list.querySelectorAll(".post-body");
     cs.forEach(function(c,idx){ if(bodies[idx]) bodies[idx].textContent=c.body; });
-  });}
+  }).catch(function(){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Feed unavailable — refresh to retry.</div>';});}
   load();
   document.getElementById("post-send").addEventListener("click",async function(){
     var inEl=document.getElementById("post-in"),body=inEl.value.trim();if(!body)return;

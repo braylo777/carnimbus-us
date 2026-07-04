@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("au-send").addEventListener("click",async function(){
     phone=digits(document.getElementById("au-phone").value);
     if(!/^[2-9]\d{9}$/.test(phone))return msg(document.getElementById("au-msg"),"That number doesn't look right — 10 digits, US for now.");
+    if(!document.getElementById("au-agree").checked)return msg(document.getElementById("au-msg"),"Please agree to the Privacy Policy to continue.");
     msg(document.getElementById("au-msg"),"");
     var r=await fetch("/api/auth/start",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone})});
     var d=await r.json();
@@ -20,6 +21,8 @@ document.addEventListener("DOMContentLoaded",function(){
     var d=await r.json();
     if(!d.ok)return msg(document.getElementById("au-msg"),"Wrong or expired code — try again.");
     var me=await fetch("/api/me").then(function(x){return x.json();}).catch(function(){return{};});
+    var who=await fetch("/api/whoami").then(function(x){return x.json();}).catch(function(){return{};});
+    if(who.dealer)return location.href="/dealer/";
     location.href=(me.ok&&me.answers)?"/app/browse.html":"/app/profile.html";
   });
   var role="";

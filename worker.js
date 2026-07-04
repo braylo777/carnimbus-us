@@ -70,6 +70,8 @@ export default {
     if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
+    if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
+    if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
     return sec(await env.ASSETS.fetch(request));
   },
   async scheduled(event, env) {
@@ -133,6 +135,8 @@ async function llm(env,messages){ if(env.AI_BACKEND_URL){ const r=await fetch(en
   const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:512}); return r.response; }
 
 // ==================== auth + profile + VDP ingest ====================
+function genCode(prefix){ const b=new Uint32Array(2); crypto.getRandomValues(b);
+  return prefix+"-"+String(b[0]%1000000).padStart(6,"0")+"-"+String(b[1]%10000).padStart(4,"0"); }
 async function authStart(request,env){ let {phone}=await request.json().catch(()=>({}));
   phone=String(phone||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1);
   if(!/^[2-9]\d{9}$/.test(phone)) return json({ok:false,error:"invalid_phone"},422); phone="+1"+phone;
@@ -150,7 +154,8 @@ async function authVerify(request,env){ let {phone,code}=await request.json().ca
     await env.DB.prepare("UPDATE otp SET tries=tries+1 WHERE phone=?").bind(phone).run();
     return json({ok:false,error:"otp_wrong"},401); }
   await env.DB.prepare("INSERT INTO users (phone,created_at) VALUES (?,?) ON CONFLICT(phone) DO NOTHING").bind(phone,new Date().toISOString()).run();
-  const u=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first();
+  const u=await env.DB.prepare("SELECT id,sid FROM users WHERE phone=?").bind(phone).first();
+  if(!u.sid) await env.DB.prepare("UPDATE users SET sid=? WHERE id=?").bind(genCode("SID"),u.id).run();
   const sess=await makeSession(env,u.id);
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","cache-control":"no-store",
     "Set-Cookie":`cn_sess=${sess}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`}}); }
@@ -179,7 +184,7 @@ async function syncEmbeddings(env){
   const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
   for(const p of (ps.results||[])){ await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(JSON.parse(p.answers))),metadata:{kind:"profile"}}]);
     await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
-async function feed(request,env){ const uid=await readSession(env,request);
+async function feed(request,env){ try{ const uid=await readSession(env,request);
   let ranked=null;
   if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
     if(p){ const q=await env.MATCH_INDEX.query(await embed(env,profileText(JSON.parse(p.answers))),{topK:20,filter:{kind:"vdp"}}).catch(()=>null);
@@ -189,7 +194,9 @@ async function feed(request,env){ const uid=await readSession(env,request);
   const out=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
     if(v) out.push({id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
       drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),match:r.score}); }
-  return json({ok:true,authed:!!uid,cars:out}); }
+  return json({ok:true,authed:!!uid,cars:out});
+  }catch(e){ const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
+    return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>({id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),match:null}))}); } }
 async function carChat(request,env,uid){ const {vdpId,messages}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
@@ -221,9 +228,10 @@ async function withDealer(request,env,fn){
   const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
   const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
   const digits=String(u&&u.phone||"").replace(/\D/g,"").slice(-10);
-  const d=await env.DB.prepare("SELECT id,name,dealership FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1")
+  const d=await env.DB.prepare("SELECT id,name,dealership,client_no,status FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1")
     .bind("%"+digits).first();
   if(!d||!digits) return json({ok:false,error:"not_dealer"},403);
+  if(d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
   return fn(request,env,uid,d);
 }
 async function dealerConsole(request,env,uid,dealer){
@@ -254,25 +262,35 @@ async function dealerCheckin(request,env,uid,dealer){
   await env.DB.prepare("UPDATE test_drives SET status=? WHERE id=?").bind(status,+driveId).run();
   return json({ok:true});
 }
+async function dealerActivate(request,env){ const {leadId}=await request.json().catch(()=>({}));
+  if(!leadId) return json({ok:false,error:"bad_request"},400);
+  const no=genCode("CN");
+  await env.DB.prepare("UPDATE dealer_leads SET client_no=?, status='active' WHERE id=?").bind(no,+leadId).run();
+  return json({ok:true,client_no:no}); }
+async function whoami(request,env,uid){
+  const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+  const digits=String(u&&u.phone||"").replace(/\D/g,"").slice(-10);
+  const d=digits?await env.DB.prepare("SELECT status,client_no FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1").bind("%"+digits).first():null;
+  return json({ok:true,buyer:true,dealer:!!(d&&d.status==="active"&&d.client_no)}); }
 async function adminStats(request,env){
   const w=await env.DB.prepare("SELECT COUNT(*) c FROM waitlist").first();
   const u=await env.DB.prepare("SELECT COUNT(*) c FROM users").first();
   const p=await env.DB.prepare("SELECT COUNT(*) c FROM profiles").first();
   const t=await env.DB.prepare("SELECT COUNT(*) c FROM test_drives").first();
   const v=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE active=1").first();
-  const dl=await env.DB.prepare("SELECT id,name,dealership,role,phone,email,created_at FROM dealer_leads ORDER BY id DESC LIMIT 50").all();
+  const dl=await env.DB.prepare("SELECT id,name,dealership,role,phone,email,created_at,client_no,status FROM dealer_leads ORDER BY id DESC LIMIT 50").all();
   const cm=await env.DB.prepare("SELECT COUNT(*) c FROM comments").first();
   return json({ok:true,waitlist:w.c,users:u.c,profiles:p.c,drives:t.c,activeCars:v.c,comments:cm.c,dealerLeads:dl.results||[]});
 }
 function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 async function me(request,env,uid){
-  const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+  const u=await env.DB.prepare("SELECT phone,sid FROM users WHERE id=?").bind(uid).first();
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   const td=await env.DB.prepare(
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
-  return json({ok:true,phone:u?u.phone:null,answers:p?JSON.parse(p.answers):null,
+  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,answers:p?JSON.parse(p.answers):null,
     drive:td?{...td,photos:JSON.parse(td.photos||"[]")}:null});
 }
 async function dealerLead(request,env){

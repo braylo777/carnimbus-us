@@ -55,15 +55,29 @@ repo `braylo777/carnimbus-com`, branch `main`, deploy command `npx wrangler depl
 `site/*.html` → `src/app/*/page.jsx`; `runtime.js` renderers → components; state already uses
 signals; `worker.js` stays the runtime host. Nothing else moves.
 
-## AI backend (today vs. ai.carnimbus.com)
-Today every AI call goes through the `embed()` / `llm()` seam in `worker.js`:
-Workers AI (`@cf/baai/bge-base-en-v1.5` embeddings, `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
-chat) + Cloudflare Vectorize (`carnimbus-match`, 768-dim cosine) for matchmaking.
+## AI architecture — three layers, never conflated
+The "Nimbus brain" is three distinct layers. Keep them separate in every doc and diagram:
 
-Future: **ai.carnimbus.com** — a VPS / on-prem appliance ("Nimbus", GLM-5.2) hosting the vector
-database, the matchmaking engine, and the scheduling brain that books test-drive appointments.
-Cutover when the box exists:
-1. Point DNS `ai.carnimbus.com` → the server (one A record).
-2. `npx wrangler secret put AI_BACKEND_URL` → `https://ai.carnimbus.com`.
-The Worker already branches on `AI_BACKEND_URL` (`/embed` and `/chat` endpoints) — no code change.
-Until then, nothing to buy or run.
+1. **Inference runtime** — GLM-5.2 (~750B-param MoE) running **CPU/RAM-offloaded on 1TB DDR5**
+   on the Ben rig. It is NOT VRAM-resident — any "96GB VRAM" framing is wrong; the MoE's active
+   experts stream through system RAM. Today's stand-in: Workers AI
+   `@cf/meta/llama-3.3-70b-instruct-fp8-fast` behind the `llm()` seam in worker.js.
+2. **Vector store** — a dedicated vector database for matchmaking embeddings (buyer profiles ↔
+   dealer VDPs). Today: Cloudflare Vectorize `carnimbus-match` (768-dim, cosine) fed by
+   `@cf/baai/bge-base-en-v1.5` via the `embed()` seam. SQLite is the relational store, not the
+   vector store — do not conflate the two.
+3. **Relational store** — SQLite (Cloudflare D1 today): users, profiles, vdps, test_drives,
+   dealer_leads, comments, sms queue.
+
+**Matchmaking pipeline (live):** cron `syncEmbeddings()` embeds new profiles + VDPs into the
+vector store; `/api/feed` queries it and ranks cars per buyer.
+
+**Projection into app./dealer. (the real mechanism, not the metaphor):** the Worker calls
+`AI_BACKEND_URL/embed` and `AI_BACKEND_URL/chat` over HTTPS; results land in D1 + the vector
+store; `/api/feed` (buyer app) and `/api/dealer/console` (dealer dashboard) read them. That is
+how ai. "surfaces results" into the other subdomains — plain request/response through one seam.
+
+**Cutover to ai.carnimbus.com** (when the box exists): 1 DNS A record +
+`npx wrangler secret put AI_BACKEND_URL` → `https://ai.carnimbus.com`. The Worker already
+branches on `AI_BACKEND_URL` (`/embed` and `/chat` endpoints) — no code change. Until then,
+nothing to buy or run.
