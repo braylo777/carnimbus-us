@@ -250,6 +250,8 @@ html,body{overflow-x:hidden;max-width:100%}
 .nav-drawer .navlink{display:block;padding:14px 10px;font-size:15px;border-bottom:1px solid rgba(24,200,255,.08)}
 .nav-drawer .btn{margin-top:10px;text-align:center}
 @media(max-width:700px){
+  .prob-grid{grid-template-columns:1fr!important}
+  .shift-grid{grid-template-columns:1fr 1fr!important}
   header nav[aria-label="Primary"]{display:none}
   header .seg,header x-import[options*="langOpts"]{display:none!important}
   header a[href="/waitlist"]{display:none}
