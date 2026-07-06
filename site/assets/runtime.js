@@ -329,13 +329,16 @@
       d.cars.forEach(function(c){
         var card=document.createElement("div");
         card.className="glass"; card.style.cssText="border-radius:16px;overflow:hidden;cursor:pointer;border:1px solid rgba(24,200,255,.18)";
-        card.innerHTML=(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" alt="'+c.year+' '+c.make+' '+c.model+'" style="width:100%;height:130px;object-fit:cover;display:block">':'')+
+        card.innerHTML=(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" alt="'+c.year+' '+c.make+' '+c.model+'" width="400" height="130" loading="lazy" style="width:100%;height:130px;object-fit:cover;display:block">':'')+
           '<div style="padding:11px 13px">'+
           (c.match!=null?'<span class="badge cyan" style="float:right">'+c.match+'% match</span>':'')+
           '<div style="font:700 13px Manrope;color:#fff">'+c.year+' '+c.make+' '+c.model+(c.trim?' '+c.trim:'')+'</div>'+
           '<div style="font:600 11px Manrope;color:#8ca0c4;margin-top:3px">$'+c.price_mo+'/mo · '+c.miles+' mi · '+c.drivetrain+'</div>'+
           '<div style="font:700 11px Manrope;color:#18C8FF;margin-top:7px">Talk to this car →</div></div>';
-        card.addEventListener("click",function(){ if(location.pathname.indexOf("/browse")===0){location.href="/app/car.html?id="+c.id;} else openCarChat(c); });
+        card.addEventListener("click",function(){ if(location.pathname.indexOf("/browse")===0){
+          var sg=function(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");};
+          location.href="/used/"+c.year+"-"+sg(c.make)+"-"+sg(c.model)+"-"+c.id;
+        } else openCarChat(c); });
         feedEl.appendChild(card);
       });
     }).catch(function(){ if(empty){empty.style.display="block";empty.textContent="Feed unavailable — refresh to retry.";} });

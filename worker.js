@@ -45,9 +45,22 @@ export default {
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
     if(PREFIX && !url.pathname.startsWith(PREFIX) && !url.pathname.startsWith("/api/") &&
        !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") &&
+       !url.pathname.startsWith("/sitemap") && url.pathname!=="/robots.txt" &&
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
       url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":"/index.html") : url.pathname);
       request = new Request(url, request);
+    }
+    // ---- SEO surface (host-aware, apex-canonical) ----
+    if (url.pathname === "/robots.txt")               return robotsTxt(url.hostname);
+    if (url.pathname === "/sitemap.xml")              return sitemapIndex();
+    if (url.pathname === "/sitemap-inventory.xml")    return inventorySitemap(env);
+    if (url.pathname === "/sitemap-content.xml")      return contentSitemap();
+    if (url.pathname.startsWith("/used/")) { const r = await usedPage(env, url.pathname); if (r) return sec(r); }
+    // Lowercase canonicalization — NEVER for /pass/ or /api/ (case-sensitive tokens)
+    if (!url.pathname.startsWith("/pass/") && !url.pathname.startsWith("/api/") &&
+        url.pathname !== url.pathname.toLowerCase()) {
+      const dest = new URL(url); dest.pathname = url.pathname.toLowerCase();
+      return Response.redirect(dest.toString(), 301);
     }
     if (url.pathname === "/api/waitlist" && request.method === "POST") {
       return sec(await waitlist(request, env));
@@ -75,7 +88,12 @@ export default {
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await aiPulse(env));
-    return sec(await env.ASSETS.fetch(request));
+    let assetRes = await env.ASSETS.fetch(request);
+    if (["app","dealer","admin","ai"].includes(url.hostname.split(".")[0])) {
+      const h = new Headers(assetRes.headers); h.set("X-Robots-Tag", "noindex, nofollow");
+      assetRes = new Response(assetRes.body, { status: assetRes.status, headers: h });
+    }
+    return sec(assetRes);
   },
   async scheduled(event, env) {
     await runQueue(env);
@@ -138,6 +156,169 @@ async function llm(env,messages){ if(env.AI_BACKEND_URL){ const r=await fetch(en
   const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:512}); return r.response; }
 
 // ==================== auth + profile + VDP ingest ====================
+// ==================== SEO: robots, sitemaps, VDP pages ====================
+function slug(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""); }
+function vdpPath(v){ return "/used/"+v.year+"-"+slug(v.make)+"-"+slug(v.model)+"-"+v.id; }
+function escHtml(s=""){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function xmlEsc(s=""){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;"); }
+const SEO_ORIGIN="https://carnimbus.com";
+
+function robotsTxt(host){
+  if(host!=="carnimbus.com"&&host!=="www.carnimbus.com")
+    return new Response("User-agent: *\nDisallow: /\n",{headers:{"content-type":"text/plain; charset=utf-8","cache-control":"public, max-age=3600"}});
+  const body=`# CarNimbus robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /pass/
+Disallow: /app/
+Disallow: /dealer/
+Disallow: /admin/
+Disallow: /ai/
+
+# AI / answer-engine crawlers — explicitly allowed for citation
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: ${SEO_ORIGIN}/sitemap.xml
+`;
+  return new Response(body,{headers:{"content-type":"text/plain; charset=utf-8","cache-control":"public, max-age=3600"}});
+}
+
+function xmlResponse(body,maxAge){ return new Response(body,{headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public, max-age="+maxAge}}); }
+function sitemapIndex(){
+  const now=new Date().toISOString();
+  return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`+
+    ["sitemap-inventory.xml","sitemap-content.xml"].map(c=>`  <sitemap><loc>${SEO_ORIGIN}/${c}</loc><lastmod>${now}</lastmod></sitemap>`).join("\n")+
+    `\n</sitemapindex>`,3600);
+}
+async function inventorySitemap(env){
+  const rows=await env.DB.prepare("SELECT id,year,make,model,photos,updated_at FROM vdps WHERE active=1 ORDER BY id DESC LIMIT 5000").all();
+  const urls=(rows.results||[]).map(v=>{
+    const imgs=JSON.parse(v.photos||"[]").slice(0,10).map(p=>`    <image:image><image:loc>${xmlEsc(p.startsWith("http")?p:SEO_ORIGIN+p)}</image:loc></image:image>`).join("\n");
+    return `  <url>\n    <loc>${xmlEsc(SEO_ORIGIN+vdpPath(v))}</loc>\n    <lastmod>${new Date(v.updated_at||Date.now()).toISOString()}</lastmod>\n    <changefreq>daily</changefreq>\n`+(imgs?imgs+"\n":"")+`  </url>`;
+  }).join("\n");
+  return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls}\n</urlset>`,900);
+}
+function contentSitemap(){
+  const now=new Date().toISOString();
+  const pages=["/","/browse","/about","/contact"];
+  return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`+
+    pages.map(p=>`  <url><loc>${SEO_ORIGIN}${p}</loc><lastmod>${now}</lastmod></url>`).join("\n")+`\n</urlset>`,3600);
+}
+
+const VDP_FAQ=[
+  {q:"Does getting pre-qualified hurt my credit?",a:"No. CarNimbus pre-qualification uses a soft pull only — zero FICO impact. A hard pull only ever happens later, if you choose to finance, and you'll know first."},
+  {q:"Is this car still available?",a:"If this page is live, the car is live. When a car sells, its page redirects to our current inventory automatically."},
+  {q:"How does the test drive work?",a:"Talk to the car in the CarNimbus app, pick a time, and you get a Drive Now Pass with a QR code. Walk in expected — terms already set, no 4-hour ordeal."},
+  {q:"What does CarNimbus cost buyers?",a:"Nothing. CarNimbus is free for buyers — partner dealers pay us for delivering ready-to-drive customers, not by marking up your car."}];
+async function usedPage(env,pathname){
+  const m=pathname.match(/^\/used\/(?:.*-)?(\d+)$/);
+  if(!m) return null;
+  const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(+m[1]).first();
+  if(!v) return new Response("Not found",{status:404});
+  if(!v.active) return Response.redirect(SEO_ORIGIN+"/browse",301);
+  const canonical=SEO_ORIGIN+vdpPath(v);
+  if(pathname!==vdpPath(v)) return Response.redirect(canonical,301);
+  const photos=JSON.parse(v.photos||"[]").map(p=>p.startsWith("http")?p:SEO_ORIGIN+p);
+  const name=`${v.year} ${v.make} ${v.model}${v.trim?" "+v.trim:""}`;
+  const title=(`Used ${name} for Sale in Los Angeles | CarNimbus`).slice(0,60);
+  const desc=(`${name}, ${v.miles||""} miles, ${v.drivetrain||""}. $${v.price_mo}/mo. Talk to this car, get pre-qualified with a soft pull — zero FICO impact — and drive it. The power's in your hands.`).slice(0,155);
+  const personality=v.description||`${name} — matched to real buyers by CarNimbus.`;
+  const mileageNum=String(v.miles||"").replace(/\D/g,"");
+  const schema=[
+    {"@context":"https://schema.org","@type":"Product","@id":canonical+"#vehicle",
+     name, description:personality, image:photos, brand:{"@type":"Brand",name:v.make},
+     sku:v.vin, additionalType:"https://schema.org/Vehicle",
+     vehicleIdentificationNumber:v.vin, modelDate:String(v.year),
+     mileageFromOdometer:mileageNum?{"@type":"QuantitativeValue",value:mileageNum,unitCode:"SMI"}:undefined,
+     bodyType:v.body||undefined,
+     offers:{"@type":"Offer",url:canonical,priceCurrency:"USD",price:String(v.price_mo),
+       availability:"https://schema.org/InStock",itemCondition:"https://schema.org/UsedCondition",
+       seller:{"@type":"Organization",name:"CarNimbus"}}},
+    {"@context":"https://schema.org","@type":"FAQPage",mainEntity:VDP_FAQ.map(f=>({"@type":"Question",name:f.q,acceptedAnswer:{"@type":"Answer",text:f.a}}))},
+    {"@context":"https://schema.org","@type":"BreadcrumbList",itemListElement:[
+      {"@type":"ListItem",position:1,name:"Home",item:SEO_ORIGIN+"/"},
+      {"@type":"ListItem",position:2,name:"Used cars",item:SEO_ORIGIN+"/browse"},
+      {"@type":"ListItem",position:3,name:name,item:canonical}]}];
+  const html=`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(title)}</title>
+<meta name="description" content="${escHtml(desc)}">
+<link rel="canonical" href="${canonical}">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#06163b">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta property="og:site_name" content="CarNimbus">
+<meta property="og:type" content="product">
+<meta property="og:title" content="${escHtml(title)}">
+<meta property="og:description" content="${escHtml(desc)}">
+<meta property="og:url" content="${canonical}">
+${photos[0]?`<meta property="og:image" content="${escHtml(photos[0])}">`:""}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escHtml(title)}">
+<meta name="twitter:description" content="${escHtml(desc)}">
+${photos[0]?`<meta name="twitter:image" content="${escHtml(photos[0])}">`:""}
+<meta name="twitter:creator" content="@nimbusbros">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>@media(max-width:700px){#vdp-grid{grid-template-columns:1fr!important}}</style>
+${photos[0]?`<link rel="preload" as="image" href="${escHtml(photos[0])}" fetchpriority="high">`:""}
+${schema.map(o=>`<script type="application/ld+json">${JSON.stringify(o).replace(/</g,"\\u003c")}</script>`).join("\n")}
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:600px;padding:22px">
+    <div class="cine"><div class="cine-grid"></div><div class="cine-vig"></div></div>
+    <nav class="z" aria-label="Breadcrumb" style="font:600 11px Manrope;color:#8ca0c4;margin-bottom:14px">
+      <a href="/" style="color:#8ca0c4">Home</a> › <a href="/browse" style="color:#8ca0c4">Used cars</a> › <span style="color:#e2e9f2">${escHtml(name)}</span>
+    </nav>
+    <article class="z" style="display:grid;grid-template-columns:1.1fr .9fr;gap:24px" id="vdp-grid">
+      <div>
+        ${photos[0]?`<img src="${escHtml(photos[0])}" alt="${escHtml("Used "+name+" for sale — front view")}" width="800" height="530" fetchpriority="high" style="width:100%;height:auto;border-radius:16px;border:1px solid rgba(24,200,255,.25)">`:""}
+        <h1 class="disp" style="font-size:28px;font-weight:700;margin-top:16px">Used ${escHtml(name)} in Los Angeles</h1>
+        <div class="cy" style="font:700 20px Manrope;margin:4px 0 12px">$${(+v.price_mo||0)}/mo <span style="font:500 12px Manrope;color:#8ca0c4">· $0 down · soft-pull pre-qualification</span></div>
+        <h2 style="font:700 14px Manrope;margin:14px 0 6px">Meet this car</h2>
+        <p style="font:500 13px/1.65 Manrope;color:#cbd5e1">${escHtml(personality)} Every CarNimbus car talks — ask it anything and it answers straight, then books your test drive itself.</p>
+        <h2 style="font:700 14px Manrope;margin:16px 0 6px">Specs</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font:600 12px Manrope;color:#e2e9f2">
+          <div>Year · ${(+v.year||0)}</div><div>Make · ${escHtml(v.make)}</div>
+          <div>Model · ${escHtml(v.model)}</div>${v.trim?`<div>Trim · ${escHtml(v.trim)}</div>`:""}
+          ${v.miles?`<div>Mileage · ${escHtml(v.miles)}</div>`:""}${v.drivetrain?`<div>Drivetrain · ${escHtml(v.drivetrain)}</div>`:""}
+          ${v.body?`<div>Body · ${escHtml(v.body)}</div>`:""}<div>Condition · Used, Certified</div>
+        </div>
+        <a class="btn primary lg" href="/app/car.html?id=${v.id}" style="text-decoration:none;display:inline-flex;margin-top:18px">Talk to this car →</a>
+      </div>
+      <aside>
+        <h2 style="font:700 14px Manrope;margin:0 0 10px">Questions buyers ask</h2>
+        ${VDP_FAQ.map(f=>`<details class="glass" style="padding:13px 15px;border-radius:12px;margin-bottom:8px"><summary style="font:700 12px Manrope;cursor:pointer">${escHtml(f.q)}</summary><p style="font:500 12px/1.6 Manrope;color:#aebfdf;margin-top:7px">${escHtml(f.a)}</p></details>`).join("\n")}
+        <div class="glass" style="border-radius:12px;padding:13px 15px;font:500 12px/1.6 Manrope;color:#aebfdf">Only 2% of buyers rate car dealers as high-trust. CarNimbus is the buyer's side: soft pull, real monthly number, walk in expected.</div>
+      </aside>
+    </article>
+  </div>
+</div></div>
+</main>
+</body>
+</html>`;
+  return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"public, max-age=300, s-maxage=900"}});
+}
+
 function genCode(prefix){ const b=new Uint32Array(2); crypto.getRandomValues(b);
   return prefix+"-"+String(b[0]%1000000).padStart(6,"0")+"-"+String(b[1]%10000).padStart(4,"0"); }
 async function authStart(request,env){ let {phone}=await request.json().catch(()=>({}));
