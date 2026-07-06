@@ -14,7 +14,11 @@ document.addEventListener("DOMContentLoaded",function(){
       m.innerHTML='<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span><div class="bubble car"><span class="tdots"><i></i><i></i><i></i></span></div>';
       thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
   function render(){
-    setSrc("v-img",(CAR.photos&&CAR.photos[0])||"");
+    var P0=(CAR.photos&&CAR.photos[0])||"";
+    var PV=P0?(P0+(P0.indexOf("?")>-1?"&":"?")+"v=3"):"";   // cache-bust past any stale 404 in the browser cache
+    setSrc("v-img",PV);
+    // paint the photo onto the hero container too, so it shows even if the <img> is hidden by a transient onerror
+    var vimg=$("v-img"); if(vimg&&vimg.parentNode&&PV){ vimg.parentNode.style.backgroundImage="url('"+PV+"')"; vimg.parentNode.style.backgroundSize="cover"; vimg.parentNode.style.backgroundPosition="center"; }
     setText("v-title",CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:""));
     setText("v-price","$"+CAR.price_mo+"/mo");
     setText("v-meta",CAR.miles+" mi · "+CAR.drivetrain+" · Certified · Los Angeles, CA");
@@ -22,7 +26,7 @@ document.addEventListener("DOMContentLoaded",function(){
     setFit(CAR.match!=null?CAR.match+"% match":"Fresh listing");
     setText("c-name",CAR.year+" "+CAR.make+" "+CAR.model);
     setText("c-tag","“"+((CAR.persona&&CAR.persona.tagline)||(CAR.description||"").split(".")[0]||"Ask me anything")+"”");
-    setSrc("c-img",(CAR.photos&&CAR.photos[0])||"");
+    setSrc("c-img",PV);
     var ci=$("chat-in"); if(ci&&CAR.persona&&CAR.persona.hint) ci.placeholder=CAR.persona.hint;
     fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
       var m=((f&&f.cars)||[]).filter(function(c){return c.id===id;})[0];
