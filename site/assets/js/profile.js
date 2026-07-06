@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded",function(){
-  var A={},cur=0,secs=[].slice.call(document.querySelectorAll("#quiz section"));
+  var A={hobbies:[]},cur=0,secs=[].slice.call(document.querySelectorAll("#quiz section"));
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
   var phone="";
   function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}
@@ -21,17 +21,32 @@ document.addEventListener("DOMContentLoaded",function(){
   });
   document.querySelectorAll("#quiz .opts").forEach(function(o){o.addEventListener("click",function(e){
     var b=e.target.closest(".opt");if(!b)return;
-    o.querySelectorAll(".opt").forEach(function(x){x.classList.remove("on");});b.classList.add("on");
-    A[o.closest("section").dataset.q]=b.dataset.v;});});
+    var sec=o.closest("section"),key=sec.dataset.q;
+    if(o.hasAttribute("data-multi")){
+      var arr=A[key]||[];
+      if(b.classList.contains("on")){b.classList.remove("on");arr=arr.filter(function(x){return x!==b.dataset.v;});}
+      else{ if(arr.length>=3)return; b.classList.add("on");arr.push(b.dataset.v); }
+      A[key]=arr;
+    } else {
+      o.querySelectorAll(".opt").forEach(function(x){x.classList.remove("on");});b.classList.add("on");
+      A[key]=b.dataset.v;
+      var other=sec.querySelector(".other-in");
+      if(other)other.style.display=(b.dataset.v==="other")?"block":"none";
+    }
+  });});
+  function readText(sec){var t=sec.querySelector(".tin");return t?t.value.trim():"";}
   function dots(){var d=document.getElementById("qz-dots");d.innerHTML="";secs.forEach(function(_,i){var s=document.createElement("span");s.className="dot2"+(i===cur?" on":"");d.appendChild(s);});
     document.getElementById("qz-prev").style.visibility=cur?"visible":"hidden";
     document.getElementById("qz-next").textContent=(cur===secs.length-1)?"Finish":"Next";}
   function show(i){secs[cur].classList.remove("on");cur=i;secs[cur].classList.add("on");dots();}
   document.getElementById("qz-prev").addEventListener("click",function(){if(cur>0)show(cur-1);});
   document.getElementById("qz-next").addEventListener("click",async function(){
-    var q=secs[cur].dataset.q;
-    if(q==="q10")A.q10=document.getElementById("q10-in").value.trim();
-    if(!A[q])return msg(document.getElementById("qz-msg"),"Pick one to keep going.");
+    var sec=secs[cur],key=sec.dataset.q;
+    if(!sec.querySelector(".opts")&&sec.querySelector(".tin"))A[key]=readText(sec);
+    if(key==="reason"&&A.reason==="other"){var ot=sec.querySelector(".other-in");if(ot&&ot.value.trim())A.reason=ot.value.trim();}
+    var val=A[key];
+    var ok=(key==="hobbies")?(val&&val.length>0):(val&&String(val).length>0);
+    if(!ok)return msg(document.getElementById("qz-msg"),"Fill this in to keep going.");
     msg(document.getElementById("qz-msg"),"");
     if(cur<secs.length-1)return show(cur+1);
     var r=await fetch("/api/profile",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({answers:A})});

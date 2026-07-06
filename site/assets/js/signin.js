@@ -2,6 +2,8 @@ document.addEventListener("DOMContentLoaded",function(){
   function step(id){["choice","buyer","dealer","dealer-done"].forEach(function(x){document.getElementById(x).style.display=(x===id?"":"none");});}
   document.getElementById("pick-buyer").addEventListener("click",function(){step("buyer");});
   document.getElementById("pick-dealer").addEventListener("click",function(){step("dealer");});
+  var gd=document.getElementById("go-dealer"); if(gd)gd.addEventListener("click",function(e){e.preventDefault();step("dealer");});
+  step("buyer");
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
   var phone="";
   function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}

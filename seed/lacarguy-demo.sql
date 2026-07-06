@@ -26,9 +26,9 @@ UPDATE users SET handle='Brandon Lopez' WHERE phone='+15128440695';
 
 -- 4. Brandon's prequalified profile (so the car treats him as pre-approved + feed can rank).
 INSERT INTO profiles (user_id,answers,embedding_synced,updated_at)
- SELECT id,'{"q1":"900","q2":"SUV","q3":"sporty luxury","q4":"15 mi","q5":"5","q6":"monthly payment","q7":"no","q8":"today","q9":"excellent","q10":"Porsche Macan"}',0,datetime('now')
+ SELECT id,'{"full_name":"Brandon Lopez","zip":"90064","buy_method":"finance","max_down":"5000","max_monthly":"900","fico":"800+","income":"150k+","dream_car":"Blacked-out Porsche Macan","reason":"Tired of fixing my 2002 Jeep Grand Cherokee","hobbies":["Weightlifting","Chess","Traveling"]}',0,datetime('now')
  FROM users WHERE phone='+15128440695'
- ON CONFLICT(user_id) DO NOTHING;
+ ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0;
 
 -- 5. Fallback appointment (Brandon -> Macan) so James's console is never empty.
 INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at)

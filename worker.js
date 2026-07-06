@@ -368,6 +368,7 @@ async function saveProfile(request,env,uid){ const {answers}=await request.json(
   await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) "+
     "ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
     .bind(uid,JSON.stringify(answers),new Date().toISOString()).run();
+  if(answers.full_name) await env.DB.prepare("UPDATE users SET handle=? WHERE id=?").bind(String(answers.full_name).slice(0,60),uid).run();
   return json({ok:true}); }
 async function vdpIngest(request,env){ const cars=await request.json().catch(()=>null);
   if(!Array.isArray(cars)) return json({ok:false,error:"bad_request"},400);
@@ -380,7 +381,7 @@ async function vdpIngest(request,env){ const cars=await request.json().catch(()=
 
 // ==================== matcher + feed + chat + pass + comments ====================
 function vdpText(v){ return `${v.year} ${v.make} ${v.model} ${v.trim}. ${v.body}, ${v.drivetrain}, ${v.miles} miles, $${v.price_mo}/mo. Features: ${JSON.parse(v.features||"[]").join(", ")}. ${v.description}`; }
-function profileText(a){ return `Budget $${a.q1}/mo. Wants ${a.q2}, ${a.q3}. Drives ${a.q4} daily. Needs ${a.q5} seats. Priority: ${a.q6}. Trade-in: ${a.q7}. Timeline: ${a.q8}. Credit: ${a.q9}. Dream car: ${a.q10}`; }
+function profileText(a){ return `Buyer wants: ${a.dream_car||""}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`; }
 async function syncEmbeddings(env){
   const vs=await env.DB.prepare("SELECT * FROM vdps WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
   for(const v of (vs.results||[])){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id}}]);
@@ -405,7 +406,7 @@ async function carChat(request,env,uid){ const {vdpId,messages}=await request.js
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-  const a=p?JSON.parse(p.answers):{}; const missing=["q1","q4","q7","q9"].filter(k=>!a[k]);
+  const a=p?JSON.parse(p.answers):{}; const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
   const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person with a confident, playful personality. FACTS (answer ONLY from these): ${vdpText(v)}. If asked something not in your facts, say you'd rather show them in person. Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"q4":"..."}</PROFILE> when learned). When the user shows test-drive intent, emit <BOOK>{"center":"Culver City","slot":"tomorrow 6pm"}</BOOK> and get them excited. Keep replies under 60 words.`};
   const text=await llm(env,[sys,...(messages||[]).slice(-10)]);
   const prof=text.match(/<PROFILE>(.*?)<\/PROFILE>/s), book=text.match(/<BOOK>(.*?)<\/BOOK>/s);
@@ -540,12 +541,12 @@ async function adminStats(request,env){
 function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 async function me(request,env,uid){
-  const u=await env.DB.prepare("SELECT phone,sid FROM users WHERE id=?").bind(uid).first();
+  const u=await env.DB.prepare("SELECT phone,sid,handle FROM users WHERE id=?").bind(uid).first();
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   const td=await env.DB.prepare(
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
-  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,answers:p?JSON.parse(p.answers):null,
+  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:p?JSON.parse(p.answers):null,
     drive:td?{...td,cid:cidFor(td.id),photos:JSON.parse(td.photos||"[]")}:null});
 }
 async function dealerLead(request,env){
