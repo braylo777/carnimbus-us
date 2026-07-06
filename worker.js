@@ -351,7 +351,7 @@ async function authStart(request,env){ let {phone}=await request.json().catch(()
   await env.DB.prepare("INSERT INTO otp (phone,code_hash,expires,tries) VALUES (?,?,?,0)")
     .bind(phone,hash,new Date(Date.now()+600e3).toISOString()).run();
   const s=await sendSMS(env,phone,"CarNimbus code: "+code+". Expires in 10 min.");
-  return json({ok:true,dev:(env.DEV_MODE==="1"&&s.dark)?code:undefined}); }
+  return json({ok:true,dev:(env.DEV_MODE==="1")?code:undefined}); }
 async function authVerify(request,env){ let {phone,code}=await request.json().catch(()=>({}));
   phone=String(phone||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1); phone="+1"+phone;
   if(env.TWILIO_VERIFY_SID){ const ok=await twilioVerifyCheck(env,phone,code);
