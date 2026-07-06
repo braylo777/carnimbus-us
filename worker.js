@@ -321,9 +321,31 @@ ${schema.map(o=>`<script type="application/ld+json">${JSON.stringify(o).replace(
 
 function genCode(prefix){ const b=new Uint32Array(2); crypto.getRandomValues(b);
   return prefix+"-"+String(b[0]%1000000).padStart(6,"0")+"-"+String(b[1]%10000).padStart(4,"0"); }
+// Twilio Verify (optional upgrade path): active only when TWILIO_VERIFY_SID secret is set.
+// Twilio manages the code (send + check); until the secret exists, the self-managed otp path runs.
+async function twilioVerifyStart(env,phone){
+  const r=await fetch(`https://verify.twilio.com/v2/Services/${env.TWILIO_VERIFY_SID}/Verifications`,
+    {method:"POST",headers:{Authorization:"Basic "+btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN),"content-type":"application/x-www-form-urlencoded"},
+     body:new URLSearchParams({To:phone,Channel:"sms"})});
+  return r.ok; }
+async function twilioVerifyCheck(env,phone,code){
+  const r=await fetch(`https://verify.twilio.com/v2/Services/${env.TWILIO_VERIFY_SID}/VerificationCheck`,
+    {method:"POST",headers:{Authorization:"Basic "+btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN),"content-type":"application/x-www-form-urlencoded"},
+     body:new URLSearchParams({To:phone,Code:String(code)})});
+  const d=await r.json().catch(()=>({})); return d.status==="approved"; }
+// Shared tail: upsert user, assign SID, mint session cookie. Used by both OTP paths.
+async function issueUserSession(env,phone){
+  await env.DB.prepare("INSERT INTO users (phone,created_at) VALUES (?,?) ON CONFLICT(phone) DO NOTHING").bind(phone,new Date().toISOString()).run();
+  const u=await env.DB.prepare("SELECT id,sid FROM users WHERE phone=?").bind(phone).first();
+  if(!u.sid) await env.DB.prepare("UPDATE users SET sid=? WHERE id=?").bind(genCode("SID"),u.id).run();
+  const sess=await makeSession(env,u.id);
+  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","cache-control":"no-store",
+    "Set-Cookie":`cn_sess=${sess}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`}}); }
 async function authStart(request,env){ let {phone}=await request.json().catch(()=>({}));
   phone=String(phone||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1);
   if(!/^[2-9]\d{9}$/.test(phone)) return json({ok:false,error:"invalid_phone"},422); phone="+1"+phone;
+  if(env.TWILIO_VERIFY_SID){ const ok=await twilioVerifyStart(env,phone);
+    return ok?json({ok:true,channel:"verify"}):json({ok:false,error:"sms_failed"},502); }
   const code=(""+Math.floor(100000+Math.random()*900000)); const hash=await hmac(env,code+phone);
   await env.DB.prepare("DELETE FROM otp WHERE phone=?").bind(phone).run();
   await env.DB.prepare("INSERT INTO otp (phone,code_hash,expires,tries) VALUES (?,?,?,0)")
@@ -332,17 +354,15 @@ async function authStart(request,env){ let {phone}=await request.json().catch(()
   return json({ok:true,dev:(env.DEV_MODE==="1"&&s.dark)?code:undefined}); }
 async function authVerify(request,env){ let {phone,code}=await request.json().catch(()=>({}));
   phone=String(phone||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1); phone="+1"+phone;
+  if(env.TWILIO_VERIFY_SID){ const ok=await twilioVerifyCheck(env,phone,code);
+    if(!ok) return json({ok:false,error:"otp_wrong"},401);
+    return issueUserSession(env,phone); }
   const row=await env.DB.prepare("SELECT * FROM otp WHERE phone=?").bind(phone).first();
   if(!row||row.tries>=3||row.expires<new Date().toISOString()) return json({ok:false,error:"otp_expired"},401);
   if(await hmac(env,String(code)+phone)!==row.code_hash){
     await env.DB.prepare("UPDATE otp SET tries=tries+1 WHERE phone=?").bind(phone).run();
     return json({ok:false,error:"otp_wrong"},401); }
-  await env.DB.prepare("INSERT INTO users (phone,created_at) VALUES (?,?) ON CONFLICT(phone) DO NOTHING").bind(phone,new Date().toISOString()).run();
-  const u=await env.DB.prepare("SELECT id,sid FROM users WHERE phone=?").bind(phone).first();
-  if(!u.sid) await env.DB.prepare("UPDATE users SET sid=? WHERE id=?").bind(genCode("SID"),u.id).run();
-  const sess=await makeSession(env,u.id);
-  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","cache-control":"no-store",
-    "Set-Cookie":`cn_sess=${sess}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`}}); }
+  return issueUserSession(env,phone); }
 async function saveProfile(request,env,uid){ const {answers}=await request.json().catch(()=>({}));
   if(!answers||typeof answers!=="object") return json({ok:false,error:"bad_request"},400);
   await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) "+
