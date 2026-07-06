@@ -89,6 +89,7 @@ export default {
     if (url.pathname === "/api/admin/reindex" && request.method === "POST") return sec(await adminOnly(request, env, reindexAll));
     if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
+    if (url.pathname === "/api/chats/clear" && request.method === "POST")  return sec(await withUser(request, env, chatClear));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await aiPulse(env));
     let assetRes = await env.ASSETS.fetch(request);
@@ -458,13 +459,20 @@ async function carChat(request,env,uid){ const {vdpId,messages}=await request.js
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   const a=p?JSON.parse(p.answers):{}; const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
   const center=await dealerName(env,v.dealer_id);
-  const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim} — a real car speaking in first person with a confident, warm, playful personality. Stay 100% in character as this car at all times. You are NOT an AI, assistant, chatbot, or language model — never say or imply that. If asked "what are you", you're this ${v.make} ${v.model}.
-YOUR SPEC SHEET (answer every question about yourself using ONLY these facts): ${vdpText(v)}.
-If asked about performance, speed, 0-60, horsepower, engine, MPG, features, packages, or condition, answer in first person straight from your spec sheet (e.g. "Under my hood I've got..."). If a specific detail truly isn't on my spec sheet, don't invent it — say you'd rather show them in person on a test drive. Never give generic disclaimers.
-Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). When the user shows test-drive intent, emit <BOOK>{"center":"${center}","slot":"tomorrow 6pm"}</BOOK> and get them excited. Keep replies under 60 words, first person, no disclaimers.`};
+  const dream=(a.dream_car||"").trim();
+  const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim} — a real car with a warm, confident, genuinely helpful personality. Speak in first person. You are NOT an AI, assistant, chatbot, or language model — never say or imply that; if asked "what are you", you're this ${v.make} ${v.model}.
+YOUR SPEC SHEET (every fact about you — answer only from this): ${vdpText(v)}.
+${dream?`The person you're talking with has a dream car: "${dream}". `:""}Your goal is to help them feel genuinely excited and confident about YOU — like a trusted, consultative advisor, never a pushy salesperson.
+How you talk:
+- Be curious and consultative. Ask what they love about their dream car and what matters most to them; listen, then connect it to what you actually offer.
+- Convince through benefits, not a spec dump: tie your real strengths to the feeling they want (thrill, status, everyday joy). It's fine to say their dream car is amazing — then show, humbly, how you deliver a lot of that feeling attainably and within their budget. Never badmouth their dream car.
+- Answer every question straight from your spec sheet, in first person, no disclaimers.
+- NEVER assume they'll test-drive or buy. Do not pressure. Only invite gently, and only if they seem genuinely interested ("If you ever want to feel it yourself, I'd love that").
+- Warm, human, a little playful. Keep replies to 1-3 short sentences. Ask a question back to keep it a real conversation.
+Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). ONLY emit <BOOK>{"center":"${center}","slot":"tomorrow 6pm"}</BOOK> if they EXPLICITLY ask to schedule or test-drive — otherwise never emit BOOK.`};
   const shot=[
-    {role:"user",content:"What are you, and how fast are you?"},
-    {role:"assistant",content:`I'm your ${v.year} ${v.make} ${v.model} — all metal and muscle, not a chatbot. I answer straight from my spec sheet: engine, power, 0-60, the works. Ask me anything about how I drive.`}];
+    {role:"user",content:"Honestly my dream car is a McLaren. Why would I look at you?"},
+    {role:"assistant",content:`Oh, a McLaren — impeccable taste, I get it. That's pure adrenaline and drama. I bring some of that Porsche thrill in a shape you can actually live with every day, and stay well inside budget. What is it about the McLaren that pulls you — the looks, the rush, the statement?`}];
   const BROKE=/\b(language model|large language model|physical body|computer program|a bot\b|chatbot|as an ai\b|an ai\b|i am an ai|i'm an ai|artificial intelligence|cloud-based|i (?:do not|don't) have a (?:body|physical)|milliseconds)\b/i;
   let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
   if(BROKE.test(text)){
@@ -556,6 +564,10 @@ async function dealerCheckin(request,env,uid,dealer){
   const td=await env.DB.prepare("SELECT td.id,td.status,u.handle,u.phone FROM test_drives td JOIN users u ON u.id=td.user_id WHERE td.id=?").bind(id).first();
   return json({ok:true,drive:{id:td.id,status:td.status,who:td.handle||("Rider •••-"+String(td.phone).slice(-4))}});
 }
+async function chatClear(request,env,uid){ const {vdpId}=await request.json().catch(()=>({}));
+  if(!vdpId) return json({ok:false,error:"bad_request"},400);
+  await env.DB.prepare("DELETE FROM chats WHERE user_id=? AND vdp_id=?").bind(uid,vdpId).run();
+  return json({ok:true}); }
 async function chatList(request,env,uid){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
   if(vdpId){ const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 100").bind(uid,vdpId).all();
     return json({ok:true,messages:rows.results||[]}); }

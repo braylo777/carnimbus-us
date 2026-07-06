@@ -21,11 +21,11 @@
 </head>
 <body>
 <main class="stage">
-<div style="padding:0 20px 40px"><div class="bw cv">
-  <div style="position:relative;background:#06163b;min-height:600px">
+<div style="padding:0 20px 16px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:calc(100vh - 96px);display:flex;flex-direction:column">
     <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(11,99,229,.16);top:-60px;left:-40px"></div><div class="cine-vig"></div></div>
     <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
-    <div class="z row app-split" style="min-height:548px" id="vdp">
+    <div class="z row app-split" style="flex:1;min-height:0" id="vdp">
       <div style="flex:1.1;padding:16px;border-right:1px solid rgba(24,200,255,.12);min-width:0">
         <div style="border-radius:14px;overflow:hidden;max-height:220px"><img id="v-img" src="" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"></div>
         <div class="disp" id="v-title" style="font-size:18px;font-weight:600;margin-top:13px"></div>
@@ -48,12 +48,13 @@
           <div id="book-msg" style="font:600 10px Manrope;color:#aebfdf;margin-top:9px;display:none"></div>
         </div>
       </div>
-      <div class="col" style="flex:1;min-width:0">
+      <div class="col" style="flex:1;min-width:0;height:100%">
         <div class="row" style="align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(24,200,255,.12)">
           <span style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex:none;border:1px solid rgba(24,200,255,.3)"><img id="c-img" src="" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"></span>
           <div style="flex:1;min-width:0"><div id="c-name" style="font:700 11px Manrope"></div><div id="c-tag" style="font:600 8px Manrope;color:#cfe0ff;font-style:italic"></div></div>
+          <button id="chat-reset" type="button" class="btn ghost sm" style="flex:none">↺ Start over</button>
         </div>
-        <div class="col" id="thread" style="flex:1;padding:13px 14px;gap:8px;overflow-y:auto;min-height:280px;max-height:420px"></div>
+        <div class="col" id="thread" style="flex:1;padding:13px 14px;gap:8px;overflow-y:auto;min-height:0"></div>
         <div id="approved" style="display:none;margin:0 14px;border:1px solid rgba(31,138,91,.5);background:rgba(31,138,91,.1);border-radius:12px;padding:9px 11px;align-items:center;gap:9px"><span class="ic-sm" style="color:#54d699"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></span><div style="flex:1"><div style="font:700 11px Manrope;color:#fff">Drive booked · pass ready</div><div style="font:500 9px Manrope;color:#9fd9b8">Soft check · 0 credit hit</div></div></div>
         <div style="padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)" class="row">
           <label class="vh" for="chat-in">Message the car</label>

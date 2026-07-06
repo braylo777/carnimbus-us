@@ -83,4 +83,11 @@ document.addEventListener("DOMContentLoaded",function(){
     else bubble("car","Static on the line — try that again.");}
   var cs=$("chat-send");if(cs)cs.addEventListener("click",send);
   var ci=$("chat-in");if(ci)ci.addEventListener("keydown",function(e){if(e.key==="Enter")send();});
+  var cr=$("chat-reset");if(cr)cr.addEventListener("click",async function(){
+    if(thread)thread.innerHTML="";hist=[];
+    var ok=$("approved");if(ok)ok.style.display="none";
+    var btn=$("pass-btn");if(btn)btn.style.display="none";
+    try{await fetch("/api/chats/clear",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:id})});}catch(e){}
+    if(CAR)bubble("car","Hey — I'm the "+CAR.year+" "+CAR.make+" "+CAR.model+". Ask me anything, or just tell me what you're looking for.");
+  });
 });

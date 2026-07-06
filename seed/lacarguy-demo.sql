@@ -29,7 +29,7 @@ UPDATE users SET handle='Brandon Lopez' WHERE phone='+15128440695';
 
 -- 4. Brandon's prequalified profile (so the car treats him as pre-approved + feed can rank).
 INSERT INTO profiles (user_id,answers,embedding_synced,updated_at)
- SELECT id,'{"full_name":"Brandon Lopez","zip":"90064","buy_method":"finance","max_down":"5000","max_monthly":"900","fico":"800+","income":"150k+","dream_car":"Blacked-out Porsche Macan","reason":"Tired of fixing my 2002 Jeep Grand Cherokee","hobbies":["Weightlifting","Chess","Traveling"]}',0,datetime('now')
+ SELECT id,'{"full_name":"Brandon Lopez","zip":"90064","buy_method":"finance","max_down":"5000","max_monthly":"900","fico":"800+","income":"150k+","dream_car":"2025 black McLaren Artura","reason":"Tired of fixing my 2002 Jeep Grand Cherokee","hobbies":["Weightlifting","Chess","Traveling"]}',0,datetime('now')
  FROM users WHERE phone='+15128440695'
  ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0;
 
@@ -39,20 +39,5 @@ INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at
  FROM users u,vdps v WHERE u.phone='+15128440695' AND v.vin='DEMO-MACAN-2025'
  AND NOT EXISTS (SELECT 1 FROM test_drives WHERE pass_token='DEMOMACANPASS0000000000000001');
 
--- 6. Seeded chat thread on the Macan (populates the dealer console chat rail before the live run).
-INSERT INTO chats (user_id,vdp_id,role,body,created_at)
- SELECT u.id,v.id,'user','love the Macan — what would my monthly be?',datetime('now','-6 minutes')
- FROM users u,vdps v WHERE u.phone='+15128440695' AND v.vin='DEMO-MACAN-2025'
- AND NOT EXISTS (SELECT 1 FROM chats WHERE body='love the Macan — what would my monthly be?');
-INSERT INTO chats (user_id,vdp_id,role,body,created_at)
- SELECT u.id,v.id,'car','You''re pre-qualified — about $899/mo, $0 down, 72-month term. Soft pull, zero credit hit. 🏁',datetime('now','-5 minutes')
- FROM users u,vdps v WHERE u.phone='+15128440695' AND v.vin='DEMO-MACAN-2025'
- AND NOT EXISTS (SELECT 1 FROM chats WHERE body LIKE 'You''re pre-qualified — about $899%');
-INSERT INTO chats (user_id,vdp_id,role,body,created_at)
- SELECT u.id,v.id,'user','can I drive it today?',datetime('now','-4 minutes')
- FROM users u,vdps v WHERE u.phone='+15128440695' AND v.vin='DEMO-MACAN-2025'
- AND NOT EXISTS (SELECT 1 FROM chats WHERE user_id=u.id AND vdp_id=v.id AND body='can I drive it today?');
-INSERT INTO chats (user_id,vdp_id,role,body,created_at)
- SELECT u.id,v.id,'car','Booked you at Culver City, Today 4:00 PM. Your Drive Now pass is ready — see you soon. 🏎️',datetime('now','-3 minutes')
- FROM users u,vdps v WHERE u.phone='+15128440695' AND v.vin='DEMO-MACAN-2025'
- AND NOT EXISTS (SELECT 1 FROM chats WHERE body LIKE 'Booked you at Culver City%');
+-- 6. (Chat thread intentionally NOT seeded — the demo starts the conversation fresh so the buyer
+--     asks every question live. The "Start over" button on the car page clears history per run.)
