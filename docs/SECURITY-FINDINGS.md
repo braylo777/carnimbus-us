@@ -21,7 +21,18 @@ not.** Details, severity, and the fix below.
   `/api/waitlist`, `/api/dealer`. The "dead buttons / zero leads" claim is stale (fixed in the
   CSP pass). Twilio is dark only because no number is purchased yet.
 
-## 🔴 P0 — Cross-dealer data exposure (the real A01 finding)
+## ✅ P0 — FIXED (2026-07-06, migration 0009 + worker scoping)
+Migration `0009_dealer_tenancy.sql` adds `vdps.dealer_id` (the single ownership source).
+`dealerListing` now stamps `dealer_id=dealer.id`; `dealerConsole`/`dealerCheckin`/`dealerChat`
+scope every query through the vdp with `(v.dealer_id=? OR v.dealer_id IS NULL)`, and checkin/chat
+verify ownership before mutate/return (403 `not_your_drive` otherwise). Legacy/demo rows
+(dealer_id NULL) stay visible to any active dealer — demo-safe — while a real dealer's uploaded
+inventory and its appointments/chats are isolated. `test_drives`/`chats` need no new column
+(ownership derives via their vdp join), so the buyer-critical carChat path is untouched.
+Proven by in-memory simulation against the real migrated schema: dealer A and B each see only
+own+demo; neither can check in the other's drive. Detail below is the original finding.
+
+## 🔴 P0 (original finding) — Cross-dealer data exposure (the real A01 finding)
 `withDealer` proves you are *some* active dealer, then the handlers **ignore which dealer** and
 query global tables:
 - `dealerConsole` (worker.js:428-441): `SELECT … FROM test_drives`, KPIs over all rows,

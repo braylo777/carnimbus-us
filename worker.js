@@ -445,16 +445,21 @@ async function withDealer(request,env,fn){
   if(d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
   return fn(request,env,uid,d);
 }
+// Dealer scoping (0009): a dealer sees/mutates only rows whose vdp.dealer_id is theirs
+// OR NULL (legacy/demo, unowned). Real dealer uploads carry dealer_id and are isolated.
+const DSCOPE="(v.dealer_id=? OR v.dealer_id IS NULL)";
 async function dealerConsole(request,env,uid,dealer){
   const tds=await env.DB.prepare(
     "SELECT td.id,td.center,td.slot,td.status,td.created_at,u.phone,u.handle,v.year,v.make,v.model,v.trim,v.price_mo,v.photos "+
-    "FROM test_drives td JOIN users u ON u.id=td.user_id JOIN vdps v ON v.id=td.vdp_id ORDER BY td.id DESC LIMIT 12").all();
+    "FROM test_drives td JOIN users u ON u.id=td.user_id JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE+" ORDER BY td.id DESC LIMIT 12").bind(dealer.id).all();
   const k=await env.DB.prepare("SELECT "+
-    "COUNT(*) routed, SUM(CASE WHEN status IN ('requested','confirmed','arrived','sold') THEN 1 ELSE 0 END) booked, "+
-    "SUM(CASE WHEN status IN ('arrived','sold') THEN 1 ELSE 0 END) showed, SUM(CASE WHEN status='sold' THEN 1 ELSE 0 END) closed FROM test_drives").first();
+    "COUNT(*) routed, SUM(CASE WHEN td.status IN ('requested','confirmed','arrived','sold') THEN 1 ELSE 0 END) booked, "+
+    "SUM(CASE WHEN td.status IN ('arrived','sold') THEN 1 ELSE 0 END) showed, SUM(CASE WHEN td.status='sold' THEN 1 ELSE 0 END) closed "+
+    "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE).bind(dealer.id).first();
   const today=new Date().toISOString().slice(0,10), yd=new Date(Date.now()-864e5).toISOString().slice(0,10);
-  const rt=await env.DB.prepare("SELECT SUM(CASE WHEN substr(created_at,1,10)=? THEN 1 ELSE 0 END) t, SUM(CASE WHEN substr(created_at,1,10)=? THEN 1 ELSE 0 END) y FROM test_drives").bind(today,yd).first();
-  const ls=await env.DB.prepare("SELECT id,year,make,model,trim,price_mo,active FROM vdps ORDER BY id DESC LIMIT 20").all();
+  const rt=await env.DB.prepare("SELECT SUM(CASE WHEN substr(td.created_at,1,10)=? THEN 1 ELSE 0 END) t, SUM(CASE WHEN substr(td.created_at,1,10)=? THEN 1 ELSE 0 END) y "+
+    "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE).bind(today,yd,dealer.id).first();
+  const ls=await env.DB.prepare("SELECT id,year,make,model,trim,price_mo,active FROM vdps v WHERE "+DSCOPE+" ORDER BY id DESC LIMIT 20").bind(dealer.id).all();
   return json({ok:true,dealer:dealer,kpis:k,deltas:{today:rt.t||0,yesterday:rt.y||0},
     appointments:(tds.results||[]).map(t=>({...t,who:t.handle||("Rider •••-"+String(t.phone).slice(-4)),cid:cidFor(t.id),phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),
     listings:ls.results||[]});
@@ -464,11 +469,11 @@ async function dealerListing(request,env,uid,dealer){
   if(!c.year||!c.make||!c.model||!c.price_mo) return json({ok:false,error:"bad_request"},400);
   const vin=c.vin||("DLR-"+dealer.id+"-"+Date.now());
   await env.DB.prepare(
-    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?)")
+    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at) "+
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)")
     .bind(vin,+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),+c.price_mo,
       String(c.miles||"").slice(0,20),String(c.drivetrain||"").slice(0,20),String(c.body||"").slice(0,20),
-      JSON.stringify(c.features||[]),String(c.description||"").slice(0,500),JSON.stringify(c.photos||[]),new Date().toISOString()).run();
+      JSON.stringify(c.features||[]),String(c.description||"").slice(0,500),JSON.stringify(c.photos||[]),dealer.id,new Date().toISOString()).run();
   return json({ok:true});
 }
 async function dealerCheckin(request,env,uid,dealer){
@@ -480,6 +485,9 @@ async function dealerCheckin(request,env,uid,dealer){
       :await env.DB.prepare("SELECT id FROM test_drives WHERE pass_token LIKE ? ORDER BY id DESC LIMIT 1").bind(t.slice(0,6)+"%").first();
     if(row) id=row.id; }
   if(!id) return json({ok:false,error:"not_found"},404);
+  // Ownership check: the drive's car must belong to this dealer (or be unowned/demo).
+  const own=await env.DB.prepare("SELECT td.id FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.id=? AND "+DSCOPE).bind(id,dealer.id).first();
+  if(!own) return json({ok:false,error:"not_your_drive"},403);
   await env.DB.prepare("UPDATE test_drives SET status=? WHERE id=?").bind(status,id).run();
   const td=await env.DB.prepare("SELECT td.id,td.status,u.handle,u.phone FROM test_drives td JOIN users u ON u.id=td.user_id WHERE td.id=?").bind(id).first();
   return json({ok:true,drive:{id:td.id,status:td.status,who:td.handle||("Rider •••-"+String(td.phone).slice(-4))}});
@@ -497,7 +505,8 @@ async function chatList(request,env,uid){ const curl=new URL(request.url); const
   return json({ok:true,threads:out}); }
 async function dealerChat(request,env,uid,dealer){ const curl=new URL(request.url); const driveId=+curl.searchParams.get("driveId")||0;
   if(!driveId) return json({ok:false,error:"bad_request"},400);
-  const td=await env.DB.prepare("SELECT user_id,vdp_id FROM test_drives WHERE id=?").bind(driveId).first();
+  // Scope to the dealer's own cars (or unowned/demo) — no reading other dealers' buyer chats.
+  const td=await env.DB.prepare("SELECT td.user_id,td.vdp_id FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.id=? AND "+DSCOPE).bind(driveId,dealer.id).first();
   if(!td) return json({ok:false,error:"not_found"},404);
   const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 40").bind(td.user_id,td.vdp_id).all();
   return json({ok:true,messages:rows.results||[]}); }
