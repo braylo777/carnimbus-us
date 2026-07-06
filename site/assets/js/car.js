@@ -32,7 +32,37 @@ document.addEventListener("DOMContentLoaded",function(){
       ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body);
         if(m.role==="user")hist.push({role:"user",content:m.body});else hist.push({role:"assistant",content:m.body});});
     }).catch(function(){bubble("car",CAR.model+" here. Ask me anything — or tell me when you want to drive.");});
+    setupBooking();
+    if(new URLSearchParams(location.search).get("book")==="1"){var bp=$("book-panel");if(bp)bp.style.display="block";}
   }
+  var bDay="Today",bTime=null;
+  function setupBooking(){
+    var where=$("book-where");if(where)where.textContent="at "+((CAR&&CAR.dealer)||"your nearest CarNimbus center");
+    var days=$("book-days"),times=$("book-times");
+    if(days&&!days.childElementCount){
+      var wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"],d2=new Date();d2.setDate(d2.getDate()+2);
+      ["Today","Tomorrow",wd[d2.getDay()]].forEach(function(dn,i){var b=document.createElement("button");b.type="button";b.className="bopt"+(i===0?" on":"");b.textContent=dn;
+        b.addEventListener("click",function(){days.querySelectorAll(".bopt").forEach(function(x){x.classList.remove("on");});b.classList.add("on");bDay=dn;});days.appendChild(b);});
+    }
+    if(times&&!times.childElementCount){
+      ["10:00 AM","12:00 PM","2:00 PM","4:00 PM","6:00 PM"].forEach(function(tn){var b=document.createElement("button");b.type="button";b.className="bopt";b.textContent=tn;
+        b.addEventListener("click",function(){times.querySelectorAll(".bopt").forEach(function(x){x.classList.remove("on");});b.classList.add("on");bTime=tn;});times.appendChild(b);});
+    }
+  }
+  var bo=$("book-open");if(bo)bo.addEventListener("click",function(){var p=$("book-panel");if(!p)return;p.style.display=(p.style.display==="none"||!p.style.display)?"block":"none";if(p.style.display==="block")setupBooking();});
+  var bc=$("book-confirm");if(bc)bc.addEventListener("click",async function(){
+    var m=$("book-msg");if(!CAR)return;
+    if(!bTime){if(m){m.style.display="block";m.textContent="Pick a time to lock it in.";}return;}
+    var slot=(bDay||"Today")+", "+bTime;
+    var r=await fetch("/api/book",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,slot:slot})});
+    if(r.status===401){if(m){m.style.display="block";m.innerHTML='Sign in to book — <a class="cy" href="/app/signin.html">sign in →</a>';}return;}
+    var d=await r.json().catch(function(){return{};});
+    if(d&&d.ok){if(m){m.style.display="block";m.textContent="Booked "+slot+" at "+d.center+" 🎟️";}
+      var ok=$("approved");if(ok)ok.style.display="flex";
+      var btn=$("pass-btn");if(btn){btn.style.display="inline-flex";btn.href=d.pass;btn.textContent="See your pass →";}
+      bubble("car","Booked — "+slot+" at "+d.center+". Your Drive Now pass is ready. See you soon!");}
+    else if(m){m.style.display="block";m.textContent="Couldn’t book that slot — try another.";}
+  });
   fetch("/api/vdp?id="+id).then(function(r){return r.text();}).then(function(txt){
     var d=null; try{ d=JSON.parse(txt); }catch(e){ d=null; }
     CAR=d&&d.car;

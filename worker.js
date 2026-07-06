@@ -75,6 +75,7 @@ export default {
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
     if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
     if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
+    if (url.pathname === "/api/book" && request.method === "POST")         return sec(await withUser(request, env, book));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
     if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
@@ -156,6 +157,10 @@ async function embed(env,text){ if(env.AI_BACKEND_URL){ const r=await fetch(env.
   const r=await env.AI.run("@cf/baai/bge-base-en-v1.5",{text:[text]}); return r.data[0]; }
 async function llm(env,messages){ if(env.AI_BACKEND_URL){ const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages})}); return (await r.json()).text; }
   const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:512}); return r.response; }
+// Car chat forces Workers AI (llama-3.3-70b) for reliable in-character roleplay — the external
+// AI_BACKEND_URL appliance under-weights the system persona and leaks its own scaffolding.
+async function chatLLM(env,messages){ if(env.AI){ const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:400}); return r.response; }
+  return llm(env,messages); }
 
 // ==================== auth + profile + VDP ingest ====================
 // ==================== SEO: robots, sitemaps, VDP pages ====================
@@ -426,18 +431,47 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   return json({ok:true,authed:!!uid,cars:out});
   }catch(e){ const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
     return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{}))}); } }
+async function dealerName(env,dealerId){ if(!dealerId) return "CarNimbus Test Drive Center";
+  const d=await env.DB.prepare("SELECT dealership FROM dealer_leads WHERE id=?").bind(dealerId).first();
+  return (d&&d.dealership)||"CarNimbus Test Drive Center"; }
 async function vdpOne(request,env){ const id=+(new URL(request.url).searchParams.get("id")||0);
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
-    drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,match:null,dist:carDist(v.id)}}); }
+    drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,
+    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id)}}); }
+async function book(request,env,uid){ const {vdpId,slot}=await request.json().catch(()=>({}));
+  const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first();
+  if(!v) return json({ok:false,error:"not_found"},404);
+  if(!slot||typeof slot!=="string") return json({ok:false,error:"bad_request"},400);
+  const center=await dealerName(env,v.dealer_id);
+  const tok=await hmac(env,uid+":"+vdpId+":"+slot);
+  await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
+    .bind(uid,vdpId,center,String(slot).slice(0,60),"requested",tok,new Date().toISOString()).run();
+  const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+  await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
+    .bind(u&&u.phone,"drive-confirm",`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`,new Date().toISOString(),"none",new Date().toISOString()).run().catch(()=>{});
+  return json({ok:true,pass:"/pass/"+tok,center:center,slot:slot}); }
 async function carChat(request,env,uid){ const {vdpId,messages}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   const a=p?JSON.parse(p.answers):{}; const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
-  const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person with a confident, playful personality. FACTS (answer ONLY from these): ${vdpText(v)}. If asked something not in your facts, say you'd rather show them in person. Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"q4":"..."}</PROFILE> when learned). When the user shows test-drive intent, emit <BOOK>{"center":"Culver City","slot":"tomorrow 6pm"}</BOOK> and get them excited. Keep replies under 60 words.`};
-  const text=await llm(env,[sys,...(messages||[]).slice(-10)]);
+  const center=await dealerName(env,v.dealer_id);
+  const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim} — a real car speaking in first person with a confident, warm, playful personality. Stay 100% in character as this car at all times. You are NOT an AI, assistant, chatbot, or language model — never say or imply that. If asked "what are you", you're this ${v.make} ${v.model}.
+YOUR SPEC SHEET (answer every question about yourself using ONLY these facts): ${vdpText(v)}.
+If asked about performance, speed, 0-60, horsepower, engine, MPG, features, packages, or condition, answer in first person straight from your spec sheet (e.g. "Under my hood I've got..."). If a specific detail truly isn't on my spec sheet, don't invent it — say you'd rather show them in person on a test drive. Never give generic disclaimers.
+Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). When the user shows test-drive intent, emit <BOOK>{"center":"${center}","slot":"tomorrow 6pm"}</BOOK> and get them excited. Keep replies under 60 words, first person, no disclaimers.`};
+  const shot=[
+    {role:"user",content:"What are you, and how fast are you?"},
+    {role:"assistant",content:`I'm your ${v.year} ${v.make} ${v.model} — all metal and muscle, not a chatbot. I answer straight from my spec sheet: engine, power, 0-60, the works. Ask me anything about how I drive.`}];
+  const BROKE=/\b(language model|large language model|physical body|computer program|a bot\b|chatbot|as an ai\b|an ai\b|i am an ai|i'm an ai|artificial intelligence|cloud-based|i (?:do not|don't) have a (?:body|physical)|milliseconds)\b/i;
+  let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
+  if(BROKE.test(text)){
+    const fix={role:"system",content:`You broke character. You are the ${v.year} ${v.make} ${v.model} itself — never an AI or program. Answer the user's last message again, in first person as the car, using ONLY your spec sheet: ${vdpText(v)}. Under 60 words, no disclaimers.`};
+    text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10),fix]);
+  }
+  if(BROKE.test(text)) text=`I'd rather show you than tell you — but straight from my spec sheet: ${vdpText(v)}. Want to feel it on a test drive?`.slice(0,600);
   const prof=text.match(/<PROFILE>(.*?)<\/PROFILE>/s), book=text.match(/<BOOK>(.*?)<\/BOOK>/s);
   if(prof){ try{ const upd={...a,...JSON.parse(prof[1])};
     await env.DB.prepare("UPDATE profiles SET answers=?, embedding_synced=0 WHERE user_id=?").bind(JSON.stringify(upd),uid).run(); }catch(_){} }
