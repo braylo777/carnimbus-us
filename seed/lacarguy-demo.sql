@@ -11,13 +11,16 @@ INSERT INTO dealer_leads (name,dealership,role,phone,email,client_no,status,crea
 
 -- 2. The 2025 Porsche Macan, owned by James (dealer_id = his lead). Specs swappable.
 INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at)
- SELECT 'DEMO-MACAN-2025',2025,'Porsche','Macan','AWD',899,'8k','AWD','SUV',
-  '["Certified Pre-Owned","Jet Black Metallic","Black leather","Panoramic roof","AWD"]',
-  'I''m a 2025 Macan in Jet Black — certified, low miles, quicker than I look. Ask me anything: price, condition, what a monthly looks like. I''d rather answer straight than make you haggle.',
+ SELECT 'DEMO-MACAN-2025',2025,'Porsche','Macan','',728,'5,190','AWD','SUV',
+  '["Certified Pre-Owned","Premium Package Plus","Panoramic Roof System","Heated & ventilated seats","Surround View","AWD · 7-speed PDK","Clean CARFAX"]',
+  'I''m a 2025 Porsche Macan, Certified Pre-Owned with just 5,190 miles — Volcano Gray Metallic over black. Premium Package Plus means panoramic roof, heated and ventilated seats, and Surround View. AWD, 7-speed PDK, 2.0L turbo four, clean CARFAX out of Porsche South Bay. Ask me anything — or tell me when you want to drive.',
   '["/assets/inventory/porsche-macan.jpg"]',1,0,
   (SELECT id FROM dealer_leads WHERE client_no='CN-LACARGUY'),datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM vdps WHERE vin='DEMO-MACAN-2025');
-UPDATE vdps SET active=1, dealer_id=(SELECT id FROM dealer_leads WHERE client_no='CN-LACARGUY')
+UPDATE vdps SET active=1, price_mo=728, miles='5,190', trim='',
+  features='["Certified Pre-Owned","Premium Package Plus","Panoramic Roof System","Heated & ventilated seats","Surround View","AWD · 7-speed PDK","Clean CARFAX"]',
+  description='I''m a 2025 Porsche Macan, Certified Pre-Owned with just 5,190 miles — Volcano Gray Metallic over black. Premium Package Plus means panoramic roof, heated and ventilated seats, and Surround View. AWD, 7-speed PDK, 2.0L turbo four, clean CARFAX out of Porsche South Bay. Ask me anything — or tell me when you want to drive.',
+  embedding_synced=0, dealer_id=(SELECT id FROM dealer_leads WHERE client_no='CN-LACARGUY')
  WHERE vin='DEMO-MACAN-2025';
 
 -- 3. Brandon = buyer, his real demo phone (live sign-in merges into this account).

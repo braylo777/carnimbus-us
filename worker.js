@@ -401,24 +401,36 @@ async function reindexAll(request,env){ let n=0;
     for(const p of ps.results){ await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(JSON.parse(p.answers))),metadata:{kind:"profile"}}]);
       await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
   return json({ok:true,indexed:n}); }
+function carDist(id){ return (((id*37)%128)/10 + 1.6).toFixed(1); }
+function carWhy(v,a){ a=a||{};
+  const dream=(a.dream_car||"").trim(), dl=dream.toLowerCase();
+  const budget=a.max_monthly?` while landing under your $${a.max_monthly}/mo`:" while fitting your budget";
+  if(dream && (dl.includes(String(v.model||"").toLowerCase())||dl.includes(String(v.make||"").toLowerCase())))
+    return `Chosen because it's the ${v.make} ${v.model} you described — Certified and ready to drive${budget}.`;
+  const trait={SUV:"the space, presence, and all-weather confidence",Sedan:"the sharp, refined driving feel",EV:"the instant, silent power",Truck:"the capability and grunt"}[v.body]||"the style you're after";
+  return dream ? `Chosen because it captures ${trait} of your dream ${dream}${budget}.`
+              : `A strong match for your budget and taste${budget}.`; }
+function feedCar(v,score,ans){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
+  drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
+  match:score,why:carWhy(v,ans),dist:carDist(v.id)}; }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
-  let ranked=null;
+  let ranked=null, ans={};
   if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-    if(p){ const q=await env.MATCH_INDEX.query(await embed(env,profileText(JSON.parse(p.answers))),{topK:20,filter:{kind:"vdp"}}).catch(()=>null);
+    if(p){ try{ ans=JSON.parse(p.answers)||{}; }catch(_){}
+      const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans)),{topK:20,filter:{kind:"vdp"}}).catch(()=>null);
       if(q) ranked=q.matches.map(m=>({id:m.metadata.vdpId,score:Math.round(m.score*100)})); } }
   if(!ranked){ const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all();
     ranked=(all.results||[]).map(r=>({id:r.id,score:null})); }
   const out=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
-    if(v) out.push({id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
-      drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),match:r.score}); }
+    if(v) out.push(feedCar(v,r.score,ans)); }
   return json({ok:true,authed:!!uid,cars:out});
   }catch(e){ const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
-    return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>({id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),match:null}))}); } }
+    return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{}))}); } }
 async function vdpOne(request,env){ const id=+(new URL(request.url).searchParams.get("id")||0);
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
-    drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,match:null}}); }
+    drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,match:null,dist:carDist(v.id)}}); }
 async function carChat(request,env,uid){ const {vdpId,messages}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
