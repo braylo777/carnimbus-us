@@ -84,6 +84,7 @@ export default {
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
+    if (url.pathname === "/api/admin/reindex" && request.method === "POST") return sec(await adminOnly(request, env, reindexAll));
     if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
@@ -389,6 +390,16 @@ async function syncEmbeddings(env){
   const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
   for(const p of (ps.results||[])){ await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(JSON.parse(p.answers))),metadata:{kind:"profile"}}]);
     await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
+async function reindexAll(request,env){ let n=0;
+  for(let i=0;i<200;i++){ const vs=await env.DB.prepare("SELECT * FROM vdps WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
+    if(!(vs.results||[]).length) break;
+    for(const v of vs.results){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id}}]);
+      await env.DB.prepare("UPDATE vdps SET embedding_synced=1 WHERE id=?").bind(v.id).run(); n++; } }
+  for(let i=0;i<200;i++){ const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
+    if(!(ps.results||[]).length) break;
+    for(const p of ps.results){ await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(JSON.parse(p.answers))),metadata:{kind:"profile"}}]);
+      await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
+  return json({ok:true,indexed:n}); }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
   let ranked=null;
   if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
