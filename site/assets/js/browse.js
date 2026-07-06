@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded",function(){
     '<span class="vbadge cert">Certified</span>'+(c.match!=null?'<span class="vbadge best">'+c.match+'% match</span>':'')+'</div>'+
     '<div class="vbody"><h4>'+c.year+' '+c.make+' '+c.model+'</h4><div class="vtrim">'+(c.trim||'&nbsp;')+'</div>'+
     '<div class="row vmeta"><span>'+c.miles+' mi</span><span>'+c.drivetrain+'</span></div>'+
-    '<div class="row vprice"><b>$'+c.price_mo+'<small>/mo</small></b><span class="vcta">Talk to this car →</span></div></div></a>';}
+    '<div style="font:600 9px Manrope;color:#8ca0c4">$0 down · 72 mo</div><div class="row vprice"><b>$'+c.price_mo+'<small>/mo</small></b><span class="vcta">Talk to this car →</span></div></div></a>';}
   function render(){var out=CARS.filter(function(c){
       if(F.body!=="All"&&(c.body||"").toLowerCase()!==F.body.toLowerCase())return false;
       if(c.price_mo>F.maxMo)return false;
