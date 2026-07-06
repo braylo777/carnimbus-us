@@ -218,6 +218,7 @@
     document.addEventListener("click",function(e){ if(!d.contains(e.target)&&e.target!==b) close(); });
     document.addEventListener("keydown",function(e){ if(e.key==="Escape") close(); });
   }
+  function initials(name){ return String(name||"").trim().split(/\s+/).map(function(w){return w[0]||"";}).join("").slice(0,2).toUpperCase()||"CN"; }
   function wireAppNav(){
     var el=document.getElementById("appnav"); if(!el) return;
     var here=location.pathname;
@@ -227,7 +228,7 @@
       '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
       '<a href="/app/you.html" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
-      if(d.ok&&d.phone) document.getElementById("appnav-av").textContent="•"+String(d.phone).slice(-2);
+      if(d.ok) document.getElementById("appnav-av").textContent=initials(d.handle);
     }).catch(function(){});
   }
   function wireTabbar(){

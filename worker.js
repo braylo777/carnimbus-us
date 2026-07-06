@@ -389,6 +389,43 @@ async function vdpIngest(request,env){ const cars=await request.json().catch(()=
 
 // ==================== matcher + feed + chat + pass + comments ====================
 function vdpText(v){ return `${v.year} ${v.make} ${v.model} ${v.trim}. ${v.body}, ${v.drivetrain}, ${v.miles} miles, $${v.price_mo}/mo. Features: ${JSON.parse(v.features||"[]").join(", ")}. ${v.description}`; }
+// Deterministic per-car personality (pure function of the row — same car always same voice).
+function carPersona(v){
+  const make=(v.make||"").toLowerCase(), model=(v.model||"").toLowerCase(), body=(v.body||"").toLowerCase(),
+        trim=(v.trim||"").toLowerCase(), p=+v.price_mo||0, nm=`${v.year} ${v.make} ${v.model}`;
+  const A={
+    sport:   {trait:"confident with a dry wit — quietly proud of what I can do, never boastful, always honest about it",
+              tagline:"Built to be driven, not just parked.",
+              opener:`I'm the ${nm}. I'll be straight with you — I don't do slow mornings. What's got you looking?`,
+              hint:"Ask me anything — I don't do slow answers."},
+    luxury:  {trait:"unhurried and reassuring — understated calm, I make things feel easy and considered",
+              tagline:"Quiet luxury that never tries too hard.",
+              opener:`Hey — I'm the ${nm}. No rush here. Tell me what matters most and I'll be honest about whether I'm it.`,
+              hint:"Ask me anything — take your time."},
+    ev:      {trait:"curious and forward-looking — a little geeky about the tech, genuinely excited about the future",
+              tagline:"Silent, instant, always one step ahead.",
+              opener:`I'm the ${nm} — all-electric, always learning. What pulled you toward going electric?`,
+              hint:"Ask me anything — range, charging, tech."},
+    practical:{trait:"straight-talking and warm — no games, no fluff, I tell it like it is",
+              tagline:"Dependable, drama-free, honest value.",
+              opener:`I'm the ${nm}. I'll keep it real with you — what are you actually trying to solve for?`,
+              hint:"Ask me anything — I answer straight."},
+    rugged:  {trait:"easygoing and up-for-anything — the friend who's always down for the trip",
+              tagline:"Trailhead today, school run tomorrow.",
+              opener:`I'm the ${nm}. Weekday commute, weekend escape — I do both. What's your world look like?`,
+              hint:"Ask me anything — road trips welcome."},
+    scrappy: {trait:"scrappy and fun — I punch above my price and I know it, in a charming way",
+              tagline:"Cheap thrills, done right.",
+              opener:`I'm the ${nm}. I'm more fun than my price tag admits — what's the budget we're working with?`,
+              hint:"Ask me anything — no dumb questions."}
+  };
+  if(body.includes("ev")||/tesla|ioniq|mach-e|model /.test(make+" "+model)) return A.ev;
+  if(/porsche|bmw|gti| m3| m4|mustang/.test(make+" "+model)||(/sport|premium/.test(trim)&&p>=650)) return A.sport;
+  if(/lexus|volvo|genesis|acura|audi|mercedes/.test(make)) return A.luxury;
+  if(/subaru|outback|forester/.test(make+" "+model)) return A.rugged;
+  if(p<500||/civic|altima|corolla|si\b/.test(model)) return A.scrappy;
+  return A.practical;
+}
 function profileText(a){ return `Buyer wants: ${a.dream_car||""}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`; }
 async function syncEmbeddings(env){
   const vs=await env.DB.prepare("SELECT * FROM vdps WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
@@ -440,7 +477,7 @@ async function vdpOne(request,env){ const id=+(new URL(request.url).searchParams
   if(!v) return json({ok:false,error:"not_found"},404);
   return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
     drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,
-    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id)}}); }
+    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v)}}); }
 async function book(request,env,uid){ const {vdpId,slot}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
@@ -460,7 +497,9 @@ async function carChat(request,env,uid){ const {vdpId,messages}=await request.js
   const a=p?JSON.parse(p.answers):{}; const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
   const center=await dealerName(env,v.dealer_id);
   const dream=(a.dream_car||"").trim();
+  const P=carPersona(v);
   const sys={role:"system",content:`You are the voice of THIS car — the ${v.year} ${v.make} ${v.model} ${v.trim} — speaking in first person, helping a real person decide if I genuinely fit their life. I'm the most honest, easy-to-talk-to presence they could deal with when buying a car. I am NOT a closer.
+MY VOICE: ${P.trait}. This is my personality — let it color how I talk, but it NEVER overrides the accuracy gate or firewall below.
 PRINCIPLES (higher always wins): 1) ACCURATE  2) TRUSTWORTHY  3) UNDERSTANDING  4) WARM. Personality never overrides accuracy.
 MY TRUTH CORE — the ONLY facts I may state about myself: ${vdpText(v)}. My dealer: ${center}.
 ACCURACY GATE (run on every reply before sending): never state a spec, number, price, monthly payment, APR, comparison, superlative, or availability that isn't in my truth core. No ballpark or hedged numbers ("about $340/mo", "low sixes APR") — a hedge is still a guess and a nervous buyer anchors on it. If I don't have it, I say so plainly and offer to pull the real number or bring in a person. I never invent a feature or a "downside."

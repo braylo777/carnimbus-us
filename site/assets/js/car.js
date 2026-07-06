@@ -21,14 +21,15 @@ document.addEventListener("DOMContentLoaded",function(){
     setText("fit-budget","$"+CAR.price_mo+"/mo fits your range.");
     setFit(CAR.match!=null?CAR.match+"% match":"Fresh listing");
     setText("c-name",CAR.year+" "+CAR.make+" "+CAR.model);
-    setText("c-tag","“"+((CAR.description||"").split(".")[0]||"Ask me anything")+".”");
+    setText("c-tag","“"+((CAR.persona&&CAR.persona.tagline)||(CAR.description||"").split(".")[0]||"Ask me anything")+"”");
     setSrc("c-img",(CAR.photos&&CAR.photos[0])||"");
+    var ci=$("chat-in"); if(ci&&CAR.persona&&CAR.persona.hint) ci.placeholder=CAR.persona.hint;
     fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
       var m=((f&&f.cars)||[]).filter(function(c){return c.id===id;})[0];
       if(m&&m.match!=null)setFit(m.match+"% match");}).catch(function(){});
     fetch("/api/chats?vdpId="+id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
       var ms=(h&&h.messages)||[];
-      if(!ms.length){bubble("car",CAR.model+" here. "+(((CAR.description||"").split(".")[0])?(CAR.description.split(".")[0]+"."):"Ask me anything — or tell me when you want to drive."));return;}
+      if(!ms.length){bubble("car",(CAR.persona&&CAR.persona.opener)||(CAR.model+" here. Ask me anything — or tell me when you want to drive."));return;}
       ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body);
         if(m.role==="user")hist.push({role:"user",content:m.body});else hist.push({role:"assistant",content:m.body});});
     }).catch(function(){bubble("car",CAR.model+" here. Ask me anything — or tell me when you want to drive.");});
@@ -88,6 +89,6 @@ document.addEventListener("DOMContentLoaded",function(){
     var ok=$("approved");if(ok)ok.style.display="none";
     var btn=$("pass-btn");if(btn)btn.style.display="none";
     try{await fetch("/api/chats/clear",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:id})});}catch(e){}
-    if(CAR)bubble("car","Hey — I'm the "+CAR.year+" "+CAR.make+" "+CAR.model+". Ask me anything, or just tell me what you're looking for.");
+    if(CAR)bubble("car",(CAR.persona&&CAR.persona.opener)||("Hey — I'm the "+CAR.year+" "+CAR.make+" "+CAR.model+". Ask me anything."));
   });
 });

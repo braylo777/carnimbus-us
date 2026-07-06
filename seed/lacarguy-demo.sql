@@ -33,11 +33,8 @@ INSERT INTO profiles (user_id,answers,embedding_synced,updated_at)
  FROM users WHERE phone='+15128440695'
  ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0;
 
--- 5. Fallback appointment (Brandon -> Macan) so James's console is never empty.
-INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at)
- SELECT u.id,v.id,'Culver City','Today, 4:00 PM','requested','DEMOMACANPASS0000000000000001',datetime('now')
- FROM users u,vdps v WHERE u.phone='+15128440695' AND v.vin='DEMO-MACAN-2025'
- AND NOT EXISTS (SELECT 1 FROM test_drives WHERE pass_token='DEMOMACANPASS0000000000000001');
+-- 5. (Fallback appointment intentionally REMOVED — the Pass must only appear AFTER the buyer
+--    books a test drive live on the car page. Booking is done during the demo, minting a real pass.)
 
 -- 6. (Chat thread intentionally NOT seeded — the demo starts the conversation fresh so the buyer
 --     asks every question live. The "Start over" button on the car page clears history per run.)
