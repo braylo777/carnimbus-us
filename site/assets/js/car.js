@@ -8,9 +8,12 @@ document.addEventListener("DOMContentLoaded",function(){
     if(on){var m=document.createElement("div");m.className="msg car typing";
       m.innerHTML='<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span><div class="bubble car"><span class="tdots"><i></i><i></i><i></i></span></div>';
       thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
-  fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
-    CAR=(d.cars||[]).filter(function(c){return c.id===id;})[0];
+  fetch("/api/vdp?id="+id).then(function(r){return r.json();}).then(function(d){
+    CAR=d&&d.car;
     if(!CAR){document.getElementById("vdp").innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">Car not found. <a class="cy" href="/app/browse.html">Back to browse</a></div>';return;}
+    fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
+      var m=(f.cars||[]).filter(function(c){return c.id===id;})[0];
+      if(m&&m.match!=null){var fm2=document.getElementById("fit-match");if(fm2)fm2.querySelector("b").textContent=m.match+"% match";}}).catch(function(){});
     document.getElementById("v-img").src=(CAR.photos&&CAR.photos[0])||"";
     document.getElementById("v-title").textContent=CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:"");
     document.getElementById("v-price").textContent="$"+CAR.price_mo+"/mo";

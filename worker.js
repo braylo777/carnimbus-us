@@ -73,6 +73,7 @@ export default {
     if (url.pathname === "/api/auth/verify" && request.method === "POST") return sec(await authVerify(request, env));
     if (url.pathname === "/api/profile" && request.method === "POST")     return sec(await withUser(request, env, saveProfile));
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
+    if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
     if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
     if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
@@ -413,6 +414,11 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   return json({ok:true,authed:!!uid,cars:out});
   }catch(e){ const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
     return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>({id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),match:null}))}); } }
+async function vdpOne(request,env){ const id=+(new URL(request.url).searchParams.get("id")||0);
+  const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first();
+  if(!v) return json({ok:false,error:"not_found"},404);
+  return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
+    drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,match:null}}); }
 async function carChat(request,env,uid){ const {vdpId,messages}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
