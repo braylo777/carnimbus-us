@@ -1,12 +1,17 @@
 document.addEventListener("DOMContentLoaded",function(){
-  fetch("/api/me").then(function(r){if(r.status===401){document.getElementById("gate").style.display="block";throw 0;}return r.json();}).then(function(me){
-    document.getElementById("acct").style.display="block";
+  function $(x){return document.getElementById(x);}
+  var ME=null;
+  fetch("/api/me").then(function(r){if(r.status===401){$("gate").style.display="block";throw 0;}return r.json();}).then(function(me){
+    ME=me;
+    $("acct").style.display="block";
     var name=me.handle||"CarNimbus rider";
     var initials=name.split(/\s+/).map(function(w){return w[0]||"";}).join("").slice(0,2).toUpperCase()||"CN";
-    document.getElementById("y-av").textContent=initials;
-    document.getElementById("y-name").textContent=name;
-    document.getElementById("y-phone").textContent="•••-"+String(me.phone||"").slice(-4);
-    if(me.cid)document.getElementById("y-cid").textContent="CID# "+me.cid;
+    if(me.avatar)$("y-av").innerHTML='<img src="'+me.avatar+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    else $("y-av").textContent=initials;
+    $("y-name").textContent=name;
+    $("y-phone").textContent="•••-"+String(me.phone||"").slice(-4);
+    if(me.sid)$("y-cid").textContent="CID# "+me.sid;        // the stored customer ID, labeled CID#
+    else if(me.cid)$("y-cid").textContent="CID# "+me.cid;
     var a=me.answers||{};
     if(me.answers){document.getElementById("y-preq").style.display="";
       if(a.fico){var yb=document.getElementById("y-band");yb.style.display="";yb.textContent="FICO "+a.fico;}
@@ -21,20 +26,52 @@ document.addEventListener("DOMContentLoaded",function(){
         return '<div class="row" style="justify-content:space-between;font:500 12px Manrope"><span style="color:#8ca0c4">'+b[0]+'</span><span style="color:#e2e9f2;font-weight:600;text-align:right">'+b[1]+'</span></div>';}).join('');
       document.getElementById("y-hobbies").innerHTML=(a.hobbies||[]).map(function(h){return '<span class="badge cyan">'+h+'</span>';}).join('');
     }
-    if(me.drive){var d=me.drive;document.getElementById("y-up").style.display="block";
-      document.getElementById("y-veh").textContent=d.year+" "+d.make+" "+d.model;
-      document.getElementById("y-status").textContent=d.status;
-      document.getElementById("y-center").textContent=d.center+" Test Drive Center";
-      document.getElementById("y-slot").textContent=d.slot;
-      document.getElementById("y-pass").href="/pass/"+d.pass_token;
-      document.getElementById("y-chat").href="/car?id="+d.vdp_id;}
+    if(me.drive){var d=me.drive;$("y-up").style.display="block";
+      $("y-veh").textContent=d.year+" "+d.make+" "+d.model;
+      $("y-status").textContent=d.status;
+      $("y-center").textContent=d.center+" Test Drive Center";
+      $("y-slot").textContent=d.slot;
+      $("y-pass").addEventListener("click",function(e){e.preventDefault();openPass(d);});
+      $("y-chat").href="/car?id="+d.vdp_id;}
     fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(f){
       document.getElementById("y-matches").innerHTML=(f.cars||[]).slice(0,3).map(function(c){
         return '<a href="/car?id='+c.id+'" class="row" style="align-items:center;gap:10px;text-decoration:none;padding:6px 0">'+
         '<span style="width:52px;height:36px;border-radius:8px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
         '<span style="flex:1"><span style="display:block;font:600 11px Manrope;color:#fff">'+c.year+' '+c.make+' '+c.model+'</span><span class="cy" style="font:700 10px Manrope">$'+c.price_mo+'/mo</span></span>'+(c.match!=null?'<span class="badge cyan">'+c.match+'%</span>':'')+'</a>';}).join('');}).catch(function(){});
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });
-  var yo=document.getElementById("y-out");
+  var yo=$("y-out");
   if(yo)yo.addEventListener("click",async function(){
     await fetch("/api/logout",{method:"POST"}); location.href="/";});
+
+  // avatar upload → resize 256² → data-URL → /api/avatar
+  var fi=$("y-av-file");
+  if(fi) fi.addEventListener("change",function(){ var f=fi.files[0]; if(!f)return; var img=new Image();
+    img.onload=function(){ var c=document.createElement("canvas");c.width=c.height=256;var g=c.getContext("2d");
+      var m=Math.min(img.width,img.height),sx=(img.width-m)/2,sy=(img.height-m)/2; g.drawImage(img,sx,sy,m,m,0,0,256,256);
+      var data=c.toDataURL("image/webp",0.8); if(data.length>80000)data=c.toDataURL("image/jpeg",0.7);
+      fetch("/api/avatar",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({avatar:data})})
+        .then(function(r){return r.json();}).then(function(x){ if(x.ok)$("y-av").innerHTML='<img src="'+data+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'; }); };
+      img.src=URL.createObjectURL(f); });
+  var avc=$("y-av"); if(avc)avc.addEventListener("click",function(){ if(fi)fi.click(); });
+
+  // Drive Now Pass modal
+  function openPass(d){
+    $("pm-car").textContent=d.year+" "+d.make+" "+d.model;
+    $("pm-code").textContent=String(d.pass_token).slice(0,6).toUpperCase();
+    var qr=qrcodegen.QrCode.encodeText("https://carnimbus.com/pass/"+d.pass_token,qrcodegen.QrCode.Ecc.MEDIUM);
+    var cv=$("pm-qr"),s=5,b=2,n=qr.size;cv.width=cv.height=(n+2*b)*s;var g=cv.getContext("2d");
+    g.fillStyle="#fff";g.fillRect(0,0,cv.width,cv.height);g.fillStyle="#06163b";
+    for(var y=0;y<n;y++)for(var x=0;x<n;x++)if(qr.getModule(x,y))g.fillRect((x+b)*s,(y+b)*s,s,s);
+    $("pass-modal").style.display="flex";
+    $("pm-cal").onclick=function(){ var st=new Date().toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+      var ics="BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:CarNimbus test drive — "+d.year+" "+d.make+" "+d.model+"\nLOCATION:"+(d.center||"")+"\nDESCRIPTION:Drive Now pass carnimbus.com/pass/"+d.pass_token+" ("+d.slot+")\nDTSTAMP:"+st+"\nEND:VEVENT\nEND:VCALENDAR";
+      var a=document.createElement("a");a.href="data:text/calendar;charset=utf-8,"+encodeURIComponent(ics);a.download="carnimbus-drive.ics";a.click(); };
+    $("pm-share").onclick=function(){ var u="https://carnimbus.com/pass/"+d.pass_token;
+      if(navigator.share)navigator.share({title:"My CarNimbus Drive Now pass",text:d.year+" "+d.make+" "+d.model+" — "+d.slot,url:u});
+      else if(navigator.clipboard){navigator.clipboard.writeText(u);alert("Pass link copied.");} };
+    $("pm-pdf").onclick=function(){ window.open("/pass/"+d.pass_token,"_blank"); };
+    $("pm-home").onclick=function(){ alert("iPhone: tap Share → Add to Home Screen to keep your pass one tap away."); };
+    $("pm-close").onclick=function(){ $("pass-modal").style.display="none"; };
+  }
+  window.openPass=openPass;
 });

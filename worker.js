@@ -85,6 +85,7 @@ export default {
     if (url.pathname === "/api/auth/start" && request.method === "POST")  return sec(await authStart(request, env));
     if (url.pathname === "/api/auth/verify" && request.method === "POST") return sec(await authVerify(request, env));
     if (url.pathname === "/api/profile" && request.method === "POST")     return sec(await withUser(request, env, saveProfile));
+    if (url.pathname === "/api/avatar" && request.method === "POST")      return sec(await withUser(request, env, saveAvatar));
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
     if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
     if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
@@ -789,13 +790,19 @@ function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"cont
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 async function me(request,env,uid){
   const u=await env.DB.prepare("SELECT phone,sid,handle FROM users WHERE id=?").bind(uid).first();
-  const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
+  const p=await env.DB.prepare("SELECT answers,avatar FROM profiles WHERE user_id=?").bind(uid).first();
   const td=await env.DB.prepare(
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
-  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:p?JSON.parse(p.answers):null,
+  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:p?JSON.parse(p.answers):null,avatar:p?p.avatar:null,
     drive:td?{...td,cid:cidFor(td.id),photos:JSON.parse(td.photos||"[]")}:null});
 }
+async function saveAvatar(request,env,uid){ const {avatar}=await request.json().catch(()=>({}));
+  if(typeof avatar!=="string"||!/^data:image\/(png|jpe?g|webp);base64,/.test(avatar)||avatar.length>80000) return json({ok:false,error:"bad_image"},400);
+  await env.DB.prepare("INSERT INTO profiles (user_id,answers,avatar,embedding_synced,updated_at) VALUES (?,?,?,0,?) "+
+    "ON CONFLICT(user_id) DO UPDATE SET avatar=excluded.avatar, updated_at=excluded.updated_at")
+    .bind(uid,"{}",avatar,new Date().toISOString()).run();
+  return json({ok:true}); }
 async function dealerLead(request,env){
   const {name,dealership,role,phone,email}=await request.json().catch(()=>({}));
   if(!name||!dealership) return json({ok:false,error:"bad_request"},400);
@@ -818,8 +825,9 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
   if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,created_at FROM comments WHERE vdp_id=? ORDER BY id DESC LIMIT 50").bind(vdpId).all();
     return json({ok:true,comments:rows.results||[]}); }
   const rows=await env.DB.prepare(
-    "SELECT c.body,c.zip,c.created_at,c.vdp_id,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
-    "LEFT JOIN vdps v ON v.id=c.vdp_id ORDER BY c.id DESC LIMIT 50").all();
+    "SELECT c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
+    "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
+    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 100").all();
   return json({ok:true,comments:(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[]}))}); }
 
 async function waitlist(request, env) {

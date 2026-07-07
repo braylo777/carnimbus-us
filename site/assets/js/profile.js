@@ -1,6 +1,13 @@
 document.addEventListener("DOMContentLoaded",function(){
   var A={hobbies:[]},cur=0,secs=[].slice.call(document.querySelectorAll("#quiz section"));
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
+  // Edit mode: prefill from existing answers so the buyer can update, not re-enter.
+  fetch("/api/me").then(function(r){return r.json();}).then(function(d){ if(!d||!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];
+    var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles"};
+    for(var m in map){var el=document.getElementById(map[m]);if(el&&a[m]!=null)el.value=a[m];}
+    document.querySelectorAll("#quiz .opts").forEach(function(o){ var sec=o.closest("section"),key=o.dataset.q2||sec.dataset.q,val=a[key];
+      o.querySelectorAll(".opt").forEach(function(b){ if(Array.isArray(val)?val.indexOf(b.dataset.v)>-1:val===b.dataset.v) b.classList.add("on"); }); });
+  }).catch(function(){});
   var phone="";
   function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}
   document.getElementById("au-send").addEventListener("click",async function(){
