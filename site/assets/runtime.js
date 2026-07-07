@@ -235,6 +235,7 @@
   function initials(name){ return String(name||"").trim().split(/\s+/).map(function(w){return w[0]||"";}).join("").slice(0,2).toUpperCase()||"CN"; }
   function wireAppNav(){
     var el=document.getElementById("appnav"); if(!el) return;
+    el.style.zIndex="70";   // lift the whole bar above sibling .z layers so the dropdown is actually clickable
     var here=location.pathname;
     el.innerHTML='<a href="https://app.carnimbus.com/feed" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
       '<img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
@@ -245,10 +246,12 @@
         '<a href="https://app.carnimbus.com/edit-profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
         '<button id="appnav-out" type="button" style="display:block;width:100%;text-align:left;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;background:none;border:none;cursor:pointer">Sign out</button>'+
       '</div></div></div>';
+    function paintAv(d){ if(!d||!d.ok)return; var av=document.getElementById("appnav-av"); if(!av)return;
+      if(d.avatar) av.innerHTML='<img src="'+d.avatar+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+      else av.textContent=initials(d.handle); }
+    try{ var cme=sessionStorage.cn_me; if(cme)paintAv(JSON.parse(cme)); }catch(_){}   // instant paint from cache
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
-      if(d.ok){ var av=document.getElementById("appnav-av");
-        if(d.avatar) av.innerHTML='<img src="'+d.avatar+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
-        else av.textContent=initials(d.handle); }
+      paintAv(d); try{ sessionStorage.cn_me=JSON.stringify({ok:d.ok,avatar:d.avatar,handle:d.handle}); }catch(_){}
     }).catch(function(){});
     var av=document.getElementById("appnav-av"), mn=document.getElementById("appnav-menu");
     if(av&&mn){ av.addEventListener("click",function(e){e.stopPropagation();mn.style.display=mn.style.display==="block"?"none":"block";});

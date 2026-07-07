@@ -633,6 +633,7 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const P=carPersona(v,lang);
   const turns=(messages||[]).filter(m=>m.role==="assistant").length;   // how many times I've already spoken
   const today=new Date().toISOString().slice(0,10);
+  const existing=await env.DB.prepare("SELECT id,slot FROM test_drives WHERE user_id=? AND vdp_id=? ORDER BY id DESC LIMIT 1").bind(uid,vdpId).first();
   const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person to a real buyer. Your ONE job: get them to a scheduled test drive — warmly, specifically, without pressure or sleaze. Think of confidently asking someone on a date: you have about 5 exchanges before they drift, so move with intent and don't waste turns. This is my reply #${turns+1} of ~5.
 MY VOICE: ${P.trait}. Personality colors how I talk but NEVER overrides the accuracy gate.
 ${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${vdpText(v)}. My home: ${center} (LA Car Guy), 424-398-8611.
@@ -644,6 +645,7 @@ HOW I CLOSE — a casual, four-step dance, ONE step per reply, never skipping ah
  STEP 3 (they give a time): give a quick preview and ask to confirm — "Here's what I've got: you + me, ${v.year} ${v.make} ${v.model}, [day] at [time], ${center}. Lock it in?" Do NOT book yet.
  STEP 4 (they confirm — "yes", "lock it in", "confirmed"): NOW emit the booking token and one warm sentence.
 BOOK: today is ${today}. In STEP 4 only, emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> (24-hour time) — convert their words ("tomorrow at 7") into the real date + 24h time. NEVER emit it in steps 1-3, and NEVER on their first message, even if they ask to schedule — the day, the time, and their confirmation must each come from THEM first.
+${existing?`RESCHEDULING: they already have a drive booked with me for ${existing.slot}. If they want to change it, acknowledge the current time warmly and run the same day → time → preview → confirm dance for the NEW slot; the <BOOK> you emit replaces the old booking automatically.`:""}
 ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
   const shot=[
     {role:"user",content:"Schedule my test drive"},
@@ -666,7 +668,9 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     await env.DB.prepare("UPDATE profiles SET answers=?, embedding_synced=0 WHERE user_id=?").bind(JSON.stringify(upd),uid).run(); }catch(_){} }
   let pass=null;
   if(book){ try{ const b=JSON.parse(book[1]); const tok=await hmac(env,uid+":"+vdpId+":"+b.slot);
-    await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
+    if(existing) await env.DB.prepare("UPDATE test_drives SET slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")   // reschedule: replace, don't stack
+      .bind(b.slot,tok,new Date().toISOString(),existing.id).run();
+    else await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
       .bind(uid,vdpId,b.center,b.slot,"confirmed",tok,new Date().toISOString()).run();
     const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
     const chatSms=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`;
@@ -690,19 +694,33 @@ function icsFor(t){ const dt=String(t.slot).replace(/[^0-9]/g,"").slice(0,12);  
   const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//EN","BEGIN:VEVENT","UID:"+t.pass_token+"@carnimbus.com","DTSTAMP:"+start,"DTSTART:"+start,"DTEND:"+end,"SUMMARY:CarNimbus test drive — "+t.year+" "+t.make+" "+t.model,"LOCATION:"+(t.center||"Porsche South Bay"),"DESCRIPTION:Drive Now pass carnimbus.com/pass/"+t.pass_token,"END:VEVENT","END:VCALENDAR"].join("\r\n");
   return new Response(ics,{headers:{"content-type":"text/calendar; charset=utf-8","content-disposition":'attachment; filename="carnimbus-drive.ics"'}}); }
 async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2].replace(/\.ics$/,"")||"";
-  const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id WHERE td.pass_token=?").bind(tok).first();
+  const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid,p.answers FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id LEFT JOIN profiles p ON p.user_id=td.user_id WHERE td.pass_token=?").bind(tok).first();
   if(!t) return new Response("Pass not found",{status:404});
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
   const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
+  let a={}; try{ a=JSON.parse(t.answers)||{}; }catch(_){}
+  const APR={"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"}[a.fico]||null;
+  const fin=[
+    t.price_mo?["Est. monthly","$"+t.price_mo+"/mo"]:null,
+    ["Down payment",a.max_down?("$"+Number(a.max_down).toLocaleString()):"$0"],
+    a.buy_method?["Method",a.buy_method]:null,
+    APR?["Est. APR",APR+" · 72 mo"]:null,
+    a.fico?["Credit range","FICO "+a.fico]:null,
+    a.income?["Income range","$"+String(a.income).replace(/k/g,"k").replace("under ","<")]:null
+  ].filter(Boolean);
   return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass — ${t.year} ${t.make} ${t.model}</title>
 <link rel="stylesheet" href="/assets/styles.css"><script src="/assets/vendor/qrcodegen.js" defer></script><script src="/assets/js/pass-render.js" defer></script>
 <style>@media print{.noprint{display:none}body{background:#fff!important}} body{background:#06163b;color:#e2e9f2;font-family:Manrope,system-ui;margin:0;padding:20px;display:flex;justify-content:center}
 .pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-.hero{height:190px;background:#06163b url('${photo}') center/cover}.pd{padding:20px}
+.brand{display:flex;align-items:center;gap:9px;padding:13px 20px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18)}
+.hero{height:180px;background:#06163b url('${photo}') center/cover}.pd{padding:20px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font:600 12px Manrope;margin-top:16px}.k{color:#8ca0c4;font:700 9px Manrope;letter-spacing:.08em;text-transform:uppercase}
+.fin{border-top:1px solid rgba(24,200,255,.18);margin-top:16px;padding-top:14px}
 .stub{border-top:2px dashed rgba(24,200,255,.3);margin-top:18px;padding-top:16px;display:flex;gap:16px;align-items:center}
 .mono{font-family:ui-monospace,Menlo,monospace}.cy{color:#18C8FF}</style></head>
-<body><div class="pass"><div class="hero"></div><div class="pd">
+<body><div class="pass">
+<div class="brand"><img src="/assets/logo.png" alt="" style="width:24px;height:24px"><b style="font:700 14px 'Space Grotesk',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:9px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></div>
+<div class="hero"></div><div class="pd">
 <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">DRIVE NOW PASS · CERTIFIED PRE-OWNED</div>
 <div style="font:800 22px Manrope;color:#fff;margin:5px 0 3px">${t.year} ${t.make} ${t.model}</div>
 <div class="cy" style="font:700 12px Manrope">Porsche South Bay · LA Car Guy · 424-398-8611</div>
@@ -711,11 +729,15 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 <div><div class="k">Miles</div>${t.miles||"—"}</div><div><div class="k">Drivetrain</div>${t.drivetrain||"—"}</div>
 ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span class="cy">•</span> ${f}</div>`).join("")}
 </div>
+<div class="fin"><div class="k" style="margin-bottom:8px">Your numbers · pre-set before you arrive</div>
+<div class="grid" style="margin-top:0">${fin.map(f=>`<div><div class="k">${f[0]}</div>${f[1]}</div>`).join("")}</div>
+<div style="font:500 9px Manrope;color:#8ca0c4;margin-top:8px">Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.</div></div>
 <div class="stub"><canvas id="qr" width="118" height="118" style="background:#fff;border-radius:10px;flex:none"></canvas>
 <div style="min-width:0"><div class="k">SID · tracking</div><div class="mono" style="color:#fff">${t.sid||"—"}</div>
 <div class="k" style="margin-top:8px">Check-in code</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
 <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">Scan at Porsche South Bay to check in.</div></div></div>
 <button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">Save / Print PDF</button>
+<div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.com · The AI car-buying superagent</div>
 </div></div>
 </body></html>`,{headers:{"content-type":"text/html"}}); }
 function cidFor(id){ const n=100000000+(id*7919)%900000000; const s=String(n); return s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }

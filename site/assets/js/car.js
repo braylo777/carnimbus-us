@@ -48,11 +48,13 @@ document.addEventListener("DOMContentLoaded",function(){
       '<div style="font:600 14px Manrope;color:#aebfdf;max-width:320px">Your test drive is scheduled.</div>'+
       '<div style="width:100%;max-width:400px;background:#0a1f4d;border:1px solid rgba(24,200,255,.3);border-radius:20px;overflow:hidden;text-align:left">'+
         (P0?'<div style="height:160px;background:#06163b url(\''+P0+'\') center/cover"></div>':'')+
+        '<div style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18)"><img src="/assets/logo.png" alt="" style="width:20px;height:20px"><b style="font:700 13px \'Space Grotesk\',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:8px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></div>'+
         '<div style="padding:16px 18px">'+
         '<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.2em">DRIVE NOW PASS</div>'+
         '<div style="font:800 18px Manrope;color:#fff;margin-top:4px" id="cg-car"></div>'+
         '<div style="font:700 11px Manrope;color:#18C8FF;margin-top:2px">Certified · Porsche South Bay · LA Car Guy</div>'+
         '<div style="font:600 12px Manrope;color:#e2e9f2;margin-top:8px" id="cg-slot"></div>'+
+        '<div style="font:600 11px Manrope;color:#aebfdf;margin-top:4px" id="cg-fin"></div>'+
         '</div></div>'+
       '<a href="'+passUrl+'" target="_blank" rel="noopener" class="btn primary md" style="text-decoration:none;width:100%;max-width:400px">🎟️ View my Drive Now Pass</a>'+
       '<a href="https://app.carnimbus.com/profile" class="btn ghost md" style="text-decoration:none;width:100%;max-width:400px">Go to my profile →</a>';
