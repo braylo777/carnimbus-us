@@ -12,7 +12,14 @@
       for(var y=0;y<n;y++)for(var x=0;x<n;x++)if(qr.getModule(x,y))g.fillRect((x+b)*s,(y+b)*s,s,s);
     }catch(e){} }
     var p=document.getElementById("pm-print");
-    if(p)p.addEventListener("click",function(){window.print();});
+    if(p)p.addEventListener("click",function(){
+      // Standalone/home-screen webviews have no print UI — window.print() silently no-ops there.
+      var standalone=(navigator.standalone===true)||(window.matchMedia&&matchMedia("(display-mode: standalone)").matches);
+      if(standalone&&navigator.share){ navigator.share({title:document.title,url:location.href}).catch(function(){}); return; }
+      try{ window.print(); }catch(e){ if(navigator.share)navigator.share({title:document.title,url:location.href}).catch(function(){}); }
+    });
+    var hint=document.getElementById("pm-hint");
+    if(hint&&/iPhone|iPad/.test(navigator.userAgent)) hint.style.display="block";
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",draw); else draw();
 })();

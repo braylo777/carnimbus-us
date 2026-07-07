@@ -741,6 +741,7 @@ ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span c
 <div class="k" style="margin-top:8px">Check-in code</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
 <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">Scan at Porsche South Bay to check in.</div></div></div>
 <button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">Save / Print PDF</button>
+<div id="pm-hint" class="noprint" style="display:none;font:600 10px Manrope;color:#8ca0c4;margin-top:8px;text-align:center">iPhone: in the print sheet choose <b style="color:#e2e9f2">Save to Files</b> — or tap Share ⬆️ → <b style="color:#e2e9f2">Print</b>.</div>
 <div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.com · The AI car-buying superagent</div>
 </div></div>
 </body></html>`,{headers:{"content-type":"text/html"}}); }
