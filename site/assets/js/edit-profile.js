@@ -10,7 +10,12 @@ document.addEventListener("DOMContentLoaded",function(){
     var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles"};
     for(var m in map){var el=document.getElementById(map[m]);if(el&&a[m]!=null)el.value=a[m];}
     document.querySelectorAll("#quiz .opts").forEach(function(o){ var sec=o.closest("section"),key=o.dataset.q2||sec.dataset.q,val=a[key];
-      o.querySelectorAll(".opt").forEach(function(b){ if(Array.isArray(val)?val.indexOf(b.dataset.v)>-1:val===b.dataset.v) b.classList.add("on"); }); });
+      var hit=false;
+      o.querySelectorAll(".opt").forEach(function(b){ if(Array.isArray(val)?val.indexOf(b.dataset.v)>-1:val===b.dataset.v){ b.classList.add("on"); hit=true; } });
+      // Free-text answers (e.g. a custom "reason") → light the "other" chip and show the text.
+      if(!hit&&val&&!Array.isArray(val)){ var ob=o.querySelector('.opt[data-v="other"]');
+        if(ob){ ob.classList.add("on"); var oi=sec.querySelector(".other-in"); if(oi){ oi.value=val; oi.style.display="block"; } } }
+    });
   }).catch(function(){});
   var phone="";
   function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}

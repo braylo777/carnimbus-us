@@ -41,14 +41,31 @@ document.addEventListener("DOMContentLoaded",function(){
   }
   function showCongrats(passUrl){
     if($("congrats"))return;
+    var P0=(CAR&&CAR.photos&&CAR.photos[0])||"";
     var o=document.createElement("div"); o.id="congrats";
-    o.style.cssText="position:fixed;inset:0;z-index:90;background:rgba(3,8,20,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px;gap:14px";
-    o.innerHTML='<div style="font:800 27px \'Space Grotesk\',Manrope;color:#fff">🎉 You’re booked!</div>'+
-      '<div style="font:600 14px Manrope;color:#aebfdf;max-width:320px">Your test drive is scheduled. Your Drive Now Pass is ready.</div>'+
-      '<iframe src="'+passUrl+'" title="Drive Now Pass" style="width:100%;max-width:430px;height:58vh;border:none;border-radius:18px;background:#0a1f4d"></iframe>'+
-      '<a href="https://app.carnimbus.com/profile" class="btn primary md" style="text-decoration:none;width:100%;max-width:430px">View pass in my profile →</a>';
+    o.style.cssText="position:fixed;inset:0;z-index:90;background:rgba(3,8,20,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px;gap:16px;overflow-y:auto";
+    o.innerHTML='<div style="font:800 28px \'Space Grotesk\',Manrope;color:#fff">🎉 Congratulations!</div>'+
+      '<div style="font:600 14px Manrope;color:#aebfdf;max-width:320px">Your test drive is scheduled.</div>'+
+      '<div style="width:100%;max-width:400px;background:#0a1f4d;border:1px solid rgba(24,200,255,.3);border-radius:20px;overflow:hidden;text-align:left">'+
+        (P0?'<div style="height:160px;background:#06163b url(\''+P0+'\') center/cover"></div>':'')+
+        '<div style="padding:16px 18px">'+
+        '<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.2em">DRIVE NOW PASS</div>'+
+        '<div style="font:800 18px Manrope;color:#fff;margin-top:4px" id="cg-car"></div>'+
+        '<div style="font:700 11px Manrope;color:#18C8FF;margin-top:2px">Certified · Porsche South Bay · LA Car Guy</div>'+
+        '<div style="font:600 12px Manrope;color:#e2e9f2;margin-top:8px" id="cg-slot"></div>'+
+        '</div></div>'+
+      '<a href="'+passUrl+'" target="_blank" rel="noopener" class="btn primary md" style="text-decoration:none;width:100%;max-width:400px">🎟️ View my Drive Now Pass</a>'+
+      '<a href="https://app.carnimbus.com/profile" class="btn ghost md" style="text-decoration:none;width:100%;max-width:400px">Go to my profile →</a>';
     document.body.appendChild(o);
+    var cg=document.getElementById("cg-car"); if(cg&&CAR)cg.textContent=CAR.year+" "+CAR.make+" "+CAR.model;
+    fetch("/api/me").then(function(r){return r.json();}).then(function(m){ var s=document.getElementById("cg-slot");
+      if(s&&m&&m.drive&&window.fmtSlotCar)s.textContent=window.fmtSlotCar(m.drive.slot); }).catch(function(){});
   }
+  function fmtSlotCar(s){ s=String(s||""); var m=s.match(/(\d{4})-(\d{2})-(\d{2})[ T]?(\d{2}:\d{2})?/);
+    if(!m)return s; var dt=new Date(m[1]+"-"+m[2]+"-"+m[3]+"T"+(m[4]||"00:00")+":00");
+    var wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return wd[dt.getDay()]+" "+mo[dt.getMonth()]+" "+dt.getDate()+(m[4]?" · "+m[4]:""); }
+  window.fmtSlotCar=fmtSlotCar;
   fetch("/api/vdp?id="+id+"&lang="+lang()).then(function(r){return r.text();}).then(function(txt){
     var d=null; try{ d=JSON.parse(txt); }catch(e){ d=null; }
     CAR=d&&d.car;
