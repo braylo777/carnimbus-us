@@ -216,6 +216,7 @@
     if(seg){ setLang(norm(seg.textContent)==="es"?"es":"en"); return; }
     var g=ev.target.closest("[data-cngo]"); if(g){ ev.preventDefault(); go(g.dataset.cngo); } }); }
   function wireBurger(){
+    return;   // hamburger nav removed per design — header keeps Log in + EN/ES only
     var hdr=document.querySelector("header")||document.querySelector(".z.row"); if(!hdr||document.querySelector(".nav-burger")) return;
     var right=hdr.querySelector('[style*="margin-left:auto"]')||hdr;
     var b=document.createElement("button"); b.className="nav-burger"; b.setAttribute("aria-label","Menu"); b.setAttribute("aria-expanded","false");

@@ -253,7 +253,6 @@ html,body{overflow-x:hidden;max-width:100%}
   .prob-grid{grid-template-columns:1fr!important}
   .shift-grid{grid-template-columns:1fr 1fr!important}
   header nav[aria-label="Primary"]{display:none}
-  header .seg,header x-import[options*="langOpts"]{display:none!important}
   header a[href="/waitlist"]{display:none}
   .z.row>.navlink{display:none}
   header.z.row,div.z.row[style*="height:58px"]{padding-left:16px!important;padding-right:16px!important}
