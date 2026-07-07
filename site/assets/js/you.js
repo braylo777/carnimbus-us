@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded",function(){
         '<span style="width:52px;height:36px;border-radius:8px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
         '<span style="flex:1"><span style="display:block;font:600 11px Manrope;color:#fff">'+c.year+' '+c.make+' '+c.model+'</span><span class="cy" style="font:700 10px Manrope">$'+c.price_mo+'/mo</span></span>'+(c.match!=null?'<span class="badge cyan">'+c.match+'%</span>':'')+'</a>';}).join('');}).catch(function(){});
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });
-  document.getElementById("y-out").addEventListener("click",async function(){
+  var yo=document.getElementById("y-out");
+  if(yo)yo.addEventListener("click",async function(){
     await fetch("/api/logout",{method:"POST"}); location.href="/";});
 });

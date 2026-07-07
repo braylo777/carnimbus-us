@@ -16,10 +16,10 @@
 <body>
 <main class="stage">
 <div style="padding:0 20px 40px"><div class="bw cv">
-  <div style="position:relative;background:#06163b;min-height:600px">
+  <div style="position:relative;background:#06163b;min-height:calc(100vh - 96px);display:flex;flex-direction:column">
     <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
     <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
-    <div class="z" style="min-height:548px;padding:16px">
+    <div class="z" style="flex:1;min-height:0;padding:16px">
       <div id="gate" style="display:none;text-align:center;padding:60px 20px"><div class="disp" style="font-size:20px">Sign in to see your account.</div><a class="btn primary md" href="/signin" style="text-decoration:none;margin-top:14px;display:inline-flex">Sign in</a></div>
       <div id="acct" style="display:none">
         <div class="row" style="align-items:center;gap:12px">
@@ -36,10 +36,6 @@
           </div>
         </div>
         <div style="margin-top:16px"><div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:4px">YOUR MATCHES</div><div id="y-matches"></div></div>
-        <div class="col" style="gap:10px;margin-top:18px">
-          <a class="btn ghost md" href="/profile" style="text-decoration:none">Edit my profile</a>
-          <button class="btn ghost md" id="y-out" type="button">Sign out</button>
-        </div>
       </div>
     </div>
   </div>

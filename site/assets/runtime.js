@@ -236,22 +236,30 @@
   function wireAppNav(){
     var el=document.getElementById("appnav"); if(!el) return;
     var here=location.pathname;
-    el.innerHTML='<a href="/" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
+    el.innerHTML='<a href="https://app.carnimbus.com/feed" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
       '<img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
       '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
       '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
-      '<a href="https://app.carnimbus.com/you" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
+      '<div style="position:relative"><button class="avatar" style="width:28px;height:28px;font-size:11px;border:none;cursor:pointer" id="appnav-av" aria-label="Account menu">·</button>'+
+      '<div id="appnav-menu" style="display:none;position:absolute;right:0;top:34px;z-index:60;min-width:160px;background:rgba(6,16,40,.98);border:1px solid rgba(24,200,255,.2);border-radius:12px;padding:6px">'+
+        '<a href="https://app.carnimbus.com/profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
+        '<button id="appnav-out" type="button" style="display:block;width:100%;text-align:left;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;background:none;border:none;cursor:pointer">Sign out</button>'+
+      '</div></div></div>';
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
-      if(d.ok) document.getElementById("appnav-av").textContent=initials(d.handle);
+      if(d.ok){ var av=document.getElementById("appnav-av");
+        if(d.avatar) av.innerHTML='<img src="'+d.avatar+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+        else av.textContent=initials(d.handle); }
     }).catch(function(){});
+    var av=document.getElementById("appnav-av"), mn=document.getElementById("appnav-menu");
+    if(av&&mn){ av.addEventListener("click",function(e){e.stopPropagation();mn.style.display=mn.style.display==="block"?"none":"block";});
+      document.addEventListener("click",function(){mn.style.display="none";});
+      var o=document.getElementById("appnav-out"); if(o)o.addEventListener("click",function(){fetch("/api/logout",{method:"POST"}).then(function(){location.href="/";});}); }
   }
   function wireTabbar(){
     if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
     var here=location.pathname;
-    var T=[["discover","https://app.carnimbus.com/discover",'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/>'],
-           ["feed","https://app.carnimbus.com/feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
+    var T=[["feed","https://app.carnimbus.com/feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
            ["talk","https://app.carnimbus.com/talk",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
-           ["pass","https://app.carnimbus.com/pass",'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M13 13h3v3h-3zM17 17h3v3h-3z"/>'],
            ["you","https://app.carnimbus.com/you",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
     var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
     bar.innerHTML=T.map(function(t){ var on=here.indexOf(t[0])>-1;
