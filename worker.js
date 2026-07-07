@@ -100,6 +100,8 @@ export default {
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
     if (url.pathname === "/api/admin/reindex" && request.method === "POST") return sec(await adminOnly(request, env, reindexAll));
+    if (url.pathname === "/api/admin/profiles/ingest" && request.method === "POST") return sec(await adminOnly(request, env, profilesIngest));
+    if (url.pathname === "/api/admin/export")                             return sec(await adminOnly(request, env, poolExport));
     if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/chats/clear" && request.method === "POST")  return sec(await withUser(request, env, chatClear));
@@ -182,9 +184,11 @@ async function runQueue(env){ const now=new Date().toISOString();
         .bind(q.phone,q.template,q.body,next,q.recurring,now).run(); } } }
 
 // ==================== AI seam (Workers AI now, Nimbus appliance later) ====================
-async function embed(env,text){ if(env.AI_BACKEND_URL){ const r=await fetch(env.AI_BACKEND_URL+"/embed",{method:"POST",body:JSON.stringify({text})}); return (await r.json()).vector; }
+async function embed(env,text){ if(env.AI_BACKEND_URL){ try{ const r=await fetch(env.AI_BACKEND_URL+"/embed",{method:"POST",body:JSON.stringify({text})});
+    if(r.ok){ const d=await r.json().catch(()=>null); if(d&&Array.isArray(d.vector)&&d.vector.length===768) return d.vector; } }catch(_){} }  // fall back to Workers AI if the appliance is down/wrong-dim
   const r=await env.AI.run("@cf/baai/bge-base-en-v1.5",{text:[text]}); return r.data[0]; }
-async function llm(env,messages){ if(env.AI_BACKEND_URL){ const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages})}); return (await r.json()).text; }
+async function llm(env,messages){ if(env.AI_BACKEND_URL){ try{ const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages})});
+    if(r.ok){ const d=await r.json().catch(()=>null); if(d&&typeof d.text==="string") return d.text; } }catch(_){} }
   const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:512}); return r.response; }
 // Car chat forces Workers AI (llama-3.3-70b) for reliable in-character roleplay — the external
 // AI_BACKEND_URL appliance under-weights the system persona and leaks its own scaffolding.
@@ -405,15 +409,53 @@ async function saveProfile(request,env,uid){ const {answers}=await request.json(
     "ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
     .bind(uid,JSON.stringify(answers),new Date().toISOString()).run();
   if(answers.full_name) await env.DB.prepare("UPDATE users SET handle=? WHERE id=?").bind(String(answers.full_name).slice(0,60),uid).run();
+  await env.DB.prepare("UPDATE profiles SET zip=?, max_monthly=?, fico=?, body_pref=?, timeline=? WHERE user_id=?")
+    .bind(String(answers.zip||"").slice(0,10), parseInt(answers.max_monthly,10)||null, String(answers.fico||"").slice(0,12),
+          String(answers.body_pref||"").slice(0,12), String(answers.timeline||"").slice(0,16), uid).run().catch(()=>{});
   return json({ok:true}); }
 async function vdpIngest(request,env){ const cars=await request.json().catch(()=>null);
   if(!Array.isArray(cars)) return json({ok:false,error:"bad_request"},400);
   for(const c of cars) await env.DB.prepare(
-    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, active=1, embedding_synced=0, updated_at=excluded.updated_at")
+    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,active,embedding_synced,updated_at) "+
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, location_zip=excluded.location_zip, active=1, embedding_synced=0, updated_at=excluded.updated_at")
     .bind(c.vin,c.year,c.make,c.model,c.trim||"",c.price_mo,c.miles||"",c.drivetrain||"",c.body||"",
-      JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),new Date().toISOString()).run();
+      JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),
+      parseInt(c.price_total,10)||null, parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null, String(c.location_zip||"").slice(0,10),
+      new Date().toISOString()).run();
   return json({ok:true,count:cars.length}); }
+const BUYER_COLS=["phone","full_name","zip","buy_method","max_down","max_monthly","fico","income","dream_car","reason","hobbies","current_year","current_make","current_model","current_miles","trade_in","trade_value","timeline","body_pref","must_haves"];
+async function profilesIngest(request,env){ const rows=await request.json().catch(()=>null);
+  if(!Array.isArray(rows)) return json({ok:false,error:"expected array"},400);
+  let n=0;
+  for(const r of rows.slice(0,500)){ let phone=String(r.phone||"").trim().replace(/^'/,""); if(!/^\+1\d{10}$/.test(phone)) continue;
+    await env.DB.prepare("INSERT INTO users (phone,sid,created_at) VALUES (?,?,?) ON CONFLICT(phone) DO NOTHING")
+      .bind(phone,genCode("SID"),new Date().toISOString()).run();
+    const u=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first(); if(!u) continue;
+    const a={}; for(const k of BUYER_COLS.slice(1)) if(r[k]!=null&&r[k]!=="") a[k]=(k==="hobbies"||k==="must_haves")?String(r[k]).split("|").map(s=>s.trim()).filter(Boolean):String(r[k]);
+    await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
+      .bind(u.id,JSON.stringify(a),new Date().toISOString()).run();
+    await env.DB.prepare("UPDATE profiles SET zip=?, max_monthly=?, fico=?, body_pref=?, timeline=? WHERE user_id=?")
+      .bind(a.zip||"",parseInt(a.max_monthly,10)||null,a.fico||"",a.body_pref||"",a.timeline||"",u.id).run();
+    if(a.full_name) await env.DB.prepare("UPDATE users SET handle=? WHERE id=?").bind(String(a.full_name).slice(0,60),u.id).run();
+    n++; }
+  return json({ok:true,ingested:n}); }
+function csvCell(s){ s=s==null?"":String(s); if(/^[=+\-@]/.test(s)) s="'"+s;   // formula-injection guard for spreadsheet apps
+  return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+async function poolExport(request,env){ const pool=new URL(request.url).searchParams.get("pool");
+  if(pool==="buyers"){ const rows=await env.DB.prepare("SELECT u.phone,u.sid,u.created_at,p.answers FROM profiles p JOIN users u ON u.id=p.user_id ORDER BY p.updated_at DESC LIMIT 5000").all();
+    const head=[...BUYER_COLS,"sid","created_at"];
+    const lines=[head.join(",")];
+    for(const r of (rows.results||[])){ let a={}; try{a=JSON.parse(r.answers)||{}}catch(_){}
+      lines.push(head.map(k=>k==="phone"?csvCell(r.phone):k==="sid"?csvCell(r.sid):k==="created_at"?csvCell(r.created_at):
+        csvCell(Array.isArray(a[k])?a[k].join("|"):a[k])).join(",")); }
+    return new Response(lines.join("\n"),{headers:{"content-type":"text/csv","content-disposition":'attachment; filename="buyers.csv"'}}); }
+  if(pool==="vdps"){ const rows=await env.DB.prepare("SELECT * FROM vdps ORDER BY updated_at DESC LIMIT 5000").all();
+    const head=["vin","year","make","model","trim","price_mo","price_total","miles","mileage","drivetrain","body","features","description","photo","location_zip","dealer_id","active"];
+    const lines=[head.join(",")];
+    for(const v of (rows.results||[])){ let fe=[],ph=[]; try{fe=JSON.parse(v.features||"[]")}catch(_){} try{ph=JSON.parse(v.photos||"[]")}catch(_){}
+      lines.push(head.map(k=>k==="features"?csvCell(fe.join("|")):k==="photo"?csvCell(ph[0]||""):csvCell(v[k])).join(",")); }
+    return new Response(lines.join("\n"),{headers:{"content-type":"text/csv","content-disposition":'attachment; filename="vdps.csv"'}}); }
+  return json({ok:false,error:"pool=buyers|vdps"},400); }
 
 // ==================== matcher + feed + chat + pass + comments ====================
 function vdpText(v){ return `${v.year} ${v.make} ${v.model} ${v.trim}. ${v.body}, ${v.drivetrain}, ${v.miles} miles, $${v.price_mo}/mo. Features: ${JSON.parse(v.features||"[]").join(", ")}. ${v.description}`; }
@@ -481,34 +523,36 @@ function carPersona(v,lang){
   if(p<500||/civic|altima|corolla|si\b/.test(model)) return T.scrappy;
   return T.practical;
 }
-function profileText(a){ return `Buyer wants: ${a.dream_car||""}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`; }
+function profileText(a){ return `Buyer wants: ${a.dream_car||""}. Prefers ${a.body_pref&&a.body_pref!=="any"?a.body_pref:"any body style"}; must-haves: ${(a.must_haves||[]).join(", ")||"none"}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Currently drives a ${a.current_year||""} ${a.current_make||""} ${a.current_model||""} with ${a.current_miles||"?"} miles${a.trade_in==="yes"?`, trading it in (est. ${a.trade_value||"?"})`:""}. Timeline: ${a.timeline||"?"}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`; }
 async function syncEmbeddings(env){
   const vs=await env.DB.prepare("SELECT * FROM vdps WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
-  for(const v of (vs.results||[])){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id}}]);
+  for(const v of (vs.results||[])){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id,price_mo:v.price_mo||0,body:v.body||"",year:v.year||0,dealer_id:v.dealer_id||0}}]);
     await env.DB.prepare("UPDATE vdps SET embedding_synced=1 WHERE id=?").bind(v.id).run(); }
   const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
-  for(const p of (ps.results||[])){ await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(JSON.parse(p.answers))),metadata:{kind:"profile"}}]);
-    await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
+  for(const p of (ps.results||[])){ try{ let a={}; try{a=JSON.parse(p.answers)||{}}catch(_){}
+      await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(a)),metadata:{kind:"profile"}}]); }catch(_){}
+    await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run().catch(()=>{}); } }
 async function reindexAll(request,env){ let n=0;
   for(let i=0;i<200;i++){ const vs=await env.DB.prepare("SELECT * FROM vdps WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
     if(!(vs.results||[]).length) break;
-    for(const v of vs.results){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id}}]);
+    for(const v of vs.results){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id,price_mo:v.price_mo||0,body:v.body||"",year:v.year||0,dealer_id:v.dealer_id||0}}]);
       await env.DB.prepare("UPDATE vdps SET embedding_synced=1 WHERE id=?").bind(v.id).run(); n++; } }
   for(let i=0;i<200;i++){ const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
     if(!(ps.results||[]).length) break;
-    for(const p of ps.results){ await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(JSON.parse(p.answers))),metadata:{kind:"profile"}}]);
-      await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
+    for(const p of ps.results){ try{ let a={}; try{a=JSON.parse(p.answers)||{}}catch(_){}
+        await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(a)),metadata:{kind:"profile"}}]); }catch(_){}
+      await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run().catch(()=>{}); } }  // best-effort; feed re-embeds profiles live anyway
   return json({ok:true,indexed:n}); }
 function carDist(id){ return (((id*37)%128)/10 + 1.6).toFixed(1); }
 function carWhy(v,a,lang){ a=a||{};
   if(lang==="es"){ const dreamE=(a.dream_car||"").trim(), dlE=dreamE.toLowerCase();
-    const bE=a.max_monthly?` sin pasar de tus $${a.max_monthly}/mes`:" sin salirte del presupuesto";
+    const bE=(a.max_monthly&&v.price_mo<=parseInt(a.max_monthly,10))?` sin pasar de tus $${a.max_monthly}/mes`:" ajustándose a tu presupuesto";
     if(dreamE && (dlE.includes(String(v.model||"").toLowerCase())||dlE.includes(String(v.make||"").toLowerCase())))
       return `Elegido porque es el ${v.make} ${v.model} que describiste — Certificado y listo para manejar${bE}.`;
     const tE={SUV:"el espacio, la presencia y la confianza en todo clima",Sedan:"la conducción precisa y refinada",EV:"la potencia instantánea y silenciosa",Truck:"la capacidad y la fuerza"}[v.body]||"el estilo que buscas";
     return dreamE ? `Elegido porque captura ${tE} de tu ${dreamE} soñado${bE}.` : `Una gran opción para tu presupuesto y tu gusto${bE}.`; }
   const dream=(a.dream_car||"").trim(), dl=dream.toLowerCase();
-  const budget=a.max_monthly?` while landing under your $${a.max_monthly}/mo`:" while fitting your budget";
+  const budget=(a.max_monthly&&v.price_mo<=parseInt(a.max_monthly,10))?` while landing under your $${a.max_monthly}/mo`:" while fitting your budget";
   if(dream && (dl.includes(String(v.model||"").toLowerCase())||dl.includes(String(v.make||"").toLowerCase())))
     return `Chosen because it's the ${v.make} ${v.model} you described — Certified and ready to drive${budget}.`;
   const trait={SUV:"the space, presence, and all-weather confidence",Sedan:"the sharp, refined driving feel",EV:"the instant, silent power",Truck:"the capability and grunt"}[v.body]||"the style you're after";
@@ -522,12 +566,28 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   let ranked=null, ans={};
   if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
     if(p){ try{ ans=JSON.parse(p.answers)||{}; }catch(_){}
-      const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans)),{topK:20,filter:{kind:"vdp"}}).catch(()=>null);
-      if(q) ranked=q.matches.map(m=>({id:m.metadata.vdpId,score:Math.round(m.score*100)})); } }
+      const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans)),{topK:50,filter:{kind:"vdp"}}).catch(()=>null);
+      if(q) ranked=q.matches.map(m=>({id:m.metadata.vdpId,vec:m.score})); } }
   if(!ranked){ const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all();
-    ranked=(all.results||[]).map(r=>({id:r.id,score:null})); }
-  const out=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
-    if(v) out.push(feedCar(v,r.score,ans,lang)); }
+    ranked=(all.results||[]).map(r=>({id:r.id,vec:null})); }
+  const budget=parseInt(ans.max_monthly,10)||0, CAP=budget?budget*1.15:0;
+  const scored=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
+    if(!v) continue;
+    if(CAP && r.vec!=null && v.price_mo>CAP) continue;                     // HARD GATE: never over budget×1.15
+    let match=null;
+    if(r.vec!=null){
+      const pm=Number.isFinite(v.price_mo)?v.price_mo:budget;               // null price → neutral budget fit
+      const budgetFit=budget?1-Math.min(1,Math.abs(pm-budget)/budget):0.7;
+      const bp=(ans.body_pref||"").toLowerCase();
+      const bodyFit=(!bp||bp==="any"||bp===String(v.body||"").toLowerCase())?1:0.4;
+      const dl=(ans.dream_car||"").toLowerCase();
+      const dreamFit=(dl&&(dl.includes(String(v.make||"").toLowerCase())||dl.includes(String(v.model||"").toLowerCase())))?1:0.5;
+      match=Math.max(0,Math.min(99,Math.round((0.6*r.vec+0.4*(0.5*budgetFit+0.3*bodyFit+0.2*dreamFit))*100)))||0;
+    }
+    scored.push({v,match});
+  }
+  scored.sort((a,b)=>(b.match||0)-(a.match||0));
+  const out=scored.slice(0,20).map(s=>feedCar(s.v,s.match,ans,lang));
   return json({ok:true,authed:!!uid,cars:out});
   }catch(e){ const lang=new URL(request.url).searchParams.get("lang"); const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
     return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{},lang))}); } }

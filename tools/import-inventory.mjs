@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 const COLMAP = { // export-header -> vdp field. Adjust to LAcarGUY's actual columns.
   vin:"vin", year:"year", make:"make", model:"model", trim:"trim",
-  price_mo:"price_mo", miles:"miles", drivetrain:"drivetrain", body:"body",
+  price_mo:"price_mo", price_total:"price_total", miles:"miles", mileage:"mileage", drivetrain:"drivetrain", body:"body", location_zip:"location_zip",
   description:"description", photo:"photo", features:"features"
 };
 const ORIGIN = process.argv[3] || "https://carnimbus.com";
@@ -32,6 +32,7 @@ function toCar(rec){
   return { vin:g("vin"), year:+g("year")||0, make:g("make"), model:g("model"), trim:g("trim"),
     price_mo:+String(g("price_mo")).replace(/[^0-9.]/g,"")||0, miles:g("miles"),
     drivetrain:g("drivetrain"), body:g("body"), description:g("description"),
+    price_total:+String(g("price_total")).replace(/[^0-9.]/g,"")||0, mileage:+String(g("mileage")).replace(/[^0-9.]/g,"")||0, location_zip:g("location_zip"),
     features: g("features")? String(g("features")).split(/[;|]/).map(s=>s.trim()).filter(Boolean):[],
     photos: g("photo")? [g("photo")]:[] };
 }

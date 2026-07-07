@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded",function(){
   });
   document.querySelectorAll("#quiz .opts").forEach(function(o){o.addEventListener("click",function(e){
     var b=e.target.closest(".opt");if(!b)return;
-    var sec=o.closest("section"),key=sec.dataset.q;
+    var sec=o.closest("section"),key=o.dataset.q2||sec.dataset.q;
     if(o.hasAttribute("data-multi")){
       var arr=A[key]||[];
       if(b.classList.contains("on")){b.classList.remove("on");arr=arr.filter(function(x){return x!==b.dataset.v;});}
@@ -42,10 +42,15 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("qz-prev").addEventListener("click",function(){if(cur>0)show(cur-1);});
   document.getElementById("qz-next").addEventListener("click",async function(){
     var sec=secs[cur],key=sec.dataset.q;
-    if(!sec.querySelector(".opts")&&sec.querySelector(".tin"))A[key]=readText(sec);
+    if(!sec.querySelector(".opts")&&sec.querySelector(".tin")&&key!=="current_car")A[key]=readText(sec);
+    if(key==="current_car"){ A.current_year=(document.getElementById("f-cyear").value||"").trim();
+      A.current_make=(document.getElementById("f-cmake").value||"").trim();
+      A.current_model=(document.getElementById("f-cmodel").value||"").trim();
+      A.current_miles=(document.getElementById("f-cmiles").value||"").trim(); }
     if(key==="reason"&&A.reason==="other"){var ot=sec.querySelector(".other-in");if(ot&&ot.value.trim())A.reason=ot.value.trim();}
     var val=A[key];
-    var ok=(key==="hobbies")?(val&&val.length>0):(val&&String(val).length>0);
+    var OPTIONAL={current_car:1,trade_in:1,timeline:1,body_pref:1};
+    var ok=OPTIONAL[key]?true:(key==="hobbies")?(val&&val.length>0):(val&&String(val).length>0);
     if(!ok)return msg(document.getElementById("qz-msg"),"Fill this in to keep going.");
     msg(document.getElementById("qz-msg"),"");
     if(cur<secs.length-1)return show(cur+1);
