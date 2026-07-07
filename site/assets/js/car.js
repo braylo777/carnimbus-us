@@ -15,11 +15,14 @@ document.addEventListener("DOMContentLoaded",function(){
       m.innerHTML='<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span><div class="bubble car"><span class="tdots"><i></i><i></i><i></i></span></div>';
       thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
   function render(){
-    var P0=(CAR.photos&&CAR.photos[0])||"";
-    var PV=P0?(P0.indexOf("?")>-1?P0:(P0+"?v=4")):"";   // cache-bust past any stale 404 in the browser cache
-    setSrc("v-img",PV);
-    // paint the photo onto the hero container too, so it shows even if the <img> is hidden by a transient onerror
-    var vimg=$("v-img"); if(vimg&&vimg.parentNode&&PV){ vimg.parentNode.style.backgroundImage="url('"+PV+"')"; vimg.parentNode.style.backgroundSize="cover"; vimg.parentNode.style.backgroundPosition="center"; }
+    var P0=((CAR.photos&&CAR.photos[0])||"").split("?")[0];
+    var PV=P0?(P0+"?v=5"):"";   // cache-bust past any stale 404 in the browser cache
+    var vimg=$("v-img");
+    if(vimg&&PV){ vimg.style.display="block";               // undo any earlier onerror hide
+      vimg.onerror=function(){ if(!vimg.dataset.r){ vimg.dataset.r=1; vimg.src=P0+"?r="+Date.now(); } else vimg.style.display="none"; };
+      // paint the photo onto the hero container too, so it shows even if the <img> is hidden by a transient onerror
+      vimg.parentNode.style.backgroundImage="url('"+PV+"')"; vimg.parentNode.style.backgroundSize="cover"; vimg.parentNode.style.backgroundPosition="center";
+      vimg.src=PV; }
     setText("v-title",CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:""));
     setText("v-price","$"+CAR.price_mo+"/mo");
     setText("v-meta",CAR.miles+" mi · "+CAR.drivetrain+" · Certified · Los Angeles, CA");
