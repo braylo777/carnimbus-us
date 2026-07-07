@@ -703,7 +703,7 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   const fin=[
     t.price_mo?["Est. monthly","$"+t.price_mo+"/mo"]:null,
     ["Down payment",a.max_down?("$"+Number(a.max_down).toLocaleString()):"$0"],
-    a.buy_method?["Method",a.buy_method]:null,
+    a.buy_method?["Method",String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]:null,
     APR?["Est. APR",APR+" · 72 mo"]:null,
     a.fico?["Credit range","FICO "+a.fico]:null,
     a.income?["Income range","$"+String(a.income).replace(/k/g,"k").replace("under ","<")]:null

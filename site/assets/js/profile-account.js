@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded",function(){
       if(a.fico){var yb=document.getElementById("y-band");yb.style.display="";yb.textContent="FICO "+a.fico;}
       var bars=[];
       if(a.max_monthly)bars.push(["Budget","$"+a.max_monthly+"/mo"+(a.max_down?" · $"+a.max_down+" down":"")]);
-      if(a.buy_method)bars.push(["Paying",a.buy_method]);
+      if(a.buy_method)bars.push(["Paying",String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]);
       if(a.income)bars.push(["Income",a.income]);
       if(a.reason)bars.push(["Why now",a.reason]);
       if(a.zip)bars.push(["Near",a.zip]);
