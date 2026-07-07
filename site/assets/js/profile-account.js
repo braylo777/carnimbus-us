@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded",function(){
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });
   var yo=$("y-out");
   if(yo)yo.addEventListener("click",async function(){
-    await fetch("/api/logout",{method:"POST"}); location.href="/";});
+    await fetch("/api/logout",{method:"POST"}); try{sessionStorage.clear();}catch(_){ } location.replace("https://carnimbus.com/");});
 
   // avatar upload → resize 256² → data-URL → /api/avatar
   var fi=$("y-av-file");

@@ -259,7 +259,8 @@
       // Delegate menu clicks: navigate explicitly so nothing (overlay, re-render, bubbling) can eat the tap.
       mn.addEventListener("click",function(e){ e.stopPropagation();
         var out=e.target.closest("#appnav-out");
-        if(out){ fetch("/api/logout",{method:"POST"}).then(function(){location.href="/";}).catch(function(){location.href="/";}); return; }
+        if(out){ var bye=function(){ try{sessionStorage.clear();}catch(_){ } location.replace("https://carnimbus.com/"); };
+          fetch("/api/logout",{method:"POST"}).then(bye).catch(bye); return; }
         var a=e.target.closest("a"); if(a&&a.href){ e.preventDefault(); location.href=a.href; } }); }
   }
   function wireTabbar(){
