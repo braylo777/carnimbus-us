@@ -382,7 +382,7 @@ async function twilioVerifyCheck(env,phone,code){
 async function issueUserSession(env,phone){
   await env.DB.prepare("INSERT INTO users (phone,created_at) VALUES (?,?) ON CONFLICT(phone) DO NOTHING").bind(phone,new Date().toISOString()).run();
   const u=await env.DB.prepare("SELECT id,sid FROM users WHERE phone=?").bind(phone).first();
-  if(!u.sid) await env.DB.prepare("UPDATE users SET sid=? WHERE id=?").bind(genCode("SID"),u.id).run();
+  if(!u.sid) await env.DB.prepare("UPDATE users SET sid=? WHERE id=?").bind(genCode("CID"),u.id).run();
   const sess=await makeSession(env,u.id);
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","cache-control":"no-store",
     "Set-Cookie":`cn_sess=${sess}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`}}); }
@@ -434,7 +434,7 @@ async function profilesIngest(request,env){ const rows=await request.json().catc
   let n=0;
   for(const r of rows.slice(0,500)){ let phone=String(r.phone||"").trim().replace(/^'/,""); if(!/^\+1\d{10}$/.test(phone)) continue;
     await env.DB.prepare("INSERT INTO users (phone,sid,created_at) VALUES (?,?,?) ON CONFLICT(phone) DO NOTHING")
-      .bind(phone,genCode("SID"),new Date().toISOString()).run();
+      .bind(phone,genCode("CID"),new Date().toISOString()).run();
     const u=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first(); if(!u) continue;
     const a={}; for(const k of BUYER_COLS.slice(1)) if(r[k]!=null&&r[k]!=="") a[k]=(k==="hobbies"||k==="must_haves")?String(r[k]).split("|").map(s=>s.trim()).filter(Boolean):String(r[k]);
     await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
@@ -733,7 +733,7 @@ ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span c
 <div class="grid" style="margin-top:0">${fin.map(f=>`<div><div class="k">${f[0]}</div>${f[1]}</div>`).join("")}</div>
 <div style="font:500 9px Manrope;color:#8ca0c4;margin-top:8px">Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.</div></div>
 <div class="stub"><canvas id="qr" width="118" height="118" style="background:#fff;border-radius:10px;flex:none"></canvas>
-<div style="min-width:0"><div class="k">SID · tracking</div><div class="mono" style="color:#fff">${t.sid||"—"}</div>
+<div style="min-width:0"><div class="k">CID · tracking</div><div class="mono" style="color:#fff">${String(t.sid||"—").replace(/^SID/,"CID")}</div>
 <div class="k" style="margin-top:8px">Check-in code</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
 <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">Scan at Porsche South Bay to check in.</div></div></div>
 <button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">Save / Print PDF</button>
