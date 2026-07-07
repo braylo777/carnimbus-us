@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded",function(){
       if(navigator.share)navigator.share({title:"My CarNimbus Drive Now pass",text:d.year+" "+d.make+" "+d.model+" — "+fmtSlot(d.slot),url:u});
       else if(navigator.clipboard){navigator.clipboard.writeText(u);alert("Pass link copied.");} };
     $("pm-pdf").onclick=function(){ window.open("/pass/"+d.pass_token,"_blank"); };
-    $("pm-home").onclick=function(){ $("home-sheet").style.display="flex"; };
+    var ph=$("pm-home"); if(ph)ph.onclick=function(){ $("home-sheet").style.display="flex"; };
     $("pm-close").onclick=function(){ $("pass-modal").style.display="none"; };
     var hc=$("hs-close"); if(hc)hc.onclick=function(){ $("home-sheet").style.display="none"; };
   }
