@@ -266,6 +266,7 @@
   function wireTabbar(){
     if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
     var here=location.pathname;
+    if(here.indexOf("/signin")>-1) return;   // not inside the app yet — no tab bar on the front door
     var T=[["Feed","https://app.carnimbus.com/feed","feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
            ["Chat","https://app.carnimbus.com/chat","chat",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
            ["Profile","https://app.carnimbus.com/profile","profile",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];

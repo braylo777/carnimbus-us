@@ -113,8 +113,11 @@ export default {
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await aiPulse(env));
     let assetRes = await env.ASSETS.fetch(request);
-    if (["app","dealer","admin","ai"].includes(url.hostname.split(".")[0])) {
-      const h = new Headers(assetRes.headers); h.set("X-Robots-Tag", "noindex, nofollow");
+    { const h = new Headers(assetRes.headers);
+      if (["app","dealer","admin","ai"].includes(url.hostname.split(".")[0])) h.set("X-Robots-Tag", "noindex, nofollow");
+      const ct=h.get("content-type")||"";
+      // HTML + JS always revalidate — stale app shells were serving old code for days. Images/fonts stay cached.
+      if (ct.includes("text/html")||ct.includes("javascript")) h.set("Cache-Control","no-cache, must-revalidate");
       assetRes = new Response(assetRes.body, { status: assetRes.status, headers: h });
     }
     return sec(assetRes);
