@@ -28,7 +28,7 @@ document.addEventListener("DOMContentLoaded",function(){
       document.getElementById("y-slot").textContent=d.slot;
       document.getElementById("y-pass").href="/pass/"+d.pass_token;
       document.getElementById("y-chat").href="/app/car.html?id="+d.vdp_id;}
-    fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
+    fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(f){
       document.getElementById("y-matches").innerHTML=(f.cars||[]).slice(0,3).map(function(c){
         return '<a href="/app/car.html?id='+c.id+'" class="row" style="align-items:center;gap:10px;text-decoration:none;padding:6px 0">'+
         '<span style="width:52px;height:36px;border-radius:8px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+

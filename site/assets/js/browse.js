@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded",function(){
       return true;});
     grid.innerHTML=out.map(card).join('')||'<div style="grid-column:1/-1;text-align:center;font:600 12px Manrope;color:#aebfdf;padding:30px">No cars match those filters.</div>';
     count.textContent=out.length+" matches";}
-  fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
+  fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(d){
     if(!d.ok)throw 0; CARS=d.cars;
     var mk=document.getElementById("makes");
     CARS.map(function(c){return c.make;}).filter(function(v,i,a){return a.indexOf(v)===i;}).forEach(function(m){

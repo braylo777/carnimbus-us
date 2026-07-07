@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded",function(){
     '<span class="cy" style="font:700 10px Manrope">$'+c.price_mo+'/mo</span></a>';
   }
   function showRecommended(){
-    fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
+    fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(f){
       var cars=(f.cars||[]).slice(0,5);
       list.innerHTML=cars.map(function(c){return carCard(c,"Tap to talk to this car"+(c.match!=null?" · "+c.match+"% match":""));}).join('')||
         '<div style="text-align:center;font:600 13px Manrope;color:#aebfdf;padding:50px 20px">Finish your profile to meet your matches.<br><a class="cy" href="/app/matches.html">See matches →</a></div>';

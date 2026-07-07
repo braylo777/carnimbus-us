@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded",function(){
   var id=+(new URLSearchParams(location.search).get("id")||0),CAR=null,hist=[];
   var thread=document.getElementById("thread");
+  function lang(){ try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";} }
   function $(x){return document.getElementById(x);}
   function setText(x,t){var e=$(x);if(e)e.textContent=t;}
   function setSrc(x,s){var e=$(x);if(e&&s)e.src=s;}
@@ -59,7 +60,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var m=$("book-msg");if(!CAR)return;
     if(!bTime){if(m){m.style.display="block";m.textContent="Pick a time to lock it in.";}return;}
     var slot=(bDay||"Today")+", "+bTime;
-    var r=await fetch("/api/book",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,slot:slot})});
+    var r=await fetch("/api/book",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,slot:slot,lang:lang()})});
     if(r.status===401){if(m){m.style.display="block";m.innerHTML='Sign in to book — <a class="cy" href="/app/signin.html">sign in →</a>';}return;}
     var d=await r.json().catch(function(){return{};});
     if(d&&d.ok){if(m){m.style.display="block";m.textContent="Booked "+slot+" at "+d.center+" 🎟️";}
@@ -68,7 +69,7 @@ document.addEventListener("DOMContentLoaded",function(){
       bubble("car","Booked — "+slot+" at "+d.center+". Your Drive Now pass is ready. See you soon!");}
     else if(m){m.style.display="block";m.textContent="Couldn’t book that slot — try another.";}
   });
-  fetch("/api/vdp?id="+id).then(function(r){return r.text();}).then(function(txt){
+  fetch("/api/vdp?id="+id+"&lang="+lang()).then(function(r){return r.text();}).then(function(txt){
     var d=null; try{ d=JSON.parse(txt); }catch(e){ d=null; }
     CAR=d&&d.car;
     if(!CAR){ fail("Car not found."); return; }
@@ -76,7 +77,7 @@ document.addEventListener("DOMContentLoaded",function(){
   }).catch(function(){ fail("Couldn’t load this car — refresh to retry."); });
   async function send(){var inEl=$("chat-in"),msg=inEl?inEl.value.trim():"";if(!msg||!CAR)return;
     inEl.value="";bubble("you",msg);hist.push({role:"user",content:msg});typing(true);
-    var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,messages:hist})});
+    var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,messages:hist,lang:lang()})});
     typing(false);
     if(r.status===401){bubble("car","Sign in first so I remember you.");
       if(thread){var a=document.createElement("a");a.href="/app/signin.html";a.textContent="Sign in →";

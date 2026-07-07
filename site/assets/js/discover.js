@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded",function(){
     e.textContent=t;e.style.display="grid";
     if(retry)e.onclick=function(){e.style.display="none";e.onclick=null;retry();};}
   function loadFeed(){
-    fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
+    fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(d){
       CARS=d.cars||[];
       if(!CARS.length)return dEmpty("No cars in your area yet — we're onboarding dealers now. 🚗");
       show();

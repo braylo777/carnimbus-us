@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded",function(){
           '<a class="btn ghost sm" href="/app/car.html?id='+c.id+'&book=1" style="text-decoration:none;flex:1;text-align:center">Schedule Test Drive</a>'+
         '</div>'+
       '</div></div>';}
-  fetch("/api/feed").then(function(r){return r.json();}).then(function(d){
+  fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(d){
     if(!d.ok)throw 0;
     if(d.authed===false){document.getElementById("m-gate").style.display="flex";}
     var cars=(d.cars||[]).slice(0,10);

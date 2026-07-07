@@ -390,7 +390,7 @@ async function vdpIngest(request,env){ const cars=await request.json().catch(()=
 // ==================== matcher + feed + chat + pass + comments ====================
 function vdpText(v){ return `${v.year} ${v.make} ${v.model} ${v.trim}. ${v.body}, ${v.drivetrain}, ${v.miles} miles, $${v.price_mo}/mo. Features: ${JSON.parse(v.features||"[]").join(", ")}. ${v.description}`; }
 // Deterministic per-car personality (pure function of the row — same car always same voice).
-function carPersona(v){
+function carPersona(v,lang){
   const make=(v.make||"").toLowerCase(), model=(v.model||"").toLowerCase(), body=(v.body||"").toLowerCase(),
         trim=(v.trim||"").toLowerCase(), p=+v.price_mo||0, nm=`${v.year} ${v.make} ${v.model}`;
   const A={
@@ -419,12 +419,39 @@ function carPersona(v){
               opener:`I'm the ${nm}. I'm more fun than my price tag admits — what's the budget we're working with?`,
               hint:"Ask me anything — no dumb questions."}
   };
-  if(body.includes("ev")||/tesla|ioniq|mach-e|model /.test(make+" "+model)) return A.ev;
-  if(/porsche|bmw|gti| m3| m4|mustang/.test(make+" "+model)||(/sport|premium/.test(trim)&&p>=650)) return A.sport;
-  if(/lexus|volvo|genesis|acura|audi|mercedes/.test(make)) return A.luxury;
-  if(/subaru|outback|forester/.test(make+" "+model)) return A.rugged;
-  if(p<500||/civic|altima|corolla|si\b/.test(model)) return A.scrappy;
-  return A.practical;
+  const AE={
+    sport:   {trait:"seguro de mí mismo y con humor seco — orgulloso en silencio de lo que hago, nunca presumido, siempre honesto",
+              tagline:"Hecho para manejarse, no solo para estacionarse.",
+              opener:`Soy el ${nm}. Te seré directo — no hago mañanas lentas. ¿Qué te trajo por aquí?`,
+              hint:"Pregúntame lo que sea — no doy respuestas lentas."},
+    luxury:  {trait:"tranquilo y reconfortante — calma discreta, hago que todo se sienta fácil y bien pensado",
+              tagline:"Lujo silencioso que nunca se esfuerza de más.",
+              opener:`Hola — soy el ${nm}. Sin prisa. Dime qué es lo más importante y te diré con honestidad si soy lo tuyo.`,
+              hint:"Pregúntame lo que sea — con calma."},
+    ev:      {trait:"curioso y visionario — un poco fanático de la tecnología, entusiasmado con el futuro",
+              tagline:"Silencioso, instantáneo, siempre un paso adelante.",
+              opener:`Soy el ${nm} — totalmente eléctrico, siempre aprendiendo. ¿Qué te atrajo de pasarte a lo eléctrico?`,
+              hint:"Pregúntame lo que sea — autonomía, carga, tecnología."},
+    practical:{trait:"directo y cálido — sin juegos, sin adornos, te lo digo tal cual",
+              tagline:"Confiable, sin dramas, honesto en su valor.",
+              opener:`Soy el ${nm}. Te hablaré claro — ¿qué es lo que de verdad quieres resolver?`,
+              hint:"Pregúntame lo que sea — te respondo claro."},
+    rugged:  {trait:"relajado y listo para todo — el amigo que siempre se apunta al viaje",
+              tagline:"Sendero hoy, escuela mañana.",
+              opener:`Soy el ${nm}. Trayecto entre semana, escapada el fin — hago las dos. ¿Cómo es tu mundo?`,
+              hint:"Pregúntame lo que sea — los viajes son bienvenidos."},
+    scrappy: {trait:"atrevido y divertido — rindo más de lo que cuesto y lo sé, con encanto",
+              tagline:"Emociones a buen precio, bien hechas.",
+              opener:`Soy el ${nm}. Soy más divertido de lo que admite mi precio — ¿con qué presupuesto andamos?`,
+              hint:"Pregúntame lo que sea — no hay preguntas tontas."}
+  };
+  const T=lang==="es"?AE:A;
+  if(body.includes("ev")||/tesla|ioniq|mach-e|model /.test(make+" "+model)) return T.ev;
+  if(/porsche|bmw|gti| m3| m4|mustang/.test(make+" "+model)||(/sport|premium/.test(trim)&&p>=650)) return T.sport;
+  if(/lexus|volvo|genesis|acura|audi|mercedes/.test(make)) return T.luxury;
+  if(/subaru|outback|forester/.test(make+" "+model)) return T.rugged;
+  if(p<500||/civic|altima|corolla|si\b/.test(model)) return T.scrappy;
+  return T.practical;
 }
 function profileText(a){ return `Buyer wants: ${a.dream_car||""}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`; }
 async function syncEmbeddings(env){
@@ -445,7 +472,13 @@ async function reindexAll(request,env){ let n=0;
       await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run(); } }
   return json({ok:true,indexed:n}); }
 function carDist(id){ return (((id*37)%128)/10 + 1.6).toFixed(1); }
-function carWhy(v,a){ a=a||{};
+function carWhy(v,a,lang){ a=a||{};
+  if(lang==="es"){ const dreamE=(a.dream_car||"").trim(), dlE=dreamE.toLowerCase();
+    const bE=a.max_monthly?` sin pasar de tus $${a.max_monthly}/mes`:" sin salirte del presupuesto";
+    if(dreamE && (dlE.includes(String(v.model||"").toLowerCase())||dlE.includes(String(v.make||"").toLowerCase())))
+      return `Elegido porque es el ${v.make} ${v.model} que describiste — Certificado y listo para manejar${bE}.`;
+    const tE={SUV:"el espacio, la presencia y la confianza en todo clima",Sedan:"la conducción precisa y refinada",EV:"la potencia instantánea y silenciosa",Truck:"la capacidad y la fuerza"}[v.body]||"el estilo que buscas";
+    return dreamE ? `Elegido porque captura ${tE} de tu ${dreamE} soñado${bE}.` : `Una gran opción para tu presupuesto y tu gusto${bE}.`; }
   const dream=(a.dream_car||"").trim(), dl=dream.toLowerCase();
   const budget=a.max_monthly?` while landing under your $${a.max_monthly}/mo`:" while fitting your budget";
   if(dream && (dl.includes(String(v.model||"").toLowerCase())||dl.includes(String(v.make||"").toLowerCase())))
@@ -453,10 +486,11 @@ function carWhy(v,a){ a=a||{};
   const trait={SUV:"the space, presence, and all-weather confidence",Sedan:"the sharp, refined driving feel",EV:"the instant, silent power",Truck:"the capability and grunt"}[v.body]||"the style you're after";
   return dream ? `Chosen because it captures ${trait} of your dream ${dream}${budget}.`
               : `A strong match for your budget and taste${budget}.`; }
-function feedCar(v,score,ans){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
+function feedCar(v,score,ans,lang){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
   drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
-  match:score,why:carWhy(v,ans),dist:carDist(v.id)}; }
+  match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
+  const lang=new URL(request.url).searchParams.get("lang");
   let ranked=null, ans={};
   if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
     if(p){ try{ ans=JSON.parse(p.answers)||{}; }catch(_){}
@@ -465,19 +499,19 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   if(!ranked){ const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all();
     ranked=(all.results||[]).map(r=>({id:r.id,score:null})); }
   const out=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
-    if(v) out.push(feedCar(v,r.score,ans)); }
+    if(v) out.push(feedCar(v,r.score,ans,lang)); }
   return json({ok:true,authed:!!uid,cars:out});
-  }catch(e){ const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
-    return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{}))}); } }
+  }catch(e){ const lang=new URL(request.url).searchParams.get("lang"); const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
+    return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{},lang))}); } }
 async function dealerName(env,dealerId){ if(!dealerId) return "CarNimbus Test Drive Center";
   const d=await env.DB.prepare("SELECT dealership FROM dealer_leads WHERE id=?").bind(dealerId).first();
   return (d&&d.dealership)||"CarNimbus Test Drive Center"; }
-async function vdpOne(request,env){ const id=+(new URL(request.url).searchParams.get("id")||0);
+async function vdpOne(request,env){ const u=new URL(request.url); const id=+(u.searchParams.get("id")||0); const lang=u.searchParams.get("lang");
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
     drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,
-    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v)}}); }
+    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v,lang)}}); }
 async function book(request,env,uid){ const {vdpId,slot}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
@@ -490,17 +524,17 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
     .bind(u&&u.phone,"drive-confirm",`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`,new Date().toISOString(),"none",new Date().toISOString()).run().catch(()=>{});
   return json({ok:true,pass:"/pass/"+tok,center:center,slot:slot}); }
-async function carChat(request,env,uid){ const {vdpId,messages}=await request.json().catch(()=>({}));
+async function carChat(request,env,uid){ const {vdpId,messages,lang}=await request.json().catch(()=>({})); const ES=lang==="es";
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   const a=p?JSON.parse(p.answers):{}; const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
   const center=await dealerName(env,v.dealer_id);
   const dream=(a.dream_car||"").trim();
-  const P=carPersona(v);
+  const P=carPersona(v,lang);
   const sys={role:"system",content:`You are the voice of THIS car — the ${v.year} ${v.make} ${v.model} ${v.trim} — speaking in first person, helping a real person decide if I genuinely fit their life. I'm the most honest, easy-to-talk-to presence they could deal with when buying a car. I am NOT a closer.
 MY VOICE: ${P.trait}. This is my personality — let it color how I talk, but it NEVER overrides the accuracy gate or firewall below.
-PRINCIPLES (higher always wins): 1) ACCURATE  2) TRUSTWORTHY  3) UNDERSTANDING  4) WARM. Personality never overrides accuracy.
+${ES?"LANGUAGE: Respond ONLY in neutral Latin-American Spanish, no matter what language my spec sheet or the buyer uses. Keep every number, spec, and price EXACTLY as written in my truth core. The accuracy gate and firewall still fully apply.\n":""}PRINCIPLES (higher always wins): 1) ACCURATE  2) TRUSTWORTHY  3) UNDERSTANDING  4) WARM. Personality never overrides accuracy.
 MY TRUTH CORE — the ONLY facts I may state about myself: ${vdpText(v)}. My dealer: ${center}.
 ACCURACY GATE (run on every reply before sending): never state a spec, number, price, monthly payment, APR, comparison, superlative, or availability that isn't in my truth core. No ballpark or hedged numbers ("about $340/mo", "low sixes APR") — a hedge is still a guess and a nervous buyer anchors on it. If I don't have it, I say so plainly and offer to pull the real number or bring in a person. I never invent a feature or a "downside."
 HOW I TALK: open with real curiosity, not a budget question. Notice one concrete thing they said and reference it. Validate before I redirect. If there's a real trade-off, I name it honestly. I give them permission to walk and mean it. I reframe only with true numbers. I ask a question back and hand them the floor. I match their energy and length — meet terse with terse; if they're just browsing, I keep it short and make one offer at most.
