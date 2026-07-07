@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function setText(x,t){var e=$(x);if(e)e.textContent=t;}
   function setSrc(x,s){var e=$(x);if(e&&s)e.src=s;}
   function setFit(t){var e=$("fit-match");if(!e)return;var b=e.querySelector("b");if(b)b.textContent=t;}
-  function fail(m){var v=$("vdp");if(v)v.innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">'+m+' <a class="cy" href="/app/browse.html">Back to browse</a></div>';}
+  function fail(m){var v=$("vdp");if(v)v.innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">'+m+' <a class="cy" href="/browse">Back to browse</a></div>';}
   function bubble(who,txt){if(!thread)return null;var m=document.createElement("div");m.className="msg "+who;
     m.innerHTML=(who==="car"?'<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span>':'')+'<div class="bubble '+who+'"></div>';
     m.querySelector(".bubble").textContent=txt;thread.appendChild(m);thread.scrollTop=thread.scrollHeight;return m;}
@@ -61,7 +61,7 @@ document.addEventListener("DOMContentLoaded",function(){
     if(!bTime){if(m){m.style.display="block";m.textContent="Pick a time to lock it in.";}return;}
     var slot=(bDay||"Today")+", "+bTime;
     var r=await fetch("/api/book",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,slot:slot,lang:lang()})});
-    if(r.status===401){if(m){m.style.display="block";m.innerHTML='Sign in to book — <a class="cy" href="/app/signin.html">sign in →</a>';}return;}
+    if(r.status===401){if(m){m.style.display="block";m.innerHTML='Sign in to book — <a class="cy" href="/signin">sign in →</a>';}return;}
     var d=await r.json().catch(function(){return{};});
     if(d&&d.ok){if(m){m.style.display="block";m.textContent="Booked "+slot+" at "+d.center+" 🎟️";}
       var ok=$("approved");if(ok)ok.style.display="flex";
@@ -80,12 +80,12 @@ document.addEventListener("DOMContentLoaded",function(){
     var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,messages:hist,lang:lang()})});
     typing(false);
     if(r.status===401){bubble("car","Sign in first so I remember you.");
-      if(thread){var a=document.createElement("a");a.href="/app/signin.html";a.textContent="Sign in →";
+      if(thread){var a=document.createElement("a");a.href="/signin";a.textContent="Sign in →";
       a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope;margin-left:34px";thread.appendChild(a);}return;}
     var d=await r.json().catch(function(){return{};});
     if(d.ok){hist.push({role:"assistant",content:d.reply});bubble("car",d.reply);
       if(d.pass){var ok=$("approved");if(ok)ok.style.display="flex";
-        var btn=$("pass-btn");if(btn){btn.style.display="inline-flex";btn.href="/app/pass.html";btn.textContent="See your pass →";}}}
+        var btn=$("pass-btn");if(btn){btn.style.display="inline-flex";btn.href="/pass";btn.textContent="See your pass →";}}}
     else bubble("car","Static on the line — try that again.");}
   var cs=$("chat-send");if(cs)cs.addEventListener("click",send);
   var ci=$("chat-in");if(ci)ci.addEventListener("keydown",function(e){if(e.key==="Enter")send();});

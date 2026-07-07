@@ -198,7 +198,7 @@
   function L(s){ return CUR()==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
   function norm(t){ return (t||"").replace(/\s+/g," ").trim().toLowerCase().replace(/[→»]/g,"").trim(); }
-  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact","sign in":"/app/signin.html" };
+  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact","sign in":"https://app.carnimbus.com/signin" };
   var CTA_WAIT = ["join waitlist","get early access","be first in line","join the waitlist","sign up"];
   function destFor(el){
     if(el.closest(".wl-form")) return null;
@@ -223,7 +223,7 @@
     b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
     right.appendChild(b);
     var d=document.createElement("div"); d.className="nav-drawer";
-    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="navlink" data-cngo="/about">'+L("About")+'</a><a class="navlink" data-cngo="/contact">'+L("Contact")+'</a><div class="seg" style="margin:12px 0 0;align-self:flex-start"><button'+(CUR()==="en"?' class="on"':'')+'>EN</button><button'+(CUR()==="es"?' class="on"':'')+'>ES</button></div><a class="btn primary" data-cngo="/app/signin.html" style="text-decoration:none">'+L("Sign in")+'</a>';
+    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="navlink" data-cngo="/about">'+L("About")+'</a><a class="navlink" data-cngo="/contact">'+L("Contact")+'</a><div class="seg" style="margin:12px 0 0;align-self:flex-start"><button'+(CUR()==="en"?' class="on"':'')+'>EN</button><button'+(CUR()==="es"?' class="on"':'')+'>ES</button></div><a class="btn primary" data-cngo="https://app.carnimbus.com/signin" style="text-decoration:none">'+L("Sign in")+'</a>';
     document.body.appendChild(d);
     function close(){ d.classList.remove("open"); b.setAttribute("aria-expanded","false"); }
     b.addEventListener("click",function(e){ e.stopPropagation(); var o=d.classList.toggle("open"); b.setAttribute("aria-expanded",o?"true":"false"); });
@@ -239,7 +239,7 @@
       '<img src="/assets/logo.png" alt="" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
       '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
       '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
-      '<a href="/app/you.html" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
+      '<a href="https://app.carnimbus.com/you" class="avatar" style="width:28px;height:28px;font-size:11px" id="appnav-av">·</a></div>';
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
       if(d.ok) document.getElementById("appnav-av").textContent=initials(d.handle);
     }).catch(function(){});
@@ -247,11 +247,11 @@
   function wireTabbar(){
     if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
     var here=location.pathname;
-    var T=[["discover","/app/discover.html",'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/>'],
-           ["feed","/app/feed.html",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
-           ["talk","/app/talk.html",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
-           ["pass","/app/pass.html",'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M13 13h3v3h-3zM17 17h3v3h-3z"/>'],
-           ["you","/app/you.html",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
+    var T=[["discover","https://app.carnimbus.com/discover",'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/>'],
+           ["feed","https://app.carnimbus.com/feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
+           ["talk","https://app.carnimbus.com/talk",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
+           ["pass","https://app.carnimbus.com/pass",'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M13 13h3v3h-3zM17 17h3v3h-3z"/>'],
+           ["you","https://app.carnimbus.com/you",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
     var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
     bar.innerHTML=T.map(function(t){ var on=here.indexOf(t[0])>-1;
       return '<a class="tab'+(on?' on':'')+'" href="'+t[1]+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+t[2]+'</svg>'+t[0]+'</a>'; }).join('');
@@ -351,7 +351,7 @@
       if(!d.ok||!d.cars||!d.cars.length){ if(empty){empty.style.display="block";empty.innerHTML='No cars yet — check back soon.';} return; }
       if(!d.authed){ var cta=document.createElement("div");
         cta.style.cssText="grid-column:1/-1;text-align:center;padding:10px;font:600 12px Manrope;color:#aebfdf";
-        cta.innerHTML='Showing newest cars. <a href="/app/profile.html" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
+        cta.innerHTML='Showing newest cars. <a href="https://app.carnimbus.com/profile" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
         feedEl.appendChild(cta); }
       d.cars.forEach(function(c){
         var card=document.createElement("div");
@@ -394,7 +394,7 @@
       inEl.value=""; bubble("you",msg); hist.push({role:"user",content:msg});
       var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:c.id,messages:hist})});
       if(r.status===401){ bubble("car",L("Sign in first so I remember you —"));
-        var a=document.createElement("a"); a.href="/app/profile.html"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
+        var a=document.createElement("a"); a.href="https://app.carnimbus.com/profile"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
       var d=await r.json();
       if(d.ok){ hist.push({role:"assistant",content:d.reply}); bubble("car",d.reply);
         if(d.pass){ var p=document.createElement("a"); p.href=d.pass; p.textContent="🎟️ "+L("Your Drive Now pass is ready →");

@@ -6,8 +6,8 @@ document.addEventListener("DOMContentLoaded",function(){
   function ini(w){return (w||"R").split(" ").map(function(x){return x[0]||"";}).join("").slice(0,2).toUpperCase();}
   function card(a){
     var act=a.status==="sold"?'<span class="badge green" style="width:100%;justify-content:center">✓ Sold today</span>'
-      :a.status==="arrived"?'<a class="btn primary sm" href="/dealer/scan.html?sold=1" style="text-decoration:none;width:100%;justify-content:center">Scan QR · mark sold</a>'
-      :a.status==="confirmed"?'<a class="btn primary sm" href="/dealer/scan.html" style="text-decoration:none;width:100%;justify-content:center">Scan QR · check in</a>'
+      :a.status==="arrived"?'<a class="btn primary sm" href="/scan?sold=1" style="text-decoration:none;width:100%;justify-content:center">Scan QR · mark sold</a>'
+      :a.status==="confirmed"?'<a class="btn primary sm" href="/scan" style="text-decoration:none;width:100%;justify-content:center">Scan QR · check in</a>'
       :'<span style="display:flex;justify-content:center;font:600 10px Manrope;color:#7f93b8;border:1px dashed rgba(24,200,255,.25);border-radius:10px;padding:8px">🔒 AI still chatting</span>';
     var pill={confirmed:"#18C8FF",arrived:"#b18cff",sold:"#54d699",requested:"#8ca0c4"}[a.status]||"#8ca0c4";
     return '<div class="glass" data-drive="'+a.id+'" style="border-radius:14px;padding:11px;cursor:pointer">'+

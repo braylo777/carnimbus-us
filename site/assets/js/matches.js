@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function card(c){
     var dm=(c.match!=null?c.match+'% Dream Match':'Top match');
-    var meta='$'+c.price_mo+'/mo · '+esc(c.miles)+' mi · Certified'+(c.dist?' · '+c.dist+' mi away':'');
+    var meta='$'+c.price_mo+'/mo · '+esc(c.miles)+' mi · Certified · Los Angeles, CA';   // real dealer geo pending — no synthetic distances
     var why=c.why?'<div style="font:italic 500 12.5px/1.55 Manrope;color:#c4d2ea;margin:9px 0 12px">'+esc(c.why)+'</div>':'';
     return '<div class="glass vcard" style="display:block;padding:0;overflow:hidden">'+
       '<div class="vphoto">'+(c.photos&&c.photos[0]?'<img src="'+esc(c.photos[0])+'" alt="'+esc(c.year+' '+c.make+' '+c.model)+'" loading="lazy" onerror="this.remove()">':'')+
@@ -14,8 +14,8 @@ document.addEventListener("DOMContentLoaded",function(){
         '<div style="font:600 11px Manrope;color:#8ca0c4">'+meta+'</div>'+
         why+
         '<div class="row" style="gap:8px">'+
-          '<a class="btn primary sm" href="/app/car.html?id='+c.id+'" style="text-decoration:none;flex:1;text-align:center">Talk to this Car</a>'+
-          '<a class="btn ghost sm" href="/app/car.html?id='+c.id+'&book=1" style="text-decoration:none;flex:1;text-align:center">Schedule Test Drive</a>'+
+          '<a class="btn primary sm" href="/car?id='+c.id+'" style="text-decoration:none;flex:1;text-align:center">Talk to this Car</a>'+
+          '<a class="btn ghost sm" href="/car?id='+c.id+'&book=1" style="text-decoration:none;flex:1;text-align:center">Schedule Test Drive</a>'+
         '</div>'+
       '</div></div>';}
   fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(d){

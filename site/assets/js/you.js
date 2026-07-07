@@ -27,10 +27,10 @@ document.addEventListener("DOMContentLoaded",function(){
       document.getElementById("y-center").textContent=d.center+" Test Drive Center";
       document.getElementById("y-slot").textContent=d.slot;
       document.getElementById("y-pass").href="/pass/"+d.pass_token;
-      document.getElementById("y-chat").href="/app/car.html?id="+d.vdp_id;}
+      document.getElementById("y-chat").href="/car?id="+d.vdp_id;}
     fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(f){
       document.getElementById("y-matches").innerHTML=(f.cars||[]).slice(0,3).map(function(c){
-        return '<a href="/app/car.html?id='+c.id+'" class="row" style="align-items:center;gap:10px;text-decoration:none;padding:6px 0">'+
+        return '<a href="/car?id='+c.id+'" class="row" style="align-items:center;gap:10px;text-decoration:none;padding:6px 0">'+
         '<span style="width:52px;height:36px;border-radius:8px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
         '<span style="flex:1"><span style="display:block;font:600 11px Manrope;color:#fff">'+c.year+' '+c.make+' '+c.model+'</span><span class="cy" style="font:700 10px Manrope">$'+c.price_mo+'/mo</span></span>'+(c.match!=null?'<span class="badge cyan">'+c.match+'%</span>':'')+'</a>';}).join('');}).catch(function(){});
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });

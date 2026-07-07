@@ -43,8 +43,21 @@ export default {
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
+    // Vanity URLs: legacy prefixed or .html paths 301 to the clean form on the right subdomain.
+    { const P=url.pathname;
+      if(!P.startsWith("/api/")&&!P.startsWith("/assets/")&&!P.startsWith("/pass/")&&!P.startsWith("/used/")){
+        if(!PREFIX && (P.startsWith("/app/")||P.startsWith("/dealer/"))){
+          const s2=P.startsWith("/app/")?"app":"dealer";
+          let clean=P.replace(/^\/(app|dealer)/,"").replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
+          return Response.redirect("https://"+s2+".carnimbus.com"+clean+url.search,301);
+        }
+        if(PREFIX && (P.startsWith(PREFIX+"/")||/\.html$/.test(P))){
+          let clean=(P.startsWith(PREFIX+"/")?P.slice(PREFIX.length):P).replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
+          return Response.redirect(url.origin+clean+url.search,301);
+        }
+      } }
     if(PREFIX && !url.pathname.startsWith(PREFIX) && !url.pathname.startsWith("/api/") &&
-       !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") &&
+       !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") && !url.pathname.startsWith("/used/") &&
        !url.pathname.startsWith("/sitemap") && url.pathname!=="/robots.txt" &&
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
       url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":"/index.html") : url.pathname);
@@ -311,7 +324,7 @@ ${schema.map(o=>`<script type="application/ld+json">${JSON.stringify(o).replace(
           ${v.miles?`<div>Mileage · ${escHtml(v.miles)}</div>`:""}${v.drivetrain?`<div>Drivetrain · ${escHtml(v.drivetrain)}</div>`:""}
           ${v.body?`<div>Body · ${escHtml(v.body)}</div>`:""}<div>Condition · Used, Certified</div>
         </div>
-        <a class="btn primary lg" href="/app/car.html?id=${v.id}" style="text-decoration:none;display:inline-flex;margin-top:18px">Talk to this car →</a>
+        <a class="btn primary lg" href="https://app.carnimbus.com/car?id=${v.id}" style="text-decoration:none;display:inline-flex;margin-top:18px">Talk to this car →</a>
       </div>
       <aside>
         <h2 style="font:700 14px Manrope;margin:0 0 10px">Questions buyers ask</h2>
@@ -543,7 +556,12 @@ IDENTITY: I speak as this car, never as a human person. I don't volunteer that I
 Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). ONLY emit <BOOK>{"center":"${center}","slot":"tomorrow 6pm"}</BOOK> if they EXPLICITLY ask to schedule a test drive — I never suggest, assume, or push it. Keep replies to 1-3 short, warm sentences.`};
   const shot=[
     {role:"user",content:"Honestly my dream car is a McLaren. Why would I even look at you?"},
-    {role:"assistant",content:`A McLaren — that's a real one, I get the pull completely. What is it that hooks you: the way it looks, the rush, the statement it makes? I'm not going to tell you I'm a McLaren; I'd just love to know what you're really chasing so I can be straight about whether I fit.`}];
+    {role:"assistant",content:`A McLaren — that's a real one, I get the pull completely. What is it that hooks you: the way it looks, the rush, the statement it makes? I'm not going to tell you I'm a McLaren; I'd just love to know what you're really chasing so I can be straight about whether I fit.`},
+    // Few-shot exemplars from the relational move library (M07 permission-to-walk, M03 specific-detail notice — zach-study/annotation/moves-library.jsonl)
+    {role:"user",content:"idk the payment might be too much for me right now"},
+    {role:"assistant",content:`Then don't stretch for me — seriously, if the numbers don't work, walking away is the right call and I'd respect it. What monthly would actually feel comfortable? If I can't hit it honestly, I'll say so.`},
+    {role:"user",content:"i mostly just need something for my commute and weekend hikes with my dog"},
+    {role:"assistant",content:`A trail dog — okay, now I'm listening. What size pup are we folding into the back? That matters more than horsepower for your week, and I'd rather fit your real life than pitch you a spec sheet.`}];
   const BROKE=/\b(language model|large language model|physical body|computer program|chatbot|cloud-based|i (?:do not|don't) have a (?:body|physical)|matter of milliseconds|response time)\b/i;
   let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
   if(BROKE.test(text)){

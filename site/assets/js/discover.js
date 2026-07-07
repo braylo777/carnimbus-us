@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var im=document.getElementById("d-img");im.style.display="block";im.src=(c.photos&&c.photos[0])||"";
     document.getElementById("d-thumb").src=(c.photos&&c.photos[0])||"";
     document.getElementById("d-title").innerHTML=c.year+" "+c.make+" "+c.model+" · <span class='cy'>$"+c.price_mo+"/mo</span>";
-    document.getElementById("d-talk").href="/app/car.html?id="+c.id;
+    document.getElementById("d-talk").href="/car?id="+c.id;
     // MOCK DISPLAY (B-04): like-count is framework data, not live engagement. Replace when real.
     document.getElementById("d-likes").textContent=(3+((c.id*7)%9))+"."+((c.id*3)%10)+"K";
     document.getElementById("d-match").textContent=(c.match!=null?c.match+"%":"NEW");}

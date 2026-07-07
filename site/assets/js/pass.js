@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded",function(){
-  fetch("/api/me").then(function(r){if(r.status===401){location.href="/app/signin.html";throw 0;}return r.json();}).then(function(me){
+  fetch("/api/me").then(function(r){if(r.status===401){location.href="/signin";throw 0;}return r.json();}).then(function(me){
     if(!me.drive){document.getElementById("p-empty").style.display="block";return;}
     var d=me.drive;document.getElementById("p-card").style.display="block";
     document.getElementById("p-car").textContent=d.year+" "+d.make+" "+d.model+(d.trim?" "+d.trim:"");
