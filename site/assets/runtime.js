@@ -253,7 +253,11 @@
     var av=document.getElementById("appnav-av"), mn=document.getElementById("appnav-menu");
     if(av&&mn){ av.addEventListener("click",function(e){e.stopPropagation();mn.style.display=mn.style.display==="block"?"none":"block";});
       document.addEventListener("click",function(){mn.style.display="none";});
-      var o=document.getElementById("appnav-out"); if(o)o.addEventListener("click",function(){fetch("/api/logout",{method:"POST"}).then(function(){location.href="/";});}); }
+      // Delegate menu clicks: navigate explicitly so nothing (overlay, re-render, bubbling) can eat the tap.
+      mn.addEventListener("click",function(e){ e.stopPropagation();
+        var out=e.target.closest("#appnav-out");
+        if(out){ fetch("/api/logout",{method:"POST"}).then(function(){location.href="/";}).catch(function(){location.href="/";}); return; }
+        var a=e.target.closest("a"); if(a&&a.href){ e.preventDefault(); location.href=a.href; } }); }
   }
   function wireTabbar(){
     if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
