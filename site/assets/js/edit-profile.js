@@ -1,8 +1,12 @@
 document.addEventListener("DOMContentLoaded",function(){
   var A={hobbies:[]},cur=0,secs=[].slice.call(document.querySelectorAll("#quiz section"));
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
-  // Edit mode: prefill from existing answers so the buyer can update, not re-enter.
-  fetch("/api/me").then(function(r){return r.json();}).then(function(d){ if(!d||!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];
+  // Edit mode: if already signed in, skip the phone-auth gate entirely and open the quiz prefilled.
+  fetch("/api/me").then(function(r){ if(r.status===401)throw 0; return r.json(); }).then(function(d){ if(!d||!d.ok)return;
+    document.getElementById("ph-auth").style.display="none";
+    document.getElementById("ph-quiz").style.display="block";
+    dots();
+    if(!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];
     var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles"};
     for(var m in map){var el=document.getElementById(map[m]);if(el&&a[m]!=null)el.value=a[m];}
     document.querySelectorAll("#quiz .opts").forEach(function(o){ var sec=o.closest("section"),key=o.dataset.q2||sec.dataset.q,val=a[key];
