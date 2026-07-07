@@ -13,4 +13,12 @@ document.addEventListener("DOMContentLoaded",function(){
     g.fillStyle="#fff";g.fillRect(0,0,cv.width,cv.height);g.fillStyle="#06163b";
     for(var y=0;y<n;y++)for(var x=0;x<n;x++)if(qr.getModule(x,y))g.fillRect((x+b)*s,(y+b)*s,s,s);
   }).catch(function(){});
+  var deferredPrompt=null;
+  window.addEventListener("beforeinstallprompt",function(e){ e.preventDefault(); deferredPrompt=e; });
+  var sv=document.getElementById("p-save");
+  if(sv) sv.addEventListener("click",function(){
+    if(deferredPrompt){ deferredPrompt.prompt(); deferredPrompt=null; return; }     // Android/Chrome native install
+    var how=document.getElementById("p-save-how");
+    if(how) how.style.display=(how.style.display==="none"||!how.style.display)?"block":"none";  // iOS: Share → Add to Home Screen
+  });
 });

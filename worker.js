@@ -146,15 +146,30 @@ async function smsNumbers(request,env){ if(!env.TWILIO_ACCOUNT_SID) return json(
   const d=await r.json().catch(()=>({}));
   return json({ok:r.ok,from_configured:!!env.TWILIO_FROM,numbers:(d.incoming_phone_numbers||[]).map(n=>n.phone_number),message:d.message}); }
 async function smsInbound(request,env){ const form=await request.formData().catch(()=>null);
-  const from=form?String(form.get("From")||""):"", text=form?String(form.get("Body")||"").trim().toUpperCase():"";
+  const from=form?String(form.get("From")||""):"", rawText=form?String(form.get("Body")||"").trim():"", text=rawText.toUpperCase();
   let reply="";
   if(/^(STOP|STOPALL|UNSUBSCRIBE|CANCEL|END|QUIT)$/.test(text)){
     await env.DB.prepare("UPDATE waitlist SET sms_consent=0 WHERE phone=?").bind(from).run().catch(()=>{});
     reply="You're unsubscribed from CarNimbus texts. No more messages. Reply START to rejoin."; }
   else if(/^(HELP|INFO)$/.test(text)) reply="CarNimbus: AI car buying, LA. Up to 4 msgs/mo. Msg&data rates may apply. Reply STOP to cancel. hello@carnimbus.com";
   else if(text==="START"){ await env.DB.prepare("UPDATE waitlist SET sms_consent=1 WHERE phone=?").bind(from).run().catch(()=>{}); reply="Welcome back to CarNimbus. Reply STOP anytime."; }
+  else if(rawText && from && from!==env.TWILIO_FROM){                       // relay: dealer↔buyer via our number
+    try{
+      const dl=await env.DB.prepare("SELECT id,name,phone FROM dealer_leads WHERE phone=? AND status='active'").bind(from).first();
+      if(dl){                                                                // dealer → buyer of their latest live drive
+        const td=await env.DB.prepare("SELECT t.id,u.phone bp FROM test_drives t JOIN users u ON u.id=t.user_id JOIN vdps v ON v.id=t.vdp_id WHERE v.dealer_id=? AND t.status!='sold' ORDER BY t.id DESC LIMIT 1").bind(dl.id).first();
+        if(td&&td.bp) await sendSMS(env,td.bp,`${dl.name} @ CarNimbus: ${rawText.slice(0,480)}`);
+      } else {
+        const us=await env.DB.prepare("SELECT id,handle FROM users WHERE phone=?").bind(from).first();
+        if(us){                                                              // buyer → dealer of their latest live drive
+          const td=await env.DB.prepare("SELECT dl.phone dp FROM test_drives t JOIN vdps v ON v.id=t.vdp_id JOIN dealer_leads dl ON dl.id=v.dealer_id WHERE t.user_id=? AND t.status!='sold' ORDER BY t.id DESC LIMIT 1").bind(us.id).first();
+          if(td&&td.dp) await sendSMS(env,td.dp,`${us.handle||"Buyer"}: ${rawText.slice(0,480)}`);
+        }
+      }
+    }catch(_){/* relay must never break the TwiML ack */}
+  }
   await env.DB.prepare("INSERT INTO sms_log (phone,direction,body,status,created_at) VALUES (?,?,?,?,?)")
-    .bind(from,"in",text,"received",new Date().toISOString()).run().catch(()=>{});
+    .bind(from,"in",rawText,"received",new Date().toISOString()).run().catch(()=>{});
   return new Response(`<?xml version="1.0"?><Response>${reply?`<Message>${reply}</Message>`:""}</Response>`,{headers:{"content-type":"text/xml"}}); }
 async function runQueue(env){ const now=new Date().toISOString();
   const due=await env.DB.prepare("SELECT * FROM sms_queue WHERE sent=0 AND send_at<=? LIMIT 25").bind(now).all().catch(()=>({results:[]}));
@@ -532,10 +547,14 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   const center=await dealerName(env,v.dealer_id);
   const tok=await hmac(env,uid+":"+vdpId+":"+slot);
   await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
-    .bind(uid,vdpId,center,String(slot).slice(0,60),"requested",tok,new Date().toISOString()).run();
-  const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+    .bind(uid,vdpId,center,String(slot).slice(0,60),"confirmed",tok,new Date().toISOString()).run();
+  const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
+  const smsBody=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`;
+  await sendSMS(env,u&&u.phone,smsBody).catch(()=>{});                                   // instant — no cron wait
   await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
-    .bind(u&&u.phone,"drive-confirm",`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`,new Date().toISOString(),"none",new Date().toISOString()).run().catch(()=>{});
+    .bind(u&&u.phone,"drive-confirm",smsBody,new Date(Date.now()+864e5).toISOString(),"none",new Date().toISOString()).run().catch(()=>{});   // +24h reminder, not duplicate
+  if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
+    if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${slot}. Reply here to text the buyer. Console: dealer.carnimbus.com`).catch(()=>{}); }
   return json({ok:true,pass:"/pass/"+tok,center:center,slot:slot}); }
 async function carChat(request,env,uid){ const {vdpId,messages,lang}=await request.json().catch(()=>({})); const ES=lang==="es";
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
@@ -575,10 +594,14 @@ Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFI
   let pass=null;
   if(book){ try{ const b=JSON.parse(book[1]); const tok=await hmac(env,uid+":"+vdpId+":"+b.slot);
     await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
-      .bind(uid,vdpId,b.center,b.slot,"requested",tok,new Date().toISOString()).run();
-    const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
+      .bind(uid,vdpId,b.center,b.slot,"confirmed",tok,new Date().toISOString()).run();
+    const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
+    const chatSms=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`;
+    await sendSMS(env,u.phone,chatSms).catch(()=>{});
     await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
-      .bind(u.phone,"drive-confirm",`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`,new Date().toISOString(),"none",new Date().toISOString()).run();
+      .bind(u.phone,"drive-confirm",chatSms,new Date(Date.now()+864e5).toISOString(),"none",new Date().toISOString()).run();
+    if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
+      if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${b.slot}. Reply here to text the buyer. Console: dealer.carnimbus.com`).catch(()=>{}); }
     pass="/pass/"+tok; }catch(_){} }
   const cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").trim();
   const lastUser=(messages||[]).slice(-1)[0];
