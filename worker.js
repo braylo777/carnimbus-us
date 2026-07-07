@@ -710,7 +710,11 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   ].filter(Boolean);
   return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass — ${t.year} ${t.make} ${t.model}</title>
 <link rel="stylesheet" href="/assets/fonts/fonts.css"><link rel="stylesheet" href="/assets/styles.css"><script src="/assets/vendor/qrcodegen.js" defer></script><script src="/assets/js/pass-render.js" defer></script>
-<style>@media print{.noprint{display:none}body{background:#fff!important}} *{font-family:Manrope,system-ui,sans-serif} body{background:#06163b;color:#e2e9f2;margin:0;padding:20px;display:flex;justify-content:center}
+<style>
+*{font-family:Manrope,system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:auto;margin:10mm}
+@media print{.noprint{display:none!important}body{background:#fff!important;padding:0!important}.pass{box-shadow:none!important;border:1px solid #0a1f4d!important;margin:0 auto;page-break-inside:avoid}}
+body{background:#06163b;color:#e2e9f2;margin:0;padding:20px;display:flex;justify-content:center}
 .pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .brand{display:flex;align-items:center;gap:9px;padding:13px 20px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18)}
 .hero{height:180px;background:#06163b url('${photo}') center/cover}.pd{padding:20px}
