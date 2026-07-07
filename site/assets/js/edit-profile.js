@@ -69,7 +69,6 @@ document.addEventListener("DOMContentLoaded",function(){
     var d=await r.json().catch(function(){return{};});
     btn.textContent="Save my profile"; btn.disabled=false;
     if(!d.ok)return msg(m,"Couldn't save — try again.");
-    document.getElementById("ph-quiz").style.display="none";document.getElementById("ph-done").style.display="block";
-    window.scrollTo(0,0);
+    location.replace("https://app.carnimbus.com/profile");   // straight back to the account — no interstitial
   });
 });
