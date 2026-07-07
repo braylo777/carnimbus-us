@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded",function(){
     else $("y-av").textContent=initials;
     $("y-name").textContent=name;
     $("y-phone").textContent="•••-"+String(me.phone||"").slice(-4);
-    if(me.sid)$("y-cid").textContent="CID# "+String(me.sid).replace(/^SID/,"CID");   // the stored customer ID, labeled CID#
+    if(me.sid)$("y-cid").textContent="CID# "+String(me.sid).replace(/^(SID|CID)-?/,"");   // label carries CID#, so strip the prefix from the code
     else if(me.cid)$("y-cid").textContent="CID# "+me.cid;
     var a=me.answers||{};
     if(me.answers){document.getElementById("y-preq").style.display="";

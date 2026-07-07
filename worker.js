@@ -733,7 +733,7 @@ ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span c
 <div class="grid" style="margin-top:0">${fin.map(f=>`<div><div class="k">${f[0]}</div>${f[1]}</div>`).join("")}</div>
 <div style="font:500 9px Manrope;color:#8ca0c4;margin-top:8px">Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.</div></div>
 <div class="stub"><canvas id="qr" width="118" height="118" style="background:#fff;border-radius:10px;flex:none"></canvas>
-<div style="min-width:0"><div class="k">CID · tracking</div><div class="mono" style="color:#fff">${String(t.sid||"—").replace(/^SID/,"CID")}</div>
+<div style="min-width:0"><div class="k">CID · tracking</div><div class="mono" style="color:#fff">${String(t.sid||"—").replace(/^(SID|CID)-?/,"")}</div>
 <div class="k" style="margin-top:8px">Check-in code</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
 <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">Scan at Porsche South Bay to check in.</div></div></div>
 <button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">Save / Print PDF</button>
