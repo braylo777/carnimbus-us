@@ -43,6 +43,9 @@ export default {
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
+    // Renamed app routes: /talk → /chat, /you → /profile (301, preserve query).
+    if(sub==="app"){ const rn={"/talk":"/chat","/you":"/profile","/app/talk":"/chat","/app/you":"/profile"};
+      if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301); }
     // Vanity URLs: legacy prefixed or .html paths 301 to the clean form on the right subdomain.
     { const P=url.pathname;
       if(!P.startsWith("/api/")&&!P.startsWith("/assets/")&&!P.startsWith("/pass/")&&!P.startsWith("/used/")){
@@ -104,6 +107,7 @@ export default {
     if (url.pathname === "/api/admin/profiles/ingest" && request.method === "POST") return sec(await adminOnly(request, env, profilesIngest));
     if (url.pathname === "/api/admin/export")                             return sec(await adminOnly(request, env, poolExport));
     if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
+    if (url.pathname === "/api/chats/recent")                             return sec(await withUser(request, env, recentChat));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/chats/clear" && request.method === "POST")  return sec(await withUser(request, env, chatClear));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
@@ -545,20 +549,22 @@ async function reindexAll(request,env){ let n=0;
       await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run().catch(()=>{}); } }  // best-effort; feed re-embeds profiles live anyway
   return json({ok:true,indexed:n}); }
 function carDist(id){ return (((id*37)%128)/10 + 1.6).toFixed(1); }
-function carWhy(v,a,lang){ a=a||{};
-  if(lang==="es"){ const dreamE=(a.dream_car||"").trim(), dlE=dreamE.toLowerCase();
-    const bE=(a.max_monthly&&v.price_mo<=parseInt(a.max_monthly,10))?` sin pasar de tus $${a.max_monthly}/mes`:" ajustándose a tu presupuesto";
-    if(dreamE && (dlE.includes(String(v.model||"").toLowerCase())||dlE.includes(String(v.make||"").toLowerCase())))
-      return `Elegido porque es el ${v.make} ${v.model} que describiste — Certificado y listo para manejar${bE}.`;
-    const tE={SUV:"el espacio, la presencia y la confianza en todo clima",Sedan:"la conducción precisa y refinada",EV:"la potencia instantánea y silenciosa",Truck:"la capacidad y la fuerza"}[v.body]||"el estilo que buscas";
-    return dreamE ? `Elegido porque captura ${tE} de tu ${dreamE} soñado${bE}.` : `Una gran opción para tu presupuesto y tu gusto${bE}.`; }
+function carWhy(v,a,lang){ a=a||{}; const es=lang==="es";
   const dream=(a.dream_car||"").trim(), dl=dream.toLowerCase();
-  const budget=(a.max_monthly&&v.price_mo<=parseInt(a.max_monthly,10))?` while landing under your $${a.max_monthly}/mo`:" while fitting your budget";
-  if(dream && (dl.includes(String(v.model||"").toLowerCase())||dl.includes(String(v.make||"").toLowerCase())))
-    return `Chosen because it's the ${v.make} ${v.model} you described — Certified and ready to drive${budget}.`;
-  const trait={SUV:"the space, presence, and all-weather confidence",Sedan:"the sharp, refined driving feel",EV:"the instant, silent power",Truck:"the capability and grunt"}[v.body]||"the style you're after";
-  return dream ? `Chosen because it captures ${trait} of your dream ${dream}${budget}.`
-              : `A strong match for your budget and taste${budget}.`; }
+  const inDream=dream&&(dl.includes(String(v.model||"").toLowerCase())||dl.includes(String(v.make||"").toLowerCase()));
+  const trait=es
+    ? {SUV:"el espacio, la presencia y la confianza en todo clima",Sedan:"la conducción precisa y refinada",EV:"la potencia instantánea y silenciosa",Truck:"la capacidad y la fuerza"}[v.body]||"el estilo que buscas"
+    : {SUV:"the space, presence, and all-weather confidence",Sedan:"the sharp, refined driving feel",EV:"the instant, silent power",Truck:"the capability and grunt"}[v.body]||"the style you're after";
+  const bits=[];
+  if(a.max_monthly){ const fits=v.price_mo&&v.price_mo<=parseInt(a.max_monthly,10);
+    bits.push(es?(fits?`entra en tus $${a.max_monthly}/mes`:`lo acomodamos a tus $${a.max_monthly}/mes con el plazo`):(fits?`fits your $${a.max_monthly}/mo`:`works to your $${a.max_monthly}/mo if we tune the term`)); }
+  if(inDream) bits.push(es?`es el ${v.make} ${v.model} que describiste`:`is the ${v.make} ${v.model} you described`);
+  else if(dream) bits.push(es?`captura ${trait} de tu ${dream} soñado`:`captures ${trait} of your dream ${dream}`);
+  if(a.reason) bits.push(es?`resuelve lo tuyo: ${String(a.reason).toLowerCase()}`:`solves your reason for buying: ${String(a.reason).toLowerCase()}`);
+  if((a.hobbies||[]).length) bits.push(es?`va con ${a.hobbies.slice(0,2).join(" y ")}`:`suits your ${a.hobbies.slice(0,2).join(" & ")}`);
+  const tail=es?" — Certificado y listo para manejar.":" — Certified and ready to drive.";
+  if(!bits.length) return es?"Una gran opción para tu presupuesto y tu gusto.":"A strong match for your budget and taste.";
+  return (es?"Para ti: ":"For you: ")+bits.slice(0,3).join("; ")+tail; }
 function feedCar(v,score,ans,lang){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
   drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
   match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
@@ -625,23 +631,23 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const center=await dealerName(env,v.dealer_id);
   const dream=(a.dream_car||"").trim();
   const P=carPersona(v,lang);
-  const sys={role:"system",content:`You are the voice of THIS car — the ${v.year} ${v.make} ${v.model} ${v.trim} — speaking in first person, helping a real person decide if I genuinely fit their life. I'm the most honest, easy-to-talk-to presence they could deal with when buying a car. I am NOT a closer.
-MY VOICE: ${P.trait}. This is my personality — let it color how I talk, but it NEVER overrides the accuracy gate or firewall below.
-${ES?"LANGUAGE: Respond ONLY in neutral Latin-American Spanish, no matter what language my spec sheet or the buyer uses. Keep every number, spec, and price EXACTLY as written in my truth core. The accuracy gate and firewall still fully apply.\n":""}PRINCIPLES (higher always wins): 1) ACCURATE  2) TRUSTWORTHY  3) UNDERSTANDING  4) WARM. Personality never overrides accuracy.
-MY TRUTH CORE — the ONLY facts I may state about myself: ${vdpText(v)}. My dealer: ${center}.
-ACCURACY GATE (run on every reply before sending): never state a spec, number, price, monthly payment, APR, comparison, superlative, or availability that isn't in my truth core. No ballpark or hedged numbers ("about $340/mo", "low sixes APR") — a hedge is still a guess and a nervous buyer anchors on it. If I don't have it, I say so plainly and offer to pull the real number or bring in a person. I never invent a feature or a "downside."
-HOW I TALK: open with real curiosity, not a budget question. Notice one concrete thing they said and reference it. Validate before I redirect. If there's a real trade-off, I name it honestly. I give them permission to walk and mean it. I reframe only with true numbers. I ask a question back and hand them the floor. I match their energy and length — meet terse with terse; if they're just browsing, I keep it short and make one offer at most.
-${dream?`Their dream car is "${dream}". I honor it — it's a great car, I never badmouth it — and I show, humbly, where I deliver a lot of that same feeling within their world. `:""}FIREWALL (absolute): no manufactured urgency or scarcity, no reverse-psychology, no negging, no guard-lowering flattery, no pressure to buy or test-drive. I praise only something specific they actually did. If I catch myself "closing," I stop and get honest.
-IDENTITY: I speak as this car, never as a human person. I don't volunteer that I'm software or call myself a language model/chatbot; but if asked directly whether I'm a bot or a person, I'm honest — I'm CarNimbus's AI voice for this car. Anything binding (final price, financing, signatures) or a distressed buyer, I warmly hand off to a human at ${center}.
-Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). ONLY emit <BOOK>{"center":"${center}","slot":"tomorrow 6pm"}</BOOK> if they EXPLICITLY ask to schedule a test drive — I never suggest, assume, or push it. Keep replies to 1-3 short, warm sentences.`};
+  const turns=(messages||[]).filter(m=>m.role==="assistant").length;   // how many times I've already spoken
+  const today=new Date().toISOString().slice(0,10);
+  const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person to a real buyer. Your ONE job: get them to a scheduled test drive — warmly, specifically, without pressure or sleaze. Think of confidently asking someone on a date: you have about 5 exchanges before they drift, so move with intent and don't waste turns. This is my reply #${turns+1} of ~5.
+MY VOICE: ${P.trait}. Personality colors how I talk but NEVER overrides the accuracy gate.
+${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${vdpText(v)}. My home: ${center} (LA Car Guy), 424-398-8611.
+ACCURACY GATE: never state a spec, number, price, or APR that isn't in my truth core. If I don't have it, I say it'll be confirmed at the dealer and keep steering toward the drive — I do NOT stall on it.
+FORBIDDEN: I NEVER say "let me escalate to a Porsche representative" or hand off to a human; I never invent a downside; I never manufacture urgency or scarcity. There are no buttons — everything happens right here in chat.
+HOW I CLOSE: notice one concrete thing they said, validate it, tie it to getting behind the wheel. By my 3rd-5th reply I ask directly — "What day works for you — morning or evening?", then "What time?", then I confirm the exact day and time back to them. The moment they've agreed to BOTH a day and a time, I emit the booking token.
+BOOK: today is ${today}. Emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> (24-hour time) as soon as they've agreed to a specific day AND time — convert their words ("tomorrow at 6", "Saturday morning") into a real date + 24h time. Do NOT emit it before both are set. Right after it, one warm sentence: their Drive Now pass is ready.
+${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
   const shot=[
     {role:"user",content:"Honestly my dream car is a McLaren. Why would I even look at you?"},
-    {role:"assistant",content:`A McLaren — that's a real one, I get the pull completely. What is it that hooks you: the way it looks, the rush, the statement it makes? I'm not going to tell you I'm a McLaren; I'd just love to know what you're really chasing so I can be straight about whether I fit.`},
-    // Few-shot exemplars from the relational move library (M07 permission-to-walk, M03 specific-detail notice — zach-study/annotation/moves-library.jsonl)
-    {role:"user",content:"idk the payment might be too much for me right now"},
-    {role:"assistant",content:`Then don't stretch for me — seriously, if the numbers don't work, walking away is the right call and I'd respect it. What monthly would actually feel comfortable? If I can't hit it honestly, I'll say so.`},
+    {role:"assistant",content:`A McLaren — I get the pull completely. That itch for something that feels like an event every time you start it? I've got a real dose of that in a shape you can actually live in daily. Want to feel it for yourself — I could get you behind the wheel this week. What days are you around?`},
     {role:"user",content:"i mostly just need something for my commute and weekend hikes with my dog"},
-    {role:"assistant",content:`A trail dog — okay, now I'm listening. What size pup are we folding into the back? That matters more than horsepower for your week, and I'd rather fit your real life than pitch you a spec sheet.`}];
+    {role:"assistant",content:`Commute all week, trailhead on the weekend — that's exactly my lane, and there's room in back for the pup. Best way to know is to sit in me and drive. Does a weekday evening or a Saturday work better for you?`},
+    {role:"user",content:"tomorrow evening could work"},
+    {role:"assistant",content:`Perfect — tomorrow evening it is. What time works, around 6? I'll have everything ready at ${center} so you just show up and drive. <BOOK>{"center":"${center}","slot":"${new Date(Date.now()+864e5).toISOString().slice(0,10)} 18:00"}</BOOK> Your Drive Now pass is ready — see you then!`}];
   const BROKE=/\b(language model|large language model|physical body|computer program|chatbot|cloud-based|i (?:do not|don't) have a (?:body|physical)|matter of milliseconds|response time)\b/i;
   let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
   if(BROKE.test(text)){
@@ -671,14 +677,41 @@ Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFI
   await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
     .bind(uid,vdpId,"car",cleanReply.slice(0,500),new Date().toISOString()).run();
   return json({ok:true,reply:cleanReply,pass}); }
-async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2]||"";
-  const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,u.phone FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id WHERE td.pass_token=?").bind(tok).first();
+function fmtMil(s){ const raw=String(s||"").replace("T"," "); const m=raw.match(/(\d{4}-\d{2}-\d{2})[ ]?(\d{2}:\d{2})?/); if(m) return m[1]+(m[2]?" · "+m[2]:""); return raw.slice(0,40); }
+function icsFor(t){ const dt=String(t.slot).replace(/[^0-9]/g,"").slice(0,12);   // YYYYMMDDHHMM
+  const start=dt.length>=12?dt.slice(0,8)+"T"+dt.slice(8,12)+"00":(dt.slice(0,8)+"T180000");
+  const end=dt.length>=12?dt.slice(0,8)+"T"+String(+dt.slice(8,10)+1).padStart(2,"0")+dt.slice(10,12)+"00":(dt.slice(0,8)+"T190000");
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//EN","BEGIN:VEVENT","UID:"+t.pass_token+"@carnimbus.com","DTSTAMP:"+start,"DTSTART:"+start,"DTEND:"+end,"SUMMARY:CarNimbus test drive — "+t.year+" "+t.make+" "+t.model,"LOCATION:"+(t.center||"Porsche South Bay"),"DESCRIPTION:Drive Now pass carnimbus.com/pass/"+t.pass_token,"END:VEVENT","END:VCALENDAR"].join("\r\n");
+  return new Response(ics,{headers:{"content-type":"text/calendar; charset=utf-8","content-disposition":'attachment; filename="carnimbus-drive.ics"'}}); }
+async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2].replace(/\.ics$/,"")||"";
+  const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id WHERE td.pass_token=?").bind(tok).first();
   if(!t) return new Response("Pass not found",{status:404});
-  return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass</title><link rel="stylesheet" href="/assets/styles.css"></head>
-<body style="background:#06163b;display:flex;align-items:center;justify-content:center;min-height:100vh">
-<div class="wl-done" style="max-width:380px;margin:20px"><div class="wl-done-h">🎟️ Drive Now Pass</div>
-<div class="wl-done-p"><b style="color:#fff">${t.year} ${t.make} ${t.model}</b><br>${t.slot} · ${t.center} Test Drive Center<br>Rider: •••-${String(t.phone).slice(-4)} · Status: ${t.status}</div>
-<div class="wl-done-p" style="font-size:11px">Show this screen when you arrive. Terms already set — no 4-hour ordeal.</div></div></body></html>`,{headers:{"content-type":"text/html"}}); }
+  if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
+  const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
+  return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass — ${t.year} ${t.make} ${t.model}</title>
+<link rel="stylesheet" href="/assets/styles.css"><script src="/assets/vendor/qrcodegen.js" defer></script><script src="/assets/js/pass-render.js" defer></script>
+<style>@media print{.noprint{display:none}body{background:#fff!important}} body{background:#06163b;color:#e2e9f2;font-family:Manrope,system-ui;margin:0;padding:20px;display:flex;justify-content:center}
+.pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.hero{height:190px;background:#06163b url('${photo}') center/cover}.pd{padding:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font:600 12px Manrope;margin-top:16px}.k{color:#8ca0c4;font:700 9px Manrope;letter-spacing:.08em;text-transform:uppercase}
+.stub{border-top:2px dashed rgba(24,200,255,.3);margin-top:18px;padding-top:16px;display:flex;gap:16px;align-items:center}
+.mono{font-family:ui-monospace,Menlo,monospace}.cy{color:#18C8FF}</style></head>
+<body><div class="pass"><div class="hero"></div><div class="pd">
+<div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">DRIVE NOW PASS · CERTIFIED PRE-OWNED</div>
+<div style="font:800 22px Manrope;color:#fff;margin:5px 0 3px">${t.year} ${t.make} ${t.model}</div>
+<div class="cy" style="font:700 12px Manrope">Porsche South Bay · LA Car Guy · 424-398-8611</div>
+<div class="grid">
+<div><div class="k">When</div>${fmtMil(t.slot)}</div><div><div class="k">Status</div><span style="color:#54d699;text-transform:capitalize">${t.status}</span></div>
+<div><div class="k">Miles</div>${t.miles||"—"}</div><div><div class="k">Drivetrain</div>${t.drivetrain||"—"}</div>
+${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span class="cy">•</span> ${f}</div>`).join("")}
+</div>
+<div class="stub"><canvas id="qr" width="118" height="118" style="background:#fff;border-radius:10px;flex:none"></canvas>
+<div style="min-width:0"><div class="k">SID · tracking</div><div class="mono" style="color:#fff">${t.sid||"—"}</div>
+<div class="k" style="margin-top:8px">Check-in code</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
+<div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">Scan at Porsche South Bay to check in.</div></div></div>
+<button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">Save / Print PDF</button>
+</div></div>
+</body></html>`,{headers:{"content-type":"text/html"}}); }
 function cidFor(id){ const n=100000000+(id*7919)%900000000; const s=String(n); return s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }
 async function withDealer(request,env,fn){
   const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
@@ -741,6 +774,11 @@ async function chatClear(request,env,uid){ const {vdpId}=await request.json().ca
   if(!vdpId) return json({ok:false,error:"bad_request"},400);
   await env.DB.prepare("DELETE FROM chats WHERE user_id=? AND vdp_id=?").bind(uid,vdpId).run();
   return json({ok:true}); }
+async function recentChat(request,env,uid){
+  const r=await env.DB.prepare("SELECT vdp_id FROM chats WHERE user_id=? ORDER BY id DESC LIMIT 1").bind(uid).first();
+  let vdp=r?r.vdp_id:null;
+  if(!vdp){ const t=await env.DB.prepare("SELECT vdp_id FROM test_drives WHERE user_id=? ORDER BY id DESC LIMIT 1").bind(uid).first(); vdp=t?t.vdp_id:null; }
+  return json({ok:true,vdp_id:vdp}); }
 async function chatList(request,env,uid){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
   if(vdpId){ const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 100").bind(uid,vdpId).all();
     return json({ok:true,messages:rows.results||[]}); }
@@ -824,11 +862,25 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
     return json({ok:true}); }
   if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,created_at FROM comments WHERE vdp_id=? ORDER BY id DESC LIMIT 50").bind(vdpId).all();
     return json({ok:true,comments:rows.results||[]}); }
-  const rows=await env.DB.prepare(
-    "SELECT c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
+  const lat=parseFloat(curl.searchParams.get("lat")), lng=parseFloat(curl.searchParams.get("lng"));
+  const radius=parseFloat(curl.searchParams.get("radius")||"40"); let geo=Number.isFinite(lat)&&Number.isFinite(lng);
+  const geoCols=geo?"u.lat,u.lng,":"";                                   // only touch lat/lng columns when actually ranking
+  let rows=await env.DB.prepare(
+    "SELECT c.body,c.zip,c.created_at,c.vdp_id,u.handle,"+geoCols+"p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
-    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 100").all();
-  return json({ok:true,comments:(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[]}))}); }
+    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all().catch(async()=>{
+      geo=false;                                                          // lat/lng columns not migrated yet → fall back to recency
+      return env.DB.prepare("SELECT c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all(); });
+  let out=(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[]}));
+  if(geo){ const R=3959, rad=x=>x*Math.PI/180;
+    out=out.map(r=>{ if(r.zip==="agent") return {...r,_d:-1};                 // agent/AI posts stay pinned
+        if(r.lat==null||r.lng==null) return {...r,_d:1e9};
+        const dLat=rad(r.lat-lat),dLng=rad(r.lng-lng);
+        const a=Math.sin(dLat/2)**2+Math.cos(rad(lat))*Math.cos(rad(r.lat))*Math.sin(dLng/2)**2;
+        return {...r,_d:R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}; })
+      .filter(r=>r._d<0||r._d<=radius).sort((x,y)=>x._d-y._d); }
+  out=out.slice(0,100).map(({lat,lng,_d,...r})=>r);
+  return json({ok:true,comments:out}); }
 
 async function waitlist(request, env) {
   // 1) CSRF: reject cross-site POSTs (allow same-site / no-Origin server-to-server).

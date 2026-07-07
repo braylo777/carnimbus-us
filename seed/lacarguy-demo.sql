@@ -17,7 +17,8 @@ INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,featur
   '["/assets/inventory/porsche-macan.jpg"]',1,0,
   (SELECT id FROM dealer_leads WHERE client_no='CN-LACARGUY'),datetime('now')
  WHERE NOT EXISTS (SELECT 1 FROM vdps WHERE vin='DEMO-MACAN-2025');
-UPDATE vdps SET active=1, price_mo=728, miles='5,190', trim='',
+UPDATE vdps SET active=1, price_mo=728, miles='5,190', trim='', drivetrain='AWD', body='SUV',
+  photos='["/assets/inventory/porsche-macan.jpg?v=4"]',
   features='["Certified Pre-Owned","Premium Package Plus","Panoramic Roof System","Heated & ventilated seats","Surround View","AWD · 7-speed PDK","Clean CARFAX"]',
   description='2025 Porsche Macan, Certified Pre-Owned, 5,190 miles, Volcano Gray Metallic over black leather. Engine: 2.0L turbocharged inline-4, 261 horsepower and 295 lb-ft of torque, 7-speed PDK dual-clutch, all-wheel drive. Performance: 0 to 60 mph in about 6.0 seconds, top track speed around 144 mph. Fuel economy: 19 city / 25 highway MPG. Premium Package Plus (panoramic roof, heated and ventilated front seats, Surround View camera), 19-inch Macan wheels, LED headlights with Porsche Dynamic Light System Plus, Lane Change Assist, Apple CarPlay, 8-speaker audio, memory seats. Clean CARFAX, Porsche Approved Certified Pre-Owned with 24-month/unlimited-mile limited warranty and roadside assistance, at Porsche South Bay in Hawthorne, CA. Retail $56,083, about $728/mo, $0 down.',
   embedding_synced=0, dealer_id=(SELECT id FROM dealer_leads WHERE client_no='CN-LACARGUY')

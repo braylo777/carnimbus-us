@@ -1,7 +1,17 @@
 document.addEventListener("DOMContentLoaded",function(){
   var list=document.getElementById("posts");
+  var ZIPS={ "90045":[33.9585,-118.3970],"90066":[34.0,-118.43],"90230":[33.997,-118.396],"90232":[34.019,-118.391],"90291":[33.991,-118.465],"90501":[33.836,-118.298],"90504":[33.872,-118.326],"90277":[33.836,-118.39],"90266":[33.892,-118.411],"90254":[33.862,-118.4],"90245":[33.917,-118.402],"90802":[33.768,-118.193],"90740":[33.757,-118.079],"90803":[33.759,-118.129],"90731":[33.736,-118.292] };
+  var GEO=null;
+  function feedUrl(){ return "/api/comments"+(GEO?("?lat="+GEO[0]+"&lng="+GEO[1]+"&radius=40"):""); }
+  function live(){ var el=document.getElementById("nm-live"); if(el)el.style.display="inline-flex"; }
+  var nl=document.getElementById("nm-loc");
+  if(nl)nl.addEventListener("click",function(){ if(!navigator.geolocation)return; nl.textContent="Locating…";
+    navigator.geolocation.getCurrentPosition(function(p){ GEO=[p.coords.latitude,p.coords.longitude]; nl.textContent="📍 Near you"; live(); load(); },
+      function(){ nl.textContent="📍 Use my location"; }); });
+  var nz=document.getElementById("nm-zip");
+  if(nz)nz.addEventListener("input",function(e){ var z=e.target.value.trim(); if(ZIPS[z]){ GEO=ZIPS[z]; live(); load(); } });
   function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(s<3600)return Math.max(1,Math.round(s/60))+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d";}
-  function load(){fetch("/api/comments").then(function(r){return r.json();}).then(function(d){
+  function load(){fetch(feedUrl()).then(function(r){return r.json();}).then(function(d){
     var cs=d.comments||[];
     if(!cs.length){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Be the first — say something about a car you talked to.</div>';return;}
     list.innerHTML=cs.map(function(c){
@@ -30,4 +40,5 @@ document.addEventListener("DOMContentLoaded",function(){
     var d=await r.json().catch(function(){return{};});
     if(d.ok){inEl.value="";document.getElementById("post-msg").style.display="none";load();}
   });
+  setInterval(function(){ if(document.visibilityState!=="hidden") load(); }, 20000);   // live refresh
 });

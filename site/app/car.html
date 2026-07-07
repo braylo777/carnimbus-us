@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#06163b">
 <title>CarNimbus — Talk to the car</title>
 <meta name="robots" content="noindex">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/assets/fonts/fonts.css">
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
@@ -36,17 +37,7 @@
           <div class="glass pd" style="flex:1;min-width:140px;padding:12px"><div class="row" style="align-items:center;gap:6px;font:700 10px Manrope"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></span>In budget</div><div id="fit-budget" style="font:500 9px Manrope;color:#8ca0c4;margin-top:4px"></div></div>
           <div class="glass pd" id="fit-match" style="flex:1;min-width:140px;padding:12px"><div class="row" style="align-items:center;gap:6px;font:700 10px Manrope"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/></svg></span><b></b></div><div style="font:500 9px Manrope;color:#8ca0c4;margin-top:4px">Top pick for your profile.</div></div>
         </div>
-        <button id="book-open" class="btn primary md" type="button" style="width:100%;margin-top:16px">Schedule Test Drive</button>
-        <div id="book-panel" class="glass pd" style="display:none;margin-top:12px;border-radius:14px">
-          <div style="font:700 12px Manrope;color:#fff">Schedule your test drive</div>
-          <div id="book-where" style="font:500 10px Manrope;color:#8ca0c4;margin:3px 0 11px"></div>
-          <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:7px">PICK A DAY</div>
-          <div class="row" id="book-days" style="flex-wrap:wrap;gap:6px"></div>
-          <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:13px 0 7px">PICK A TIME</div>
-          <div class="row" id="book-times" style="flex-wrap:wrap;gap:6px"></div>
-          <button id="book-confirm" class="btn primary md" type="button" style="width:100%;margin-top:15px">Confirm test drive</button>
-          <div id="book-msg" style="font:600 10px Manrope;color:#aebfdf;margin-top:9px;display:none"></div>
-        </div>
+        <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:16px;line-height:1.5">Just tell me when you want to drive — I'll set it up right here in chat. No forms.</div>
       </div>
       <div class="col" style="flex:1;min-width:0;height:100%">
         <div class="row" style="align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(24,200,255,.12)">
@@ -60,7 +51,6 @@
           <label class="vh" for="chat-in">Message the car</label>
           <input id="chat-in" class="pill" style="flex:1;height:44px" placeholder="Ask me anything — I answer straight.">
           <button id="chat-send" class="btn primary md" type="button" style="margin-left:8px">Send</button>
-          <a id="pass-btn" class="btn primary md" style="display:none;margin-left:8px;text-decoration:none">See your pass →</a>
         </div>
       </div>
     </div>

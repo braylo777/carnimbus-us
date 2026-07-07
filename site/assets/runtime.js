@@ -41,9 +41,9 @@
     VehicleCard:function(el){var mk=a(el,'make','').toLowerCase();var img=a(el,'image','')||CAR_IMGS[mk]||'';var cert=a(el,'certified','')==='true',best=a(el,'best-match','')==='true';
       return '<div class="glass vcard hoverable"><div class="vphoto">'+CARFALL+(img?'<img src="'+img+'" alt="'+a(el,'year','')+' '+a(el,'make','')+' '+a(el,'model','')+'" loading="lazy" style="position:relative;z-index:1" onerror="this.remove()">':'')+(cert?'<span class="vbadge cert">Certified</span>':'')+(best?'<span class="vbadge best">Best match</span>':'')+'</div><div class="vbody"><h4>'+a(el,'year','')+' '+a(el,'make','')+' '+a(el,'model','')+'</h4><div class="vtrim">'+(a(el,'trim','')||'&nbsp;')+'</div><div class="row vmeta"><span>'+a(el,'miles','')+' mi</span><span>'+a(el,'drivetrain','')+'</span></div><div style="font:600 10px Manrope;color:#8ca0c4;margin-top:2px">$0 down · 72-month term</div><div class="row vprice"><b>$'+a(el,'price-per-mo','')+'<small>/mo</small></b><span class="vcta">'+a(el,'cta','Drive this')+' →</span></div></div></div>';},
     PhoneFrame:function(el){return '<div class="phone"><div class="notch"></div><div class="screen"><div class="statusbar"><span>'+a(el,'time','9:41')+'</span><span style="display:inline-flex;gap:5px;align-items:center"><svg width="15" height="11" viewBox="0 0 16 12" fill="#fff"><path d="M1 8h2v3H1zM4.5 6h2v5h-2zM8 3.5h2V11H8zM11.5 1h2v10h-2z"/></svg><svg width="20" height="11" viewBox="0 0 22 12" fill="none"><rect x=".8" y=".8" width="17" height="10.4" rx="2.4" stroke="#fff" opacity=".5"/><rect x="2.3" y="2.3" width="12" height="7.4" rx="1.2" fill="#fff"/><path d="M19.5 4v4a2 2 0 0 0 0-4Z" fill="#fff" opacity=".5"/></svg></span></div>'+el.innerHTML+'</div></div>';},
-    BottomTabBar:function(el){var val=a(el,'value','discover');
-      var I={discover:'<circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/',feed:'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/',talk:'<path d="M8 9h8M8 13h5M21 12a8 8 0 1 1-3.6-6.7L21 4l-.8 3.6A8 8 0 0 1 21 12Z"/',you:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/'};
-      return '<div class="tabbar">'+['discover','feed','talk','you'].map(function(t){return '<div class="tab'+(t===val?' on':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+I[t]+'></svg>'+t+'</div>';}).join('')+'</div>';}
+    BottomTabBar:function(el){var val=a(el,'value','feed');
+      var I={feed:'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/',chat:'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/'};
+      return '<div class="tabbar">'+['feed','chat','profile'].map(function(t){return '<div class="tab'+(t===val?' on':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+I[t]+'></svg>'+t+'</div>';}).join('')+'</div>';}
   };
   function upgrade(){
     var guard=0;
@@ -242,7 +242,7 @@
       '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
       '<div style="position:relative"><button class="avatar" style="width:28px;height:28px;font-size:11px;border:none;cursor:pointer" id="appnav-av" aria-label="Account menu">·</button>'+
       '<div id="appnav-menu" style="display:none;position:absolute;right:0;top:34px;z-index:60;min-width:160px;background:rgba(6,16,40,.98);border:1px solid rgba(24,200,255,.2);border-radius:12px;padding:6px">'+
-        '<a href="https://app.carnimbus.com/profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
+        '<a href="https://app.carnimbus.com/edit-profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
         '<button id="appnav-out" type="button" style="display:block;width:100%;text-align:left;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;background:none;border:none;cursor:pointer">Sign out</button>'+
       '</div></div></div>';
     fetch("/api/me").then(function(r){return r.json();}).then(function(d){
@@ -258,12 +258,13 @@
   function wireTabbar(){
     if(!document.getElementById("appnav")||document.querySelector(".tabbar")) return;
     var here=location.pathname;
-    var T=[["feed","https://app.carnimbus.com/feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
-           ["talk","https://app.carnimbus.com/talk",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
-           ["you","https://app.carnimbus.com/you",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
+    var T=[["Feed","https://app.carnimbus.com/feed","feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
+           ["Chat","https://app.carnimbus.com/chat","chat",'<path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/>'],
+           ["Profile","https://app.carnimbus.com/profile","profile",'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>']];
     var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
-    bar.innerHTML=T.map(function(t){ var on=here.indexOf(t[0])>-1;
-      return '<a class="tab'+(on?' on':'')+'" href="'+t[1]+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+t[2]+'</svg>'+t[0]+'</a>'; }).join('');
+    bar.innerHTML=T.map(function(t){ var key=t[2];
+      var on=here.indexOf("/"+key)>-1||(key==="chat"&&(here.indexOf("/car")>-1||here.indexOf("/talk")>-1))||(key==="profile"&&here.indexOf("/you")>-1);
+      return '<a class="tab'+(on?' on':'')+'" href="'+t[1]+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+t[3]+'</svg>'+t[0]+'</a>'; }).join('');
     document.body.appendChild(bar);
   }
   function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
@@ -360,7 +361,7 @@
       if(!d.ok||!d.cars||!d.cars.length){ if(empty){empty.style.display="block";empty.innerHTML='No cars yet — check back soon.';} return; }
       if(!d.authed){ var cta=document.createElement("div");
         cta.style.cssText="grid-column:1/-1;text-align:center;padding:10px;font:600 12px Manrope;color:#aebfdf";
-        cta.innerHTML='Showing newest cars. <a href="https://app.carnimbus.com/profile" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
+        cta.innerHTML='Showing newest cars. <a href="https://app.carnimbus.com/edit-profile" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
         feedEl.appendChild(cta); }
       d.cars.forEach(function(c){
         var card=document.createElement("div");
@@ -403,7 +404,7 @@
       inEl.value=""; bubble("you",msg); hist.push({role:"user",content:msg});
       var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:c.id,messages:hist})});
       if(r.status===401){ bubble("car",L("Sign in first so I remember you —"));
-        var a=document.createElement("a"); a.href="https://app.carnimbus.com/profile"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
+        var a=document.createElement("a"); a.href="https://app.carnimbus.com/edit-profile"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
       var d=await r.json();
       if(d.ok){ hist.push({role:"assistant",content:d.reply}); bubble("car",d.reply);
         if(d.pass){ var p=document.createElement("a"); p.href=d.pass; p.textContent="🎟️ "+L("Your Drive Now pass is ready →");

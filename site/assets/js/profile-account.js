@@ -29,8 +29,9 @@ document.addEventListener("DOMContentLoaded",function(){
     if(me.drive){var d=me.drive;$("y-up").style.display="block";
       $("y-veh").textContent=d.year+" "+d.make+" "+d.model;
       $("y-status").textContent=d.status;
-      $("y-center").textContent=d.center+" Test Drive Center";
-      $("y-slot").textContent=d.slot;
+      $("y-center").textContent="Porsche South Bay · LA Car Guy";
+      $("y-slot").textContent=fmtSlot(d.slot);
+      if(d.photos&&d.photos[0])$("y-photo").innerHTML='<img src="'+d.photos[0]+'" style="width:100%;height:100%;object-fit:cover" alt="">';
       $("y-pass").addEventListener("click",function(e){e.preventDefault();openPass(d);});
       $("y-chat").href="/car?id="+d.vdp_id;}
     fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(f){
@@ -54,24 +55,29 @@ document.addEventListener("DOMContentLoaded",function(){
       img.src=URL.createObjectURL(f); });
   var avc=$("y-av"); if(avc)avc.addEventListener("click",function(){ if(fi)fi.click(); });
 
+  // Format a slot like "2025-07-08 18:00" → "Tue Jul 8 · 18:00" (24h). Falls back to raw text.
+  function fmtSlot(s){ s=String(s||""); var m=s.match(/(\d{4})-(\d{2})-(\d{2})[ T]?(\d{2}:\d{2})?/);
+    if(!m)return s; var dt=new Date(m[1]+"-"+m[2]+"-"+m[3]+"T"+(m[4]||"00:00")+":00");
+    var wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return wd[dt.getDay()]+" "+mo[dt.getMonth()]+" "+dt.getDate()+(m[4]?" · "+m[4]:""); }
+  window.fmtSlot=fmtSlot;
   // Drive Now Pass modal
   function openPass(d){
-    $("pm-car").textContent=d.year+" "+d.make+" "+d.model;
-    $("pm-code").textContent=String(d.pass_token).slice(0,6).toUpperCase();
+    $("pm-car").innerHTML=d.year+" "+d.make+" "+d.model+'<div style="font:600 10px Manrope;color:#18C8FF;margin-top:2px">Certified · Porsche South Bay · LA Car Guy</div><div style="font:600 11px Manrope;color:#e2e9f2;margin-top:4px">'+fmtSlot(d.slot)+"</div>";
+    $("pm-code").textContent=(d.cid||String(d.pass_token).slice(0,6).toUpperCase());
     var qr=qrcodegen.QrCode.encodeText("https://carnimbus.com/pass/"+d.pass_token,qrcodegen.QrCode.Ecc.MEDIUM);
     var cv=$("pm-qr"),s=5,b=2,n=qr.size;cv.width=cv.height=(n+2*b)*s;var g=cv.getContext("2d");
     g.fillStyle="#fff";g.fillRect(0,0,cv.width,cv.height);g.fillStyle="#06163b";
     for(var y=0;y<n;y++)for(var x=0;x<n;x++)if(qr.getModule(x,y))g.fillRect((x+b)*s,(y+b)*s,s,s);
     $("pass-modal").style.display="flex";
-    $("pm-cal").onclick=function(){ var st=new Date().toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
-      var ics="BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:CarNimbus test drive — "+d.year+" "+d.make+" "+d.model+"\nLOCATION:"+(d.center||"")+"\nDESCRIPTION:Drive Now pass carnimbus.com/pass/"+d.pass_token+" ("+d.slot+")\nDTSTAMP:"+st+"\nEND:VEVENT\nEND:VCALENDAR";
-      var a=document.createElement("a");a.href="data:text/calendar;charset=utf-8,"+encodeURIComponent(ics);a.download="carnimbus-drive.ics";a.click(); };
+    $("pm-cal").onclick=function(){ location.href="/pass/"+d.pass_token+".ics"; };   // server .ics → reliable on iOS
     $("pm-share").onclick=function(){ var u="https://carnimbus.com/pass/"+d.pass_token;
-      if(navigator.share)navigator.share({title:"My CarNimbus Drive Now pass",text:d.year+" "+d.make+" "+d.model+" — "+d.slot,url:u});
+      if(navigator.share)navigator.share({title:"My CarNimbus Drive Now pass",text:d.year+" "+d.make+" "+d.model+" — "+fmtSlot(d.slot),url:u});
       else if(navigator.clipboard){navigator.clipboard.writeText(u);alert("Pass link copied.");} };
     $("pm-pdf").onclick=function(){ window.open("/pass/"+d.pass_token,"_blank"); };
-    $("pm-home").onclick=function(){ alert("iPhone: tap Share → Add to Home Screen to keep your pass one tap away."); };
+    $("pm-home").onclick=function(){ $("home-sheet").style.display="flex"; };
     $("pm-close").onclick=function(){ $("pass-modal").style.display="none"; };
+    var hc=$("hs-close"); if(hc)hc.onclick=function(){ $("home-sheet").style.display="none"; };
   }
   window.openPass=openPass;
 });
