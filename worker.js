@@ -697,6 +697,7 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid,p.answers FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id LEFT JOIN profiles p ON p.user_id=td.user_id WHERE td.pass_token=?").bind(tok).first();
   if(!t) return new Response("Pass not found",{status:404});
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
+  const isPrint=new URL(request.url).searchParams.get("print")==="1";
   const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
   let a={}; try{ a=JSON.parse(t.answers)||{}; }catch(_){}
   const APR={"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"}[a.fico]||null;
@@ -713,8 +714,9 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 <style>
 *{font-family:Manrope,system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @page{size:auto;margin:10mm}
-@media print{.noprint{display:none!important}body{background:#fff!important;padding:0!important}.pass{box-shadow:none!important;border:1px solid #0a1f4d!important;margin:0 auto;page-break-inside:avoid}}
+@media print{.noprint{display:none!important}body{background:#fff!important;padding:0!important;display:block!important}.pass{box-shadow:none!important;border:1px solid #0a1f4d!important;margin:0 auto;page-break-inside:avoid;border-radius:14px!important}}
 body{background:#06163b;color:#e2e9f2;margin:0;padding:20px;display:flex;justify-content:center}
+${isPrint?".noprint{display:none!important}body{background:#fff;padding:8px;display:block}.pass{box-shadow:none;border:1.5px solid #0a1f4d;border-radius:14px;margin:0 auto}":""}
 .pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .brand{display:flex;align-items:center;gap:9px;padding:13px 20px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18)}
 .hero{height:180px;background:#06163b url('${photo}') center/cover}.pd{padding:20px}
