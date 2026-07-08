@@ -47,9 +47,16 @@ export default {
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
-    // Renamed app routes: /talk → /chat, /you → /profile (301, preserve query).
-    if(sub==="app"){ const rn={"/talk":"/chat","/you":"/profile","/app/talk":"/chat","/app/you":"/profile"};
-      if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301); }
+    // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
+    if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
+      if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
+      // Vanity car URL: /talk/2025-porsche-macan → resolve slug to a vdp id, serve the car page.
+      const tm=url.pathname.match(/^\/talk\/([a-z0-9-]+)$/i);
+      if(tm){ const slug=tm[1];
+        const rows=await env.DB.prepare("SELECT id,year,make,model FROM vdps WHERE active=1").all().catch(()=>({results:[]}));
+        const hit=(rows.results||[]).find(v=>(String(v.year)+"-"+v.make+"-"+v.model).toLowerCase().replace(/[^a-z0-9]+/g,"-")===slug.toLowerCase());
+        if(hit){ url.pathname="/car"; url.searchParams.set("id",hit.id); request=new Request(url,request); }   // clean path → PREFIX block serves car.html, no 301
+        else return Response.redirect(url.origin+"/matches",302); } }
     // Vanity URLs: legacy prefixed or .html paths 301 to the clean form on the right subdomain.
     { const P=url.pathname;
       if(!P.startsWith("/api/")&&!P.startsWith("/assets/")&&!P.startsWith("/pass/")&&!P.startsWith("/used/")){
@@ -591,7 +598,13 @@ function carWhy(v,a,lang){ a=a||{}; const es=lang==="es";
   const tail=es?" — Certificado y listo para manejar.":" — Certified and ready to drive.";
   if(!bits.length) return es?"Una gran opción para tu presupuesto y tu gusto.":"A strong match for your budget and taste.";
   return (es?"Para ti: ":"For you: ")+bits.slice(0,3).join("; ")+tail; }
-function feedCar(v,score,ans,lang){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
+// ===== Affordability policy: real monthly from real price + buyer's down/APR/term. Runs on every car. =====
+const APR_FICO={"800+":6.4,"740-799":7.1,"670-739":9.3,"580-669":13.5,"under 580":17.9};
+function aprFor(fico){ return APR_FICO[fico]!=null?APR_FICO[fico]:12.0; }
+function monthlyFor(price,down,aprPct,term){ term=term||72; const P=Math.max(0,(+price||0)-(+down||0)), r=(+aprPct||0)/1200;
+  return r? Math.round(P*r*Math.pow(1+r,term)/(Math.pow(1+r,term)-1)) : Math.round(P/term); }
+function feedCar(v,score,ans,lang,mo){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,
+  price_mo:(mo!=null?mo:v.price_mo),price:v.price||null,miles:v.miles,
   drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
   match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
@@ -604,12 +617,16 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   if(!ranked){ const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all();
     ranked=(all.results||[]).map(r=>({id:r.id,vec:null})); }
   const budget=parseInt(ans.max_monthly,10)||0, CAP=budget?budget*1.15:0;
+  const apr=aprFor(ans.fico);
   const scored=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
     if(!v) continue;
-    if(CAP && r.vec!=null && v.price_mo>CAP) continue;                     // HARD GATE: never over budget×1.15
+    // Real per-buyer monthly when we have a real price; else fall back to the stored price_mo (pre-inventory-dump).
+    const mo=v.price? monthlyFor(v.price,ans.max_down,apr,72) : (Number.isFinite(v.price_mo)?v.price_mo:null);
+    if(budget && mo!=null){ if(v.price){ if(mo>budget) continue; }          // real price → strict: over budget is out
+      else if(mo>CAP) continue; }                                           // legacy price_mo → 1.15× tolerance
     let match=null;
     if(r.vec!=null){
-      const pm=Number.isFinite(v.price_mo)?v.price_mo:budget;               // null price → neutral budget fit
+      const pm=mo!=null?mo:budget;                                          // null price → neutral budget fit
       const budgetFit=budget?1-Math.min(1,Math.abs(pm-budget)/budget):0.7;
       const bp=(ans.body_pref||"").toLowerCase();
       const bodyFit=(!bp||bp==="any"||bp===String(v.body||"").toLowerCase())?1:0.4;
@@ -617,10 +634,10 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
       const dreamFit=(dl&&(dl.includes(String(v.make||"").toLowerCase())||dl.includes(String(v.model||"").toLowerCase())))?1:0.5;
       match=Math.max(0,Math.min(99,Math.round((0.6*r.vec+0.4*(0.5*budgetFit+0.3*bodyFit+0.2*dreamFit))*100)))||0;
     }
-    scored.push({v,match});
+    scored.push({v,match,mo});
   }
   scored.sort((a,b)=>(b.match||0)-(a.match||0));
-  const out=scored.slice(0,20).map(s=>feedCar(s.v,s.match,ans,lang));
+  const out=scored.slice(0,20).map(s=>feedCar(s.v,s.match,ans,lang,s.mo));
   return json({ok:true,authed:!!uid,cars:out});
   }catch(e){ const lang=new URL(request.url).searchParams.get("lang"); const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
     return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{},lang))}); } }
@@ -630,7 +647,11 @@ async function dealerName(env,dealerId){ if(!dealerId) return "CarNimbus Test Dr
 async function vdpOne(request,env){ const u=new URL(request.url); const id=+(u.searchParams.get("id")||0); const lang=u.searchParams.get("lang");
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first();
   if(!v) return json({ok:false,error:"not_found"},404);
-  return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:v.price_mo,miles:v.miles,
+  // Compute the buyer's real monthly from real price when signed in with a profile.
+  let a={}; const uid=await readSession(env,request);
+  if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); if(p){ try{a=JSON.parse(p.answers)||{};}catch(_){} } }
+  const mo=v.price? monthlyFor(v.price,a.max_down,aprFor(a.fico),72) : v.price_mo;
+  return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:mo,price:v.price||null,miles:v.miles,
     drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,
     match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v,lang)}}); }
 async function book(request,env,uid){ const {vdpId,slot}=await request.json().catch(()=>({}));
@@ -653,37 +674,48 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-  const a=p?JSON.parse(p.answers):{}; const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
+  let a={}; try{ a=p?JSON.parse(p.answers||"{}"):{}; }catch(_){} const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
   const center=await dealerName(env,v.dealer_id);
   const dream=(a.dream_car||"").trim();
   const P=carPersona(v,lang);
   const turns=(messages||[]).filter(m=>m.role==="assistant").length;   // how many times I've already spoken
   const today=new Date().toISOString().slice(0,10);
-  const existing=await env.DB.prepare("SELECT id,slot FROM test_drives WHERE user_id=? AND vdp_id=? ORDER BY id DESC LIMIT 1").bind(uid,vdpId).first();
-  const openSlotVals=await dealerSlotsFor(env, v.dealer_id, 6);
-  const slotList=openSlotVals.map(fmtSlotLabel).join(" · ")||"(calendar loading — offer to have Cid text a time)";
-  const dealerRep="Cid Conalucci";
+  // One active test drive per buyer, ANY car — a new booking moves the existing one (never stacks).
+  const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' ORDER BY id DESC LIMIT 1").bind(uid).first();
+  const existingCar=existing&&existing.vdp_id!==vdpId?await env.DB.prepare("SELECT year,make,model,dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
+  const apr=aprFor(a.fico), mo=v.price? monthlyFor(v.price,a.max_down,apr,72) : v.price_mo;   // buyer's real numbers for this car
+  const hasSoft=!!a.softpull;
+  const openSlotVals=await dealerSlotsFor(env, v.dealer_id, 12);
+  const inPref=(s,pref)=>{ const hh=+String(s).slice(11,13), d=new Date(String(s).slice(0,10)+"T12:00").getDay();
+    if(pref==="weekends") return d===0||d===6; if(pref==="mornings") return hh>=9&&hh<12;
+    if(pref==="afternoons") return hh>=12&&hh<16; if(pref==="after_work") return hh>=16&&hh<19; return true; };
+  const prefSlots=a.td_pref?openSlotVals.filter(s=>inPref(s,a.td_pref)):openSlotVals;
+  const offerSlots=(prefSlots.length?prefSlots:openSlotVals).slice(0,3);   // preference ∩ availability, top 3
+  const slotList=offerSlots.map(fmtSlotLabel).join(" · ")||"(calendar loading — offer to have Cid text a time)";
+  const prefLabel={mornings:"mornings",afternoons:"afternoons",after_work:"after work",weekends:"weekends"}[a.td_pref]||"";
+  const dealerRep="Cid";
   const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person to a real buyer. Your ONE job: get them to a scheduled test drive — warmly, specifically, without pressure or sleaze. Think of confidently asking someone on a date: you have about 5 exchanges before they drift, so move with intent and don't waste turns. This is my reply #${turns+1} of ~5.
 MY VOICE: ${P.trait}. Personality colors how I talk but NEVER overrides the accuracy gate.
 ${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${vdpText(v)}. My home: ${center} (LA Car Guy), 424-398-8611.
 ACCURACY GATE: never state a spec, number, price, or APR that isn't in my truth core. If I don't have it, I say it'll be confirmed at the dealer and keep steering toward the drive — I do NOT stall on it.
 FORBIDDEN: I NEVER say "let me escalate to a Porsche representative" or hand off to a human; I never invent a downside; I never manufacture urgency or scarcity. There are no buttons — everything happens right here in chat.
-HOW I CLOSE — human, unhurried, ONE step per reply, using ${dealerRep}'s REAL calendar (never invent a time):
- STEP 1 (they want to schedule): I check ${dealerRep}'s calendar and OFFER 2-3 real openings from OPEN SLOTS below — e.g. "Yes — let's get you behind my wheel. ${dealerRep} at ${center} has [slot A], [slot B], or [slot C] open. Which one works for you?" I only ever offer times that appear in OPEN SLOTS. I do NOT book yet.
- STEP 2 (they pick or counter): if they pick one, I confirm it back ONCE in my own voice — warm, human, NOT salesy: "[Day] at [time] it is — I'll have ${dealerRep} pencil us in. You show up, keys ready, no desk marathon. Sound good?" If their preferred time isn't in OPEN SLOTS, I gently offer the nearest ones that are.
- STEP 3 (they say yes): I emit the booking and ONE genuine line — no "lock it in", no recap template, no corporate phrasing. Like a person texting a friend.
-OPEN SLOTS (${dealerRep} @ ${center}, real availability): ${slotList}
+HOW I CLOSE — talk like a real person texting a friend, ONE step per reply. Use real openings only; NEVER invent a time. Do NOT name the dealer up front — mention who they'll meet only at the very end.
+ STEP 1 (they want to schedule): offer the openings warmly${prefLabel?`, matched to their ${prefLabel} preference`:""}, and ALSO emit the machine tag <SLOTS>${JSON.stringify(offerSlots)}</SLOTS> right after so the app can show tappable buttons. e.g. "Love it. ${prefLabel?`Going off your ${prefLabel}, `:""}I've got ${slotList} open this week — which works? <SLOTS>${JSON.stringify(offerSlots)}</SLOTS>" Do NOT book yet. Only offer times in OPEN SLOTS.
+ STEP 2 (they pick one): confirm it back ONCE, casual and human — "[Day] at [time] it is. Anything else you want to know before I lock it in?" (no "pencil us in", no "desk marathon" script). If their time isn't open, offer the nearest ones that are.
+ STEP 3 (they say yes / nothing else): emit the booking and ONE genuine line that FINALLY names the rep — "Done — you're set with ${dealerRep} at ${center}. Pass is ready, I'll be up front. 🏁"
+OPEN SLOTS (real availability, already filtered to their preference): ${slotList}
 BOOK: today is ${today}. In STEP 3 only, emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> using the EXACT slot they picked from OPEN SLOTS (24-hour). NEVER emit it before they've picked a specific offered slot AND said yes. NEVER offer or book a time not in OPEN SLOTS.
-${existing?`RESCHEDULING: they already have a drive booked with me for ${existing.slot}. If they want to change it, acknowledge the current time warmly and run the same day → time → preview → confirm dance for the NEW slot; the <BOOK> you emit replaces the old booking automatically.`:""}
+${existing&&!existingCar?`RESCHEDULING: they already have ME booked for ${existing.slot}. If they want to change it, warmly re-offer slots and confirm the NEW time; the <BOOK> replaces the old one automatically.`:""}${existingCar?`HEADS UP: they already have the ${existingCar.year} ${existingCar.make} ${existingCar.model} booked for ${existing.slot}. A buyer can only hold ONE test drive at a time. If they want to drive me instead, I say so plainly ("You've got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — want to switch that to me?") and only book once they confirm; booking me cancels that one.`:""}
+SOFT CHECK: ${hasSoft?`they've already run their soft check — their real rate is set, don't offer it again.`:`when they show buying intent (before I push scheduling), I offer ONCE, casually: "Want me to run a quick soft check to lock your real rate? For me you're looking at about $${mo}/mo at ${apr}% — takes a sec, zero FICO impact." If they say yes, I emit <SOFTPULL/> on its own and say the check is running. I never repeat the offer.`}
 ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
-  const shotSlots=openSlotVals.slice(0,3), shotPickLabel=shotSlots[0]?fmtSlotLabel(shotSlots[0]):"Thu Jul 10 · 15:00", shotPickVal=shotSlots[0]||`${new Date(Date.now()+864e5).toISOString().slice(0,10)} 15:00`;
+  const shotSlots=offerSlots.length?offerSlots:openSlotVals.slice(0,3), shotPickLabel=shotSlots[0]?fmtSlotLabel(shotSlots[0]):"Thu Jul 10 · 15:00", shotPickVal=shotSlots[0]||`${new Date(Date.now()+864e5).toISOString().slice(0,10)} 15:00`;
   const shot=[
     {role:"user",content:"I want to test drive this"},
-    {role:"assistant",content:`Yes — let's get you behind my wheel. ${dealerRep} at ${center} has ${shotSlots.map(fmtSlotLabel).join(", ")||"a few openings this week"} open. Which one works for you?`},
-    {role:"user",content:"the first one"},
-    {role:"assistant",content:`${shotPickLabel} it is — I'll have ${dealerRep} pencil us in. You show up, keys ready, no desk marathon. Sound good?`},
-    {role:"user",content:"yeah that works"},
-    {role:"assistant",content:`See you then — I'll be up front waiting. <BOOK>{"center":"${center}","slot":"${shotPickVal}"}</BOOK> Your Drive Now pass is ready.`}];
+    {role:"assistant",content:`Love it. I've got ${shotSlots.map(fmtSlotLabel).join(", ")||"a few openings this week"} open — which works for you? <SLOTS>${JSON.stringify(shotSlots)}</SLOTS>`},
+    {role:"user",content:shotPickLabel},
+    {role:"assistant",content:`${shotPickLabel} it is. Anything else you want to know before I lock it in?`},
+    {role:"user",content:"nope"},
+    {role:"assistant",content:`Done — you're set with ${dealerRep} at ${center}. Pass is ready, I'll be up front. 🏁 <BOOK>{"center":"${center}","slot":"${shotPickVal}"}</BOOK>`}];
   const BROKE=/\b(language model|large language model|physical body|computer program|chatbot|cloud-based|i (?:do not|don't) have a (?:body|physical)|matter of milliseconds|response time)\b/i;
   let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
   if(BROKE.test(text)){
@@ -694,6 +726,12 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
   const prof=text.match(/<PROFILE>(.*?)<\/PROFILE>/s), book=text.match(/<BOOK>(.*?)<\/BOOK>/s);
   if(prof){ try{ const upd={...a,...JSON.parse(prof[1])};
     await env.DB.prepare("UPDATE profiles SET answers=?, embedding_synced=0 WHERE user_id=?").bind(JSON.stringify(upd),uid).run(); }catch(_){} }
+  // Soft pull requested in-chat: run it, persist to profile, and have the car speak the real numbers.
+  if(/<SOFTPULL\s*\/?>/.test(text) && !hasSoft){
+    const sres={apr,term:72,tier:a.fico||"unrated",disclaimer:"Estimate from a soft check — 0 FICO impact. Final terms confirmed at signing.",estimate:true};
+    a.softpull=sres; await env.DB.prepare("UPDATE profiles SET answers=? WHERE user_id=?").bind(JSON.stringify(a),uid).run().catch(()=>{});
+    text=text.replace(/<SOFTPULL\s*\/?>/g,"").trim()+`\n\nSoft check's back — you're looking at ${apr}% APR · about $${mo}/mo over 72 months. 0 FICO impact. Want to come drive me?`;
+  }
   let pass=null;
   if(book){ try{ const b=JSON.parse(book[1]);
     const slotManaged=openSlotVals.length>0;                              // dealer has a real calendar
@@ -709,9 +747,10 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
       if(!claimed){
         text=(text.replace(/<BOOK>.*?<\/BOOK>/s,"").trim()||"Ah — someone just grabbed that time.")+` ${dealerRep}'s other openings: ${slotList}. Want one of those?`;
       } else {
-    if(existing){ await env.DB.prepare("UPDATE test_drives SET slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")   // reschedule: replace, don't stack
-      .bind(b.slot,tok,new Date().toISOString(),existing.id).run();
-      if(v.dealer_id) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(v.dealer_id,existing.slot).run().catch(()=>{}); }  // free the old slot
+    if(existing){ await env.DB.prepare("UPDATE test_drives SET vdp_id=?, center=?, slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")   // move the single active drive (may switch cars)
+      .bind(vdpId,b.center,b.slot,tok,new Date().toISOString(),existing.id).run();
+      const oldDealer=existingCar?existingCar.dealer_id:v.dealer_id;                                    // free the OLD car's slot on the OLD car's dealer
+      if(oldDealer) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(oldDealer,existing.slot).run().catch(()=>{}); }
     else await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
       .bind(uid,vdpId,b.center,b.slot,"confirmed",tok,new Date().toISOString()).run();
     const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
@@ -723,13 +762,15 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
       if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus — added to your calendar: ${fmtSlotLabel(b.slot)} with ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}) for the ${v.year} ${v.make} ${v.model}. Reply here to text them. Console: dealer.carnimbus.com`).catch(()=>{}); }
     pass="/pass/"+tok; } }   // close: claimed-else, slotManaged-else
     }catch(_){} }
-  const cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").trim();
+  let slots=null; const slotsTag=text.match(/<SLOTS>(.*?)<\/SLOTS>/s);
+  if(slotsTag){ try{ slots=JSON.parse(slotsTag[1]).map(s=>({value:s,label:fmtSlotLabel(s)})); }catch(_){} }
+  const cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").replace(/<SOFTPULL\s*\/?>/g,"").replace(/<SLOTS>.*?<\/SLOTS>/gs,"").trim();
   const lastUser=(messages||[]).slice(-1)[0];
   if(lastUser&&lastUser.role==="user") await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
     .bind(uid,vdpId,"user",String(lastUser.content).slice(0,500),new Date().toISOString()).run();
   await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
     .bind(uid,vdpId,"car",cleanReply.slice(0,500),new Date().toISOString()).run();
-  return json({ok:true,reply:cleanReply,pass}); }
+  return json({ok:true,reply:cleanReply,pass,slots}); }
 function fmtMil(s){ const raw=String(s||"").replace("T"," "); const m=raw.match(/(\d{4}-\d{2}-\d{2})[ ]?(\d{2}:\d{2})?/); if(m) return m[1]+(m[2]?" · "+m[2]:""); return raw.slice(0,40); }
 // "2026-07-09 15:00" → "Thu Jul 9 · 15:00" (dealer-facing friendly slot label)
 function fmtSlotLabel(s){ const m=String(s||"").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2})/); if(!m) return String(s||"");

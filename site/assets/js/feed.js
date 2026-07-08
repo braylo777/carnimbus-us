@@ -4,21 +4,29 @@ document.addEventListener("DOMContentLoaded",function(){
   var GEO=null;
   function feedUrl(){ return "/api/comments"+(GEO?("?lat="+GEO[0]+"&lng="+GEO[1]+"&radius=40"):""); }
   function live(){ var el=document.getElementById("nm-live"); if(el)el.style.display="inline-flex"; }
+  function scope(v){ try{localStorage.cn_feedscope=v;}catch(_){} }
+  function getScope(){ try{return localStorage.cn_feedscope||"";}catch(_){return "";} }
   var nl=document.getElementById("nm-loc");
-  if(nl)nl.addEventListener("click",function(){ if(!navigator.geolocation)return; nl.textContent="Locating…";
-    navigator.geolocation.getCurrentPosition(function(p){ GEO=[p.coords.latitude,p.coords.longitude]; nl.textContent="📍 Near you"; live(); load(); },
-      function(){ nl.textContent="📍 Use my location"; }); });
+  function toNear(p){ GEO=[p.coords.latitude,p.coords.longitude]; if(nl)nl.textContent="📍 Near you  ✕"; live(); scope("near"); load(); }
+  function toMaster(){ GEO=null; if(nl)nl.textContent="🌎 Everyone"; scope("master"); load(); }
+  if(nl)nl.addEventListener("click",function(){
+    if(GEO){ toMaster(); return; }                                   // ✕ → global master feed
+    if(!navigator.geolocation)return; nl.textContent="Locating…";
+    navigator.geolocation.getCurrentPosition(toNear,function(){ nl.textContent="📍 Use my location"; }); });
+  // Auto-default to near-me on load (unless they chose the master feed before).
+  if(navigator.geolocation && getScope()!=="master"){ navigator.geolocation.getCurrentPosition(toNear,function(){}); }
   var nz=document.getElementById("nm-zip");
   if(nz)nz.addEventListener("input",function(e){ var z=e.target.value.trim(); if(ZIPS[z]){ GEO=ZIPS[z]; live(); load(); } });
   function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(s<3600)return Math.max(1,Math.round(s/60))+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d";}
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function mono(name){var s=String(name||"R"),h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;
+    return '<span style="width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(135deg,hsl('+h+',58%,46%),hsl('+((h+42)%360)+',58%,34%));font:700 9px Manrope;color:#fff">'+s.trim().charAt(0).toUpperCase().replace(/[<&>]/g,"")+'</span>';}
   function paint(cs){
     if(!cs.length){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Be the first — say something about a car you talked to.</div>';return;}
     list.innerHTML=cs.map(function(c){
       var agent=(c.zip==="agent");
       var av=agent?'<img src="/assets/logo-96.png" style="width:100%;height:100%;object-fit:cover">'
-        :(c.avatar?'<img src="'+esc(c.avatar)+'" style="width:100%;height:100%;object-fit:cover">':
-          '<span style="font:700 8px Manrope;color:#fff">'+String(c.handle||"R").trim().charAt(0).toUpperCase().replace(/[<&>]/g,"")+'</span>');
+        :(c.avatar?'<img src="'+esc(c.avatar)+'" style="width:100%;height:100%;object-fit:cover">':mono(c.handle));
       var score=(c.upvotes||0)-(c.downvotes||0), mine=c.myvote||0;
       var rail='<div class="col" style="align-items:center;gap:1px;flex:none;width:34px;padding-top:2px">'+
         '<button class="vote" data-id="'+(+c.id)+'" data-dir="1" aria-label="Upvote" style="background:none;border:none;cursor:pointer;font-size:13px;line-height:1;color:'+(mine>0?"#18C8FF":"#8ca0c4")+'">▲</button>'+
@@ -28,8 +36,8 @@ document.addEventListener("DOMContentLoaded",function(){
       var chip=(c.vdp_id&&c.year)?('<div class="row" style="align-items:center;gap:8px;margin-top:9px;background:rgba(6,16,40,.6);border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:7px">'+
         '<span style="width:38px;height:26px;border-radius:6px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+esc(c.photos[0])+'" loading="lazy" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
         '<span style="font:700 10px Manrope;flex:1;color:#fff">'+esc(c.year)+' '+esc(c.make)+' '+esc(c.model)+' · <span class="cy">$'+esc(c.price_mo)+'/mo</span></span></div>'+
-        '<a href="/car?id='+(+c.vdp_id)+'" class="btn primary sm" style="text-decoration:none;margin-top:8px;display:inline-flex">Talk to this '+esc(c.make)+' '+esc(c.model)+' →</a>'):'';
-      var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span style="opacity:.7">💬 Reply</span>')+'</div>';
+        '<a href="/talk/'+String(c.year+"-"+c.make+"-"+c.model).toLowerCase().replace(/[^a-z0-9]+/g,"-")+'" class="btn primary sm" style="text-decoration:none;margin-top:8px;display:inline-flex">Talk to this '+esc(c.make)+' '+esc(c.model)+' →</a>'):'';
+      var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span class="act-reply" data-h="'+esc(c.handle||"")+'" style="cursor:pointer">💬 Reply</span>')+'</div>';
       return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+rail+
         '<div style="flex:1;min-width:0">'+
         '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span></div>'+
@@ -62,7 +70,11 @@ document.addEventListener("DOMContentLoaded",function(){
       .then(function(r){ if(r.status===401){document.getElementById("post-msg").innerHTML='Sign in to vote — <a class="cy" href="/signin">sign in →</a>';document.getElementById("post-msg").style.display="block";return null;} return r.json(); })
       .then(function(x){ if(x&&x.ok)load(); }).catch(function(){}); return; }
     var sh=e.target.closest(".act-share");
-    if(sh){ var u=location.origin+"/feed"; if(navigator.share)navigator.share({title:"CarNimbus",url:u}).catch(function(){}); else if(navigator.clipboard){navigator.clipboard.writeText(u);var pm=document.getElementById("post-msg");if(pm){pm.textContent="Link copied.";pm.style.display="block";setTimeout(function(){pm.style.display="none";},1500);}} }
+    if(sh){ var body=(sh.closest(".post").querySelector(".post-body")||{}).textContent||"", u=location.origin+"/feed";
+      if(navigator.share)navigator.share({title:"CarNimbus",text:body,url:u}).catch(function(){});
+      else if(navigator.clipboard){navigator.clipboard.writeText(body+" — "+u);var pm=document.getElementById("post-msg");if(pm){pm.textContent="Copied to share.";pm.style.display="block";setTimeout(function(){pm.style.display="none";},1500);}} return; }
+    var rp=e.target.closest(".act-reply");
+    if(rp){ var inEl=document.getElementById("post-in"); if(inEl){ var at=rp.dataset.h?("@"+String(rp.dataset.h).split(" ")[0]+" "):""; inEl.value=at; inEl.focus(); inEl.scrollIntoView({block:"center"}); } }
   });
   setInterval(function(){ if(document.visibilityState!=="hidden") load(); }, 20000);   // live refresh
 });

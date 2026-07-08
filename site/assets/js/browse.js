@@ -1,7 +1,9 @@
 document.addEventListener("DOMContentLoaded",function(){
-  var CARS=[],F={body:"All",maxMo:800,makes:{},q:""};
+  var CARS=[],AUTHED=false,F={body:"All",maxMo:800,makes:{},q:""};
   var grid=document.getElementById("grid"),count=document.getElementById("count");
-  function card(c){return '<a class="glass vcard hoverable" href="/car?id='+c.id+'" style="text-decoration:none;display:block">'+
+  function slug(c){return String(c.year+'-'+c.make+'-'+c.model).toLowerCase().replace(/[^a-z0-9]+/g,'-');}
+  function hrefFor(c){return AUTHED?("https://app.carnimbus.com/talk/"+slug(c)):"https://app.carnimbus.com/signin";}   // anon → signup, authed → the car
+  function card(c){return '<a class="glass vcard hoverable" href="'+hrefFor(c)+'" style="text-decoration:none;display:block">'+
     '<div class="vphoto">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" alt="'+c.year+' '+c.make+' '+c.model+'" loading="lazy" onerror="this.remove()">':'')+
     '<span class="vbadge cert">Certified</span>'+(c.match!=null?'<span class="vbadge best">'+c.match+'% match</span>':'')+'</div>'+
     '<div class="vbody"><h4>'+c.year+' '+c.make+' '+c.model+'</h4><div class="vtrim">'+(c.trim||'&nbsp;')+'</div>'+
@@ -16,7 +18,7 @@ document.addEventListener("DOMContentLoaded",function(){
     grid.innerHTML=out.map(card).join('')||'<div style="grid-column:1/-1;text-align:center;font:600 12px Manrope;color:#aebfdf;padding:30px">No cars match those filters.</div>';
     count.textContent=out.length+" matches";}
   fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(d){
-    if(!d.ok)throw 0; CARS=d.cars;
+    if(!d.ok)throw 0; CARS=d.cars; AUTHED=(d.authed!==false);
     var mk=document.getElementById("makes");
     CARS.map(function(c){return c.make;}).filter(function(v,i,a){return a.indexOf(v)===i;}).forEach(function(m){
       var b=document.createElement("button");b.type="button";b.className="opt";b.style.cssText="padding:4px 9px;font-size:10px";b.textContent=m;

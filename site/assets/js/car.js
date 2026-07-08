@@ -20,18 +20,12 @@ document.addEventListener("DOMContentLoaded",function(){
     var sp=$("v-specs"); if(sp)sp.innerHTML=specs.map(function(s){return '<div style="min-width:120px"><span style="font:700 8px Manrope;color:#8ca0c4;letter-spacing:.06em;text-transform:uppercase">'+esc(s[0])+'</span><br><span style="font:700 12px Manrope;color:#e2e9f2">'+esc(s[1])+'</span></div>';}).join("");
     var feats=(CAR.features||[]).slice(0,6);
     if(feats.length){ var fh=$("v-feats-h"); if(fh)fh.style.display=""; var fe=$("v-feats"); if(fe)fe.innerHTML=feats.map(function(f){return '<div style="font:600 11px Manrope;color:#cbd5e1"><span class="cy">•</span> '+esc(f)+'</div>';}).join(""); }
-    // Money line from profile (window.__me set by runtime) — mirrors the pass/profile math.
+    // Plain money line (no button — the soft check now happens in the chat). price_mo is the buyer's real monthly.
     (window.__me||Promise.resolve(null)).then(function(me){ var a=(me&&me.answers)||{};
       var down=a.max_down!=null?Number(a.max_down):0;
       var sp=a.softpull, apr=sp?(sp.apr+"%"):(({"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"})[a.fico]||"—");
       var mm=$("v-money"); if(!mm)return;
-      mm.innerHTML='<span class="cy" style="font-weight:800">$'+CAR.price_mo+'/mo</span> · $'+down.toLocaleString()+' down<br><span style="color:#8ca0c4;font-weight:500">'+apr+' '+(sp?"APR (soft-checked)":"est APR")+' · 72mo</span>'+
-        (sp?'':'<button id="v-soft" type="button" class="btn ghost sm" style="margin-top:9px;width:100%">Run soft check — 0 FICO impact</button>');
-      var sb=$("v-soft"); if(sb)sb.addEventListener("click",function(){ sb.classList.add("loading");
-        fetch("/api/softpull",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({consent:true})})
-          .then(function(r){ if(r.status===401){location.href="/signin";return null;} return r.json(); })
-          .then(function(x){ if(x&&x.ok){ if(me)me.answers=Object.assign({},a,{softpull:x}); renderSpecs(); } sb.classList.remove("loading"); })
-          .catch(function(){ sb.classList.remove("loading"); }); });
+      mm.innerHTML='<span class="cy" style="font-weight:800">$'+CAR.price_mo+'/mo</span> · $'+down.toLocaleString()+' down<br><span style="color:#8ca0c4;font-weight:500">'+apr+' '+(sp?"APR (soft-checked)":"est APR")+' · 72mo</span>';
     }).catch(function(){});
   }
   function render(){
@@ -109,8 +103,17 @@ document.addEventListener("DOMContentLoaded",function(){
       a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope;margin-left:34px";thread.appendChild(a);}return;}
     var d=await r.json().catch(function(){return{};});
     if(d.ok){hist.push({role:"assistant",content:d.reply});bubble("car",d.reply);
+      if(d.slots&&d.slots.length)renderSlots(d.slots);
       if(d.pass){ setTimeout(function(){showCongrats(d.pass);},600); }}
     else bubble("car","Static on the line — try that again.");}
+  function renderSlots(slots){ if(!thread)return; var w=document.createElement("div");
+    w.className="msg car"; w.style.marginLeft="34px";
+    w.innerHTML='<div class="row" style="flex-wrap:wrap;gap:7px">'+slots.map(function(s){
+      return '<button type="button" class="bopt slot-chip" data-v="'+String(s.label).replace(/"/g,"")+'">'+String(s.label).replace(/[<&>]/g,"")+'</button>';}).join('')+'</div>';
+    thread.appendChild(w); thread.scrollTop=thread.scrollHeight;
+    w.querySelectorAll(".slot-chip").forEach(function(b){ b.addEventListener("click",function(){
+      var ci=$("chat-in"); if(ci){ ci.value=b.dataset.v; send(); }
+      w.querySelectorAll(".slot-chip").forEach(function(x){x.disabled=true;}); }); }); }
   var cs=$("chat-send");if(cs)cs.addEventListener("click",send);
   var ci=$("chat-in");if(ci)ci.addEventListener("keydown",function(e){if(e.key==="Enter")send();});
   var cr=$("chat-reset");if(cr)cr.addEventListener("click",async function(){

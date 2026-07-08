@@ -16,19 +16,26 @@ document.addEventListener("DOMContentLoaded",function(){
     if(me.answers){document.getElementById("y-preq").style.display="";
       if(a.fico){var yb=document.getElementById("y-band");yb.style.display="";yb.textContent="FICO "+a.fico;}
       function tc(s){return String(s||"").replace(/\b\w/g,function(m){return m.toUpperCase();});}
-      var APR=(a.softpull&&a.softpull.apr!=null)?(a.softpull.apr+"%"):{"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"}[a.fico];
+      var aprNum=(a.softpull&&a.softpull.apr!=null)?a.softpull.apr:({"800+":6.4,"740-799":7.1,"670-739":9.3,"580-669":13.5,"under 580":17.9}[a.fico]);
+      // Financial dashboard only — numbers, in priority order. No "Why now", no "Near".
       var bars=[];
-      if(a.max_monthly)bars.push(["Monthly","$"+a.max_monthly+"/mo"]);
-      if(a.max_down!=null)bars.push(["Down payment","$"+Number(a.max_down||0).toLocaleString()]);
       if(a.buy_method)bars.push(["Method",tc(a.buy_method)]);
-      if(APR)bars.push(["Est. APR",APR+" · 72mo"]);
-      if(a.income)bars.push(["Income",a.income]);
-      if(a.reason)bars.push(["Why now",tc(a.reason)]);
-      if(a.zip)bars.push(["Near",a.zip]);
+      if(a.max_down!=null)bars.push(["Down payment","$"+Number(a.max_down||0).toLocaleString()]);
+      if(a.max_monthly)bars.push(["Max monthly","$"+a.max_monthly+"/mo"]);
+      if(a.income)bars.push(["Income range",a.income]);
+      if(a.fico)bars.push(["FICO range",a.fico]);
+      if(a.trade_value)bars.push(["Trade-in value",a.trade_value]);
       document.getElementById("y-summary").style.display="block";
       document.getElementById("y-bars").innerHTML=bars.map(function(b){
         return '<div class="row" style="justify-content:space-between;font:500 12px Manrope"><span style="color:#8ca0c4">'+b[0]+'</span><span style="color:#e2e9f2;font-weight:600;text-align:right">'+b[1]+'</span></div>';}).join('');
       document.getElementById("y-hobbies").innerHTML=(a.hobbies||[]).map(function(h){return '<span class="badge cyan">'+h+'</span>';}).join('');
+      // Computed estimate box — its own card.
+      var est=document.getElementById("y-estimate");
+      if(est&&aprNum!=null){ est.style.display="block";
+        est.innerHTML='<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:8px">YOUR ESTIMATE'+(a.softpull?" · SOFT-CHECKED":"")+'</div>'+
+          '<div class="row" style="justify-content:space-between;font:600 13px Manrope"><span style="color:#8ca0c4">Est. APR</span><span class="cy" style="font-weight:800">'+aprNum+'% · 72 mo</span></div>'+
+          '<div style="font:500 10px Manrope;color:#8ca0c4;margin-top:6px">Loan partners: <span style="color:#c9d6ef">Chase Auto · Ally · Capital One</span> <span style="opacity:.6">(sample)</span></div>'+
+          '<div style="font:500 9px/1.5 Manrope;color:#7f93b8;margin-top:9px;border-top:1px solid rgba(24,200,255,.12);padding-top:8px">These are estimates based only on the information you provided. CarNimbus isn\'t responsible for inaccurate details you enter — we estimate your rate from your inputs and our dealer &amp; lender partners. Your final terms are confirmed at signing.</div>'; }
     }
     if(me.drive){var d=me.drive;$("y-up").style.display="block";
       $("y-veh").textContent=d.year+" "+d.make+" "+d.model;
