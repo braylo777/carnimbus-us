@@ -18,7 +18,7 @@
     }catch(e){} }
     var p=document.getElementById("pm-print");
     if(p)p.addEventListener("click",function(){
-      location.href=location.pathname+"?print=1";   // dedicated clean print view
+      var lg=/[?&]lang=es/.test(location.search)?"&lang=es":""; location.href=location.pathname+"?print=1"+lg;   // clean print view, keep lang
     });
     if(isPrint){ setTimeout(function(){ try{ window.print(); }catch(e){} },400); }
   }

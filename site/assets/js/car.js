@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded",function(){
       thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
   function render(){
     var P0=((CAR.photos&&CAR.photos[0])||"").split("?")[0];
-    var PV=P0?(P0+"?v=5"):"";   // cache-bust past any stale 404 in the browser cache
+    var PV=P0?(P0+"?v=6"):"";   // cache-bust past any stale image in the browser cache
     var vimg=$("v-img");
     if(vimg&&PV){ vimg.style.display="block";               // undo any earlier onerror hide
       vimg.onerror=function(){ if(!vimg.dataset.r){ vimg.dataset.r=1; vimg.src=P0+"?r="+Date.now(); } else vimg.style.display="none"; };
@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded",function(){
     if($("congrats"))return;
     var P0=(CAR&&CAR.photos&&CAR.photos[0])||"";
     var o=document.createElement("div"); o.id="congrats";
+    o.setAttribute("role","dialog"); o.setAttribute("aria-modal","true"); o.setAttribute("aria-label","Test drive booked");
     o.style.cssText="position:fixed;inset:0;z-index:90;background:rgba(3,8,20,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px;gap:16px;overflow-y:auto";
     o.innerHTML='<div style="font:800 28px \'Space Grotesk\',Manrope;color:#fff">🎉 Congratulations!</div>'+
       '<div style="font:600 14px Manrope;color:#aebfdf;max-width:320px">Your test drive is scheduled.</div>'+
@@ -62,6 +63,7 @@ document.addEventListener("DOMContentLoaded",function(){
       '<a href="'+passUrl+'" target="_blank" rel="noopener" class="btn primary md" style="text-decoration:none;width:100%;max-width:400px">🎟️ View my Drive Now Pass</a>'+
       '<a href="https://app.carnimbus.com/profile" class="btn ghost md" style="text-decoration:none;width:100%;max-width:400px">Go to my profile →</a>';
     document.body.appendChild(o);
+    var f=o.querySelector("a.btn"); if(f)f.focus();   // move focus into the dialog
     var cg=document.getElementById("cg-car"); if(cg&&CAR)cg.textContent=CAR.year+" "+CAR.make+" "+CAR.model;
     fetch("/api/me").then(function(r){return r.json();}).then(function(m){ var s=document.getElementById("cg-slot");
       if(s&&m&&m.drive&&window.fmtSlotCar)s.textContent=window.fmtSlotCar(m.drive.slot); }).catch(function(){});

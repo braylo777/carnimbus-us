@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded",function(){
+  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   var k=localStorage.getItem("cn_admin")||"";document.getElementById("a-key").value=k;
   async function load(){var key=document.getElementById("a-key").value.trim();if(!key)return;
     localStorage.setItem("cn_admin",key);
@@ -9,9 +10,9 @@ document.addEventListener("DOMContentLoaded",function(){
       document.getElementById("s-"+p).textContent=d[p];});
     document.getElementById("leads").innerHTML=(d.dealerLeads||[]).map(function(l){
       return '<div class="row" style="gap:10px;padding:7px 0;border-bottom:1px solid rgba(24,200,255,.08);font:600 11px Manrope;flex-wrap:wrap">'+
-      '<span style="min-width:110px">'+l.name+'</span><span style="min-width:140px;color:#8ca0c4">'+l.dealership+'</span>'+
-      '<span class="badge cyan">'+(l.role||'—')+'</span><span style="color:#8ca0c4">'+(l.phone||'')+' '+(l.email||'')+'</span>'+
-      (l.status==="active"?'<span class="badge green">'+(l.client_no||'')+'</span>':'<button class="btn primary sm" data-act="'+l.id+'" type="button">Activate → issue #</button>')+
+      '<span style="min-width:110px">'+esc(l.name)+'</span><span style="min-width:140px;color:#8ca0c4">'+esc(l.dealership)+'</span>'+
+      '<span class="badge cyan">'+esc(l.role||'—')+'</span><span style="color:#8ca0c4">'+esc(l.phone||'')+' '+esc(l.email||'')+'</span>'+
+      (l.status==="active"?'<span class="badge green">'+esc(l.client_no||'')+'</span>':'<button class="btn primary sm" data-act="'+(+l.id)+'" type="button">Activate → issue #</button>')+
       '<span class="mono" style="font-size:9px;color:#7f93b8;margin-left:auto">'+String(l.created_at).slice(0,10)+'</span></div>';}).join('')||
       '<div style="font:600 12px Manrope;color:#aebfdf">No dealer requests yet.</div>';}
   document.getElementById("a-load").addEventListener("click",load);

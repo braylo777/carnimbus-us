@@ -39,6 +39,10 @@ const SEC = {
 
 export default {
   async fetch(request, env) {
+    try { return await this.route(request, env); }
+    catch(e){ return sec(json({ok:false,error:"server_error"},500)); }   // e.g. SESSION_SECRET unset → never fall back to a forgeable session; keep sec() headers
+  },
+  async route(request, env) {
     let url = new URL(request.url);
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
@@ -129,7 +133,8 @@ export default {
 };
 
 // ==================== auth/session (HMAC cookie) ====================
-async function hmac(env, s){ const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.SESSION_SECRET||"dev"),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+async function hmac(env, s){ const secret=env.SESSION_SECRET; if(!secret) throw new Error("SESSION_SECRET unset");
+  const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
   const sig=await crypto.subtle.sign("HMAC",k,new TextEncoder().encode(s)); return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/[+/=]/g,m=>({"+":"-","/":"_","=":""}[m])); }
 async function makeSession(env,userId){ const exp=Date.now()+30*864e5; const p=userId+"."+exp; return p+"."+await hmac(env,p); }
 async function readSession(env,request){ const m=(request.headers.get("Cookie")||"").match(/cn_sess=([^;]+)/); if(!m) return null;
@@ -155,7 +160,17 @@ async function smsNumbers(request,env){ if(!env.TWILIO_ACCOUNT_SID) return json(
     {headers:{Authorization:"Basic "+btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN)}});
   const d=await r.json().catch(()=>({}));
   return json({ok:r.ok,from_configured:!!env.TWILIO_FROM,numbers:(d.incoming_phone_numbers||[]).map(n=>n.phone_number),message:d.message}); }
+async function twilioValid(request,env,form){
+  const sig=request.headers.get("X-Twilio-Signature"); if(!sig||!env.TWILIO_AUTH_TOKEN) return false;
+  const keys=[...form.keys()].sort();                       // Twilio scheme: URL + params in key-sorted order
+  let data=request.url; for(const k of keys) data+=k+String(form.get(k));
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.TWILIO_AUTH_TOKEN),{name:"HMAC",hash:"SHA-1"},false,["sign"]);
+  const mac=await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(data));
+  const b64=btoa(String.fromCharCode(...new Uint8Array(mac)));
+  return b64===sig;
+}
 async function smsInbound(request,env){ const form=await request.formData().catch(()=>null);
+  if(!form || !(await twilioValid(request,env,form))) return new Response('<?xml version="1.0"?><Response/>',{status:403,headers:{"content-type":"text/xml"}});
   const from=form?String(form.get("From")||""):"", rawText=form?String(form.get("Body")||"").trim():"", text=rawText.toUpperCase();
   let reply="";
   if(/^(STOP|STOPALL|UNSUBSCRIBE|CANCEL|END|QUIT)$/.test(text)){
@@ -392,7 +407,12 @@ async function issueUserSession(env,phone){
 async function authStart(request,env){ let {phone}=await request.json().catch(()=>({}));
   phone=String(phone||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1);
   if(!/^[2-9]\d{9}$/.test(phone)) return json({ok:false,error:"invalid_phone"},422); phone="+1"+phone;
+  // Rate limit per destination number (10-min window) — sms_log is never deleted, unlike otp. Blocks SMS-bombing + OTP-wipe DoS.
+  const since=new Date(Date.now()-600e3).toISOString();
+  const rc=await env.DB.prepare("SELECT COUNT(*) c FROM sms_log WHERE phone=? AND direction='out' AND created_at>?").bind(phone,since).first().catch(()=>({c:0}));
+  if(rc && rc.c>=3) return json({ok:true});                 // silently drop — no SMS, no enumeration signal
   if(env.TWILIO_VERIFY_SID){ const ok=await twilioVerifyStart(env,phone);
+    await env.DB.prepare("INSERT INTO sms_log (phone,direction,body,status,created_at) VALUES (?,?,?,?,?)").bind(phone,"out","[verify] code","sent",new Date().toISOString()).run().catch(()=>{});
     return ok?json({ok:true,channel:"verify"}):json({ok:false,error:"sms_failed"},502); }
   const code=(""+Math.floor(100000+Math.random()*900000)); const hash=await hmac(env,code+phone);
   await env.DB.prepare("DELETE FROM otp WHERE phone=?").bind(phone).run();
@@ -701,18 +721,23 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   if(!t) return new Response("Pass not found",{status:404});
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
   const isPrint=new URL(request.url).searchParams.get("print")==="1";
+  const ES=new URL(request.url).searchParams.get("lang")==="es";
+  const T=ES?{pass:"PASE DRIVE NOW · SEMINUEVO CERTIFICADO",when:"Cuándo",status:"Estado",miles:"Millas",drive:"Tracción",numbers:"Tus números · listos antes de llegar",estm:"Est. mensual",down:"Enganche",method:"Método",apr:"TAE est.",credit:"Rango de crédito",income:"Rango de ingreso",disc:"Estimaciones de tu consulta suave — términos finales al firmar. 0 impacto en crédito.",track:"CID · seguimiento",code:"Código de check-in",scan:"Escanea en Porsche South Bay para registrarte.",save:"Guardar / Imprimir PDF",tag:"El superagente de IA para comprar autos"}
+    :{pass:"DRIVE NOW PASS · CERTIFIED PRE-OWNED",when:"When",status:"Status",miles:"Miles",drive:"Drivetrain",numbers:"Your numbers · pre-set before you arrive",estm:"Est. monthly",down:"Down payment",method:"Method",apr:"Est. APR",credit:"Credit range",income:"Income range",disc:"Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.",track:"CID · tracking",code:"Check-in code",scan:"Scan at Porsche South Bay to check in.",save:"Save / Print PDF",tag:"The AI car-buying superagent"};
   const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
+  const safePhoto=(/^\/assets\/[\w/?=.-]*$/.test(photo)&&!photo.includes(".."))?photo:"";   // dealer-controlled → allowlist, no traversal, before CSS url()
+  const carTitle=escHtml(t.year+" "+t.make+" "+t.model);
   let a={}; try{ a=JSON.parse(t.answers)||{}; }catch(_){}
   const APR={"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"}[a.fico]||null;
   const fin=[
-    t.price_mo?["Est. monthly","$"+t.price_mo+"/mo"]:null,
-    ["Down payment",a.max_down?("$"+Number(a.max_down).toLocaleString()):"$0"],
-    a.buy_method?["Method",String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]:null,
-    APR?["Est. APR",APR+" · 72 mo"]:null,
-    a.fico?["Credit range","FICO "+a.fico]:null,
-    a.income?["Income range","$"+String(a.income).replace(/k/g,"k").replace("under ","<")]:null
+    t.price_mo?[T.estm,"$"+t.price_mo+"/mo"]:null,
+    [T.down,a.max_down?("$"+Number(a.max_down).toLocaleString()):"$0"],
+    a.buy_method?[T.method,String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]:null,
+    APR?[T.apr,APR+" · 72 mo"]:null,
+    a.fico?[T.credit,"FICO "+a.fico]:null,
+    a.income?[T.income,"$"+String(a.income).replace(/k/g,"k").replace("under ","<")]:null
   ].filter(Boolean);
-  return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass — ${t.year} ${t.make} ${t.model}</title>
+  return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass — ${carTitle}</title>
 <link rel="stylesheet" href="/assets/fonts/fonts.css"><link rel="stylesheet" href="/assets/styles.css"><script src="/assets/vendor/qrcodegen.js" defer></script><script src="/assets/js/pass-render.js" defer></script>
 <style>
 *{font-family:Manrope,system-ui,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -722,7 +747,7 @@ body{background:#06163b;color:#e2e9f2;margin:0;padding:20px;display:flex;justify
 ${isPrint?".noprint{display:none!important}body{background:#fff;padding:8px;display:block}.pass{box-shadow:none;border:1.5px solid #0a1f4d;border-radius:14px;margin:0 auto}":""}
 .pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .brand{display:flex;align-items:center;gap:9px;padding:13px 20px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18)}
-.hero{height:180px;background:#06163b url('${photo}') center/cover}.pd{padding:20px}
+.hero{height:180px;background:#06163b url('${safePhoto}') center/cover}.pd{padding:20px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font:600 12px Manrope;margin-top:16px}.k{color:#8ca0c4;font:700 9px Manrope;letter-spacing:.08em;text-transform:uppercase}
 .fin{border-top:1px solid rgba(24,200,255,.18);margin-top:16px;padding-top:14px}
 .stub{border-top:2px dashed rgba(24,200,255,.3);margin-top:18px;padding-top:16px;display:flex;gap:16px;align-items:center}
@@ -730,24 +755,24 @@ ${isPrint?".noprint{display:none!important}body{background:#fff;padding:8px;disp
 <body><div class="pass">
 <div class="brand"><img src="/assets/logo.png" alt="" style="width:24px;height:24px"><b style="font:700 14px 'Space Grotesk',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:9px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></div>
 <div class="hero"></div><div class="pd">
-<div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">DRIVE NOW PASS · CERTIFIED PRE-OWNED</div>
-<div style="font:800 22px Manrope;color:#fff;margin:5px 0 3px">${t.year} ${t.make} ${t.model}</div>
+<div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">${T.pass}</div>
+<div style="font:800 22px Manrope;color:#fff;margin:5px 0 3px">${carTitle}</div>
 <div class="cy" style="font:700 12px Manrope">Porsche South Bay · LA Car Guy · 424-398-8611</div>
 <div class="grid">
-<div><div class="k">When</div>${fmtMil(t.slot)}</div><div><div class="k">Status</div><span style="color:#54d699;text-transform:capitalize">${t.status}</span></div>
-<div><div class="k">Miles</div>${t.miles||"—"}</div><div><div class="k">Drivetrain</div>${t.drivetrain||"—"}</div>
-${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span class="cy">•</span> ${f}</div>`).join("")}
+<div><div class="k">${T.when}</div>${fmtMil(t.slot)}</div><div><div class="k">${T.status}</div><span style="color:#54d699;text-transform:capitalize">${escHtml(t.status)}</span></div>
+<div><div class="k">${T.miles}</div>${escHtml(t.miles||"—")}</div><div><div class="k">${T.drive}</div>${escHtml(t.drivetrain||"—")}</div>
+${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span class="cy">•</span> ${escHtml(f)}</div>`).join("")}
 </div>
-<div class="fin"><div class="k" style="margin-bottom:8px">Your numbers · pre-set before you arrive</div>
-<div class="grid" style="margin-top:0">${fin.map(f=>`<div><div class="k">${f[0]}</div>${f[1]}</div>`).join("")}</div>
-<div style="font:500 9px Manrope;color:#8ca0c4;margin-top:8px">Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.</div></div>
+<div class="fin"><div class="k" style="margin-bottom:8px">${T.numbers}</div>
+<div class="grid" style="margin-top:0">${fin.map(f=>`<div><div class="k">${f[0]}</div>${escHtml(f[1])}</div>`).join("")}</div>
+<div style="font:500 9px Manrope;color:#8ca0c4;margin-top:8px">${T.disc}</div></div>
 <div class="stub"><canvas id="qr" width="118" height="118" style="background:#fff;border-radius:10px;flex:none"></canvas>
-<div style="min-width:0"><div class="k">CID · tracking</div><div class="mono" style="color:#fff">${String(t.sid||"—").replace(/^(SID|CID)-?/,"")}</div>
-<div class="k" style="margin-top:8px">Check-in code</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
-<div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">Scan at Porsche South Bay to check in.</div></div></div>
-<button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">Save / Print PDF</button>
+<div style="min-width:0"><div class="k">${T.track}</div><div class="mono" style="color:#fff">${String(t.sid||"—").replace(/^(SID|CID)-?/,"")}</div>
+<div class="k" style="margin-top:8px">${T.code}</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
+<div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">${T.scan}</div></div></div>
+<button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">${T.save}</button>
 <div id="pm-hint" class="noprint" style="display:none;font:600 10px Manrope;color:#8ca0c4;margin-top:8px;text-align:center">iPhone: in the print sheet choose <b style="color:#e2e9f2">Save to Files</b> — or tap Share ⬆️ → <b style="color:#e2e9f2">Print</b>.</div>
-<div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.com · The AI car-buying superagent</div>
+<div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.com · ${T.tag}</div>
 </div></div>
 </body></html>`,{headers:{"content-type":"text/html"}}); }
 function cidFor(id){ const n=100000000+(id*7919)%900000000; const s=String(n); return s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }
@@ -885,6 +910,7 @@ async function dealerLead(request,env){
   await env.DB.prepare("INSERT INTO dealer_leads (name,dealership,role,phone,email,created_at) VALUES (?,?,?,?,?,?)")
     .bind(String(name).slice(0,80),String(dealership).slice(0,120),String(role||"").slice(0,40),
       String(phone||"").slice(0,20),String(email||"").slice(0,120),new Date().toISOString()).run();
+  if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,"New CarNimbus dealer lead: "+String(name).slice(0,40)+" @ "+String(dealership).slice(0,60)+(phone?(" · "+String(phone).slice(0,20)):"")).catch(()=>{});
   return json({ok:true});
 }
 async function comments(request,env){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;

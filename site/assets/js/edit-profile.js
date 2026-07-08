@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded",function(){
   var A={hobbies:[]};
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
   // Signed-in buyers skip the phone gate and land straight on the prefilled list.
-  fetch("/api/me").then(function(r){ if(r.status===401)throw 0; return r.json(); }).then(function(d){ if(!d||!d.ok)return;
+  (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(d){ if(!d||!d.ok)return;
     document.getElementById("ph-auth").style.display="none";
     document.getElementById("ph-quiz").style.display="block";
     if(!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];

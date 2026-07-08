@@ -55,7 +55,8 @@ document.addEventListener("DOMContentLoaded",function(){
     soon.style.display=live.length?"":"none"; soon.textContent="● "+live.length+" arriving within the hour";
     var next=live[0];
     document.getElementById("do-now").style.display=next?"flex":"none";
-    if(next)document.getElementById("dn-txt").innerHTML='Do now: <span class="cy">'+next.who+'</span> arrives '+next.slot+' — scan their QR to check them in.';
+    if(next){var e=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
+      document.getElementById("dn-txt").innerHTML='Do now: <span class="cy">'+e(next.who)+'</span> arrives '+e(next.slot)+' — scan their QR to check them in.';}
     document.getElementById("appts").innerHTML=(d.appointments||[]).map(card).join('')||
       '<div style="grid-column:1/-1;font:600 12px Manrope;color:#aebfdf;padding:20px;text-align:center">No routed buyers yet — they appear here the moment the AI books a drive.</div>';
     document.getElementById("sched").innerHTML=(d.appointments||[]).slice().sort(function(a,b){return String(a.slot).localeCompare(String(b.slot));}).map(function(a){
