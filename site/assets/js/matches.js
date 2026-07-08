@@ -14,14 +14,19 @@ document.addEventListener("DOMContentLoaded",function(){
         '<div style="font:600 11px Manrope;color:#8ca0c4">'+meta+'</div>'+
         why+
         '<div class="row" style="gap:8px">'+
-          '<a class="btn primary sm" href="/car?id='+c.id+'" style="text-decoration:none;flex:1;text-align:center">Talk to this Car</a>'+
-          '<a class="btn ghost sm" href="/car?id='+c.id+'&book=1" style="text-decoration:none;flex:1;text-align:center">Schedule Test Drive</a>'+
+          '<button class="btn ghost sm skip" data-id="'+c.id+'" type="button" style="flex:none">✕ Skip</button>'+
+          '<a class="btn primary sm" href="/car?id='+c.id+'" style="text-decoration:none;flex:1;text-align:center">Talk to this Car →</a>'+
         '</div>'+
       '</div></div>';}
+  function skipped(){ try{return JSON.parse(localStorage.cn_skipped||"[]");}catch(_){return [];} }
+  function skip(id){ try{var s=skipped();if(s.indexOf(id)<0){s.push(id);localStorage.cn_skipped=JSON.stringify(s);}}catch(_){} }
   fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(d){
     if(!d.ok)throw 0;
     if(d.authed===false){document.getElementById("m-gate").style.display="flex";}
-    var cars=(d.cars||[]).slice(0,10);
-    grid.innerHTML=cars.map(card).join('')||'<div style="grid-column:1/-1;text-align:center;font:600 12px Manrope;color:#aebfdf;padding:30px">No matches yet — finish your profile to rank inventory.</div>';
+    var sk=skipped();
+    var cars=(d.cars||[]).filter(function(c){return sk.indexOf(c.id)<0;}).slice(0,10);   // Tinder: skipped cars stay gone
+    grid.innerHTML=cars.map(card).join('')||'<div style="grid-column:1/-1;text-align:center;font:600 12px Manrope;color:#aebfdf;padding:30px">No matches right now — finish your profile or check back as inventory lands.</div>';
+    grid.addEventListener("click",function(e){ var b=e.target.closest(".skip"); if(!b)return;
+      skip(+b.dataset.id); var card=b.closest(".vcard"); if(card){card.style.transition="opacity .2s,transform .2s";card.style.opacity="0";card.style.transform="scale(.96)";setTimeout(function(){card.remove();if(!grid.querySelector(".vcard"))grid.innerHTML='<div style="grid-column:1/-1;text-align:center;font:600 12px Manrope;color:#aebfdf;padding:30px">That is all for now — check back as inventory lands.</div>';},200);} });
   }).catch(function(){grid.innerHTML='<div style="grid-column:1/-1;text-align:center;font:600 12px Manrope;color:#aebfdf;padding:30px">Matches unavailable — refresh to retry.</div>';});
 });

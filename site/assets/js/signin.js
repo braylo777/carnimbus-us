@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var me=await fetch("/api/me").then(function(x){return x.json();}).catch(function(){return{};});
     var who=await fetch("/api/whoami").then(function(x){return x.json();}).catch(function(){return{};});
     if(who.dealer)return location.href="/dealer/";
-    location.href=(me.ok&&me.answers)?"/profile":"/edit-profile";
+    location.href=(me.ok&&me.answers)?"/feed":"/edit-profile";   // onboarded → feed; new → questionnaire
   });
   var role="";
   document.querySelectorAll("#roles .opt").forEach(function(b){b.addEventListener("click",function(){

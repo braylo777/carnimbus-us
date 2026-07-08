@@ -95,6 +95,9 @@ export default {
     if (url.pathname === "/api/avatar" && request.method === "POST")      return sec(await withUser(request, env, saveAvatar));
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
     if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
+    if (url.pathname === "/api/slots")                                    return sec(await openSlots(request, env));
+    if (url.pathname === "/api/comments/vote" && request.method === "POST") return sec(await withUser(request, env, voteComment));
+    if (url.pathname === "/api/softpull" && request.method === "POST")     return sec(await withUser(request, env, softPull));
     if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
     if (url.pathname === "/api/book" && request.method === "POST")         return sec(await withUser(request, env, book));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
@@ -657,28 +660,30 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const turns=(messages||[]).filter(m=>m.role==="assistant").length;   // how many times I've already spoken
   const today=new Date().toISOString().slice(0,10);
   const existing=await env.DB.prepare("SELECT id,slot FROM test_drives WHERE user_id=? AND vdp_id=? ORDER BY id DESC LIMIT 1").bind(uid,vdpId).first();
+  const openSlotVals=await dealerSlotsFor(env, v.dealer_id, 6);
+  const slotList=openSlotVals.map(fmtSlotLabel).join(" · ")||"(calendar loading — offer to have Cid text a time)";
+  const dealerRep="Cid Conalucci";
   const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person to a real buyer. Your ONE job: get them to a scheduled test drive — warmly, specifically, without pressure or sleaze. Think of confidently asking someone on a date: you have about 5 exchanges before they drift, so move with intent and don't waste turns. This is my reply #${turns+1} of ~5.
 MY VOICE: ${P.trait}. Personality colors how I talk but NEVER overrides the accuracy gate.
 ${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${vdpText(v)}. My home: ${center} (LA Car Guy), 424-398-8611.
 ACCURACY GATE: never state a spec, number, price, or APR that isn't in my truth core. If I don't have it, I say it'll be confirmed at the dealer and keep steering toward the drive — I do NOT stall on it.
 FORBIDDEN: I NEVER say "let me escalate to a Porsche representative" or hand off to a human; I never invent a downside; I never manufacture urgency or scarcity. There are no buttons — everything happens right here in chat.
-HOW I CLOSE — a casual, four-step dance, ONE step per reply, never skipping ahead:
- STEP 1 (they show interest or ask to schedule): ask ONLY for the day, casually — "Love it. What day works for you?" Do NOT pick a day or time for them. Do NOT book.
- STEP 2 (they give a day): ask ONLY for the time — "Perfect. Morning or evening — what time?"
- STEP 3 (they give a time): give a quick preview and ask to confirm — "Here's what I've got: you + me, ${v.year} ${v.make} ${v.model}, [day] at [time], ${center}. Lock it in?" Do NOT book yet.
- STEP 4 (they confirm — "yes", "lock it in", "confirmed"): NOW emit the booking token and one warm sentence.
-BOOK: today is ${today}. In STEP 4 only, emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> (24-hour time) — convert their words ("tomorrow at 7") into the real date + 24h time. NEVER emit it in steps 1-3, and NEVER on their first message, even if they ask to schedule — the day, the time, and their confirmation must each come from THEM first.
+HOW I CLOSE — human, unhurried, ONE step per reply, using ${dealerRep}'s REAL calendar (never invent a time):
+ STEP 1 (they want to schedule): I check ${dealerRep}'s calendar and OFFER 2-3 real openings from OPEN SLOTS below — e.g. "Yes — let's get you behind my wheel. ${dealerRep} at ${center} has [slot A], [slot B], or [slot C] open. Which one works for you?" I only ever offer times that appear in OPEN SLOTS. I do NOT book yet.
+ STEP 2 (they pick or counter): if they pick one, I confirm it back ONCE in my own voice — warm, human, NOT salesy: "[Day] at [time] it is — I'll have ${dealerRep} pencil us in. You show up, keys ready, no desk marathon. Sound good?" If their preferred time isn't in OPEN SLOTS, I gently offer the nearest ones that are.
+ STEP 3 (they say yes): I emit the booking and ONE genuine line — no "lock it in", no recap template, no corporate phrasing. Like a person texting a friend.
+OPEN SLOTS (${dealerRep} @ ${center}, real availability): ${slotList}
+BOOK: today is ${today}. In STEP 3 only, emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> using the EXACT slot they picked from OPEN SLOTS (24-hour). NEVER emit it before they've picked a specific offered slot AND said yes. NEVER offer or book a time not in OPEN SLOTS.
 ${existing?`RESCHEDULING: they already have a drive booked with me for ${existing.slot}. If they want to change it, acknowledge the current time warmly and run the same day → time → preview → confirm dance for the NEW slot; the <BOOK> you emit replaces the old booking automatically.`:""}
 ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
+  const shotSlots=openSlotVals.slice(0,3), shotPickLabel=shotSlots[0]?fmtSlotLabel(shotSlots[0]):"Thu Jul 10 · 15:00", shotPickVal=shotSlots[0]||`${new Date(Date.now()+864e5).toISOString().slice(0,10)} 15:00`;
   const shot=[
-    {role:"user",content:"Schedule my test drive"},
-    {role:"assistant",content:`Let's do it — I've been waiting for this. What day works for you?`},
-    {role:"user",content:"tomorrow"},
-    {role:"assistant",content:`Tomorrow it is. Morning or evening — what time should I be ready?`},
-    {role:"user",content:"7pm"},
-    {role:"assistant",content:`Here's what I've got: you + me, ${v.year} ${v.make} ${v.model}, tomorrow at 19:00, ${center}. Lock it in?`},
-    {role:"user",content:"yes lock it in"},
-    {role:"assistant",content:`Done — see you tomorrow at 19:00. <BOOK>{"center":"${center}","slot":"${new Date(Date.now()+864e5).toISOString().slice(0,10)} 19:00"}</BOOK> Your Drive Now pass is ready — can't wait.`}];
+    {role:"user",content:"I want to test drive this"},
+    {role:"assistant",content:`Yes — let's get you behind my wheel. ${dealerRep} at ${center} has ${shotSlots.map(fmtSlotLabel).join(", ")||"a few openings this week"} open. Which one works for you?`},
+    {role:"user",content:"the first one"},
+    {role:"assistant",content:`${shotPickLabel} it is — I'll have ${dealerRep} pencil us in. You show up, keys ready, no desk marathon. Sound good?`},
+    {role:"user",content:"yeah that works"},
+    {role:"assistant",content:`See you then — I'll be up front waiting. <BOOK>{"center":"${center}","slot":"${shotPickVal}"}</BOOK> Your Drive Now pass is ready.`}];
   const BROKE=/\b(language model|large language model|physical body|computer program|chatbot|cloud-based|i (?:do not|don't) have a (?:body|physical)|matter of milliseconds|response time)\b/i;
   let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
   if(BROKE.test(text)){
@@ -690,9 +695,23 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
   if(prof){ try{ const upd={...a,...JSON.parse(prof[1])};
     await env.DB.prepare("UPDATE profiles SET answers=?, embedding_synced=0 WHERE user_id=?").bind(JSON.stringify(upd),uid).run(); }catch(_){} }
   let pass=null;
-  if(book){ try{ const b=JSON.parse(book[1]); const tok=await hmac(env,uid+":"+vdpId+":"+b.slot);
-    if(existing) await env.DB.prepare("UPDATE test_drives SET slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")   // reschedule: replace, don't stack
+  if(book){ try{ const b=JSON.parse(book[1]);
+    const slotManaged=openSlotVals.length>0;                              // dealer has a real calendar
+    // Server-side guard: never trust the model's slot. If the dealer runs a calendar, the slot MUST be one we offered.
+    if(slotManaged && !openSlotVals.includes(b.slot)){
+      text=(text.replace(/<BOOK>.*?<\/BOOK>/s,"").trim()||`That time's not on ${dealerRep}'s calendar.`)+` He's got ${slotList} — which of those works?`;
+    } else {
+      const tok=await hmac(env,uid+":"+vdpId+":"+b.slot);
+      // Atomic claim: only book if the slot is still open (taken=0). changes===0 → someone just grabbed it.
+      let claimed=true;
+      if(v.dealer_id && slotManaged){ const r=await env.DB.prepare("UPDATE dealer_slots SET taken=1 WHERE dealer_id=? AND starts_at=? AND taken=0").bind(v.dealer_id,b.slot).run().catch(()=>({meta:{changes:0}}));
+        claimed=(r&&r.meta&&r.meta.changes)===1; }
+      if(!claimed){
+        text=(text.replace(/<BOOK>.*?<\/BOOK>/s,"").trim()||"Ah — someone just grabbed that time.")+` ${dealerRep}'s other openings: ${slotList}. Want one of those?`;
+      } else {
+    if(existing){ await env.DB.prepare("UPDATE test_drives SET slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")   // reschedule: replace, don't stack
       .bind(b.slot,tok,new Date().toISOString(),existing.id).run();
+      if(v.dealer_id) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(v.dealer_id,existing.slot).run().catch(()=>{}); }  // free the old slot
     else await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
       .bind(uid,vdpId,b.center,b.slot,"confirmed",tok,new Date().toISOString()).run();
     const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
@@ -701,8 +720,9 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
       .bind(u.phone,"drive-confirm",chatSms,new Date(Date.now()+864e5).toISOString(),"none",new Date().toISOString()).run();
     if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
-      if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${b.slot}. Reply here to text the buyer. Console: dealer.carnimbus.com`).catch(()=>{}); }
-    pass="/pass/"+tok; }catch(_){} }
+      if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus — added to your calendar: ${fmtSlotLabel(b.slot)} with ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}) for the ${v.year} ${v.make} ${v.model}. Reply here to text them. Console: dealer.carnimbus.com`).catch(()=>{}); }
+    pass="/pass/"+tok; } }   // close: claimed-else, slotManaged-else
+    }catch(_){} }
   const cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").trim();
   const lastUser=(messages||[]).slice(-1)[0];
   if(lastUser&&lastUser.role==="user") await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
@@ -711,6 +731,18 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     .bind(uid,vdpId,"car",cleanReply.slice(0,500),new Date().toISOString()).run();
   return json({ok:true,reply:cleanReply,pass}); }
 function fmtMil(s){ const raw=String(s||"").replace("T"," "); const m=raw.match(/(\d{4}-\d{2}-\d{2})[ ]?(\d{2}:\d{2})?/); if(m) return m[1]+(m[2]?" · "+m[2]:""); return raw.slice(0,40); }
+// "2026-07-09 15:00" → "Thu Jul 9 · 15:00" (dealer-facing friendly slot label)
+function fmtSlotLabel(s){ const m=String(s||"").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2})/); if(!m) return String(s||"");
+  const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const d=new Date(+m[1],+m[2]-1,+m[3]); return wd[d.getDay()]+" "+mo[+m[2]-1]+" "+(+m[3])+" · "+m[4]; }
+async function dealerSlotsFor(env, dealerId, limit){ if(!dealerId) return [];
+  const now=new Date().toISOString().slice(0,16).replace("T"," ");
+  const r=await env.DB.prepare("SELECT starts_at FROM dealer_slots WHERE dealer_id=? AND taken=0 AND starts_at>? ORDER BY starts_at LIMIT ?").bind(dealerId,now,limit||6).all().catch(()=>({results:[]}));
+  return (r.results||[]).map(x=>x.starts_at); }
+async function openSlots(request,env){ const u=new URL(request.url); const vid=+(u.searchParams.get("vdpId")||0);
+  const v=await env.DB.prepare("SELECT dealer_id FROM vdps WHERE id=?").bind(vid).first();
+  const slots=await dealerSlotsFor(env, v&&v.dealer_id, 6);
+  return json({ok:true, slots: slots.map(s=>({value:s, label:fmtSlotLabel(s)}))}); }
 function icsFor(t){ const dt=String(t.slot).replace(/[^0-9]/g,"").slice(0,12);   // YYYYMMDDHHMM
   const start=dt.length>=12?dt.slice(0,8)+"T"+dt.slice(8,12)+"00":(dt.slice(0,8)+"T180000");
   const end=dt.length>=12?dt.slice(0,8)+"T"+String(+dt.slice(8,10)+1).padStart(2,"0")+dt.slice(10,12)+"00":(dt.slice(0,8)+"T190000");
@@ -928,14 +960,16 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
     return json({ok:true,comments:rows.results||[]}); }
   const lat=parseFloat(curl.searchParams.get("lat")), lng=parseFloat(curl.searchParams.get("lng"));
   const radius=parseFloat(curl.searchParams.get("radius")||"40"); let geo=Number.isFinite(lat)&&Number.isFinite(lng);
+  const meUid=await readSession(env,request);                            // optional — to surface the caller's own vote
   const geoCols=geo?"u.lat,u.lng,":"";                                   // only touch lat/lng columns when actually ranking
   let rows=await env.DB.prepare(
-    "SELECT c.body,c.zip,c.created_at,c.vdp_id,u.handle,"+geoCols+"p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
+    "SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,c.upvotes,c.downvotes,c.images,u.handle,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
-    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all().catch(async()=>{
-      geo=false;                                                          // lat/lng columns not migrated yet → fall back to recency
-      return env.DB.prepare("SELECT c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all(); });
-  let out=(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[]}));
+    "LEFT JOIN post_votes pv ON pv.comment_id=c.id AND pv.user_id=? "+
+    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").bind(meUid||0).all().catch(async()=>{
+      geo=false;                                                          // votes/lat columns not migrated yet → fall back to recency, no votes
+      return env.DB.prepare("SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all(); });
+  let out=(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[],images:r.images?JSON.parse(r.images):[]}));
   if(geo){ const R=3959, rad=x=>x*Math.PI/180;
     out=out.map(r=>{ if(r.zip==="agent") return {...r,_d:-1};                 // agent/AI posts stay pinned
         if(r.lat==null||r.lng==null) return {...r,_d:1e9};
@@ -946,6 +980,23 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
   out=out.slice(0,100).map(({lat,lng,_d,...r})=>r);
   return json({ok:true,comments:out}); }
 
+async function voteComment(request,env,uid){ const {commentId,dir}=await request.json().catch(()=>({}));
+  if(!commentId||![1,-1].includes(dir)) return json({ok:false,error:"bad_request"},400);
+  const prev=await env.DB.prepare("SELECT dir FROM post_votes WHERE user_id=? AND comment_id=?").bind(uid,commentId).first();
+  if(prev && prev.dir===dir) await env.DB.prepare("DELETE FROM post_votes WHERE user_id=? AND comment_id=?").bind(uid,commentId).run();   // toggle off
+  else await env.DB.prepare("INSERT INTO post_votes (user_id,comment_id,dir) VALUES (?,?,?) ON CONFLICT(user_id,comment_id) DO UPDATE SET dir=excluded.dir").bind(uid,commentId,dir).run();
+  const up=await env.DB.prepare("SELECT COUNT(*) c FROM post_votes WHERE comment_id=? AND dir=1").bind(commentId).first();
+  const dn=await env.DB.prepare("SELECT COUNT(*) c FROM post_votes WHERE comment_id=? AND dir=-1").bind(commentId).first();
+  await env.DB.prepare("UPDATE comments SET upvotes=?, downvotes=? WHERE id=?").bind(up.c,dn.c,commentId).run();
+  return json({ok:true,upvotes:up.c,downvotes:dn.c}); }
+async function softPull(request,env,uid){ const {consent}=await request.json().catch(()=>({}));
+  if(!consent) return json({ok:false,error:"consent_required"},400);
+  const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
+  const a=p?JSON.parse(p.answers||"{}"):{};
+  const apr={"800+":6.4,"740-799":7.1,"670-739":9.3,"580-669":13.5,"under 580":17.9}[a.fico]||12.0;   // TODO: real bureau/lender soft-pull here
+  const result={apr,term:72,tier:a.fico||"unrated",disclaimer:"Estimate from a soft check — 0 FICO impact. Final terms confirmed at signing.",estimate:true};
+  a.softpull=result; await env.DB.prepare("UPDATE profiles SET answers=? WHERE user_id=?").bind(JSON.stringify(a),uid).run().catch(()=>{});
+  return json({ok:true,...result}); }
 async function waitlist(request, env) {
   // 1) CSRF: reject cross-site POSTs (allow same-site / no-Origin server-to-server).
   const origin = request.headers.get("Origin") || "";

@@ -1,0 +1,10 @@
+-- Feed enrichment (run AFTER 0014_votes.sql). Idempotent-ish; safe to re-run.
+UPDATE comments SET upvotes = 8 + (id*37)%320, downvotes = (id*7)%9 WHERE zip IN ('demo','agent') AND (upvotes IS NULL OR upvotes=0);
+UPDATE comments SET images='["/assets/inventory/bmw-330i.jpg","/assets/inventory/porsche-macan.jpg"]' WHERE id=(SELECT id FROM comments WHERE zip='demo' AND body LIKE '%330i%' ORDER BY id LIMIT 1);
+UPDATE comments SET images='["/assets/inventory/porsche-macan.jpg"]' WHERE body LIKE 'Huge thanks to Cid%';
+INSERT INTO comments (user_id,vdp_id,body,zip,upvotes,downvotes,created_at) SELECT id,0,'ok the fact that I test drove on a thursday after work and didn''t lose my whole saturday to a dealership… game changer','demo',214,3,datetime('now','-20 minutes') FROM users WHERE phone='+13105551001' LIMIT 1;
+INSERT INTO comments (user_id,vdp_id,body,zip,upvotes,downvotes,created_at) SELECT id,0,'asked the car point blank what my payment would be and it just told me. no ''let me grab my manager'' lol','demo',188,1,datetime('now','-27 minutes') FROM users WHERE phone='+13105551014' LIMIT 1;
+INSERT INTO comments (user_id,vdp_id,body,zip,upvotes,downvotes,created_at) SELECT id,0,'my credit isn''t perfect and I was bracing for the usual song and dance. soft check, real number, done.','demo',156,2,datetime('now','-34 minutes') FROM users WHERE phone='+13105551027' LIMIT 1;
+INSERT INTO comments (user_id,vdp_id,body,zip,upvotes,downvotes,created_at) SELECT id,0,'3rd car I''ve bought and first time I didn''t leave feeling like I got played','demo',301,5,datetime('now','-41 minutes') FROM users WHERE phone='+13105551040' LIMIT 1;
+INSERT INTO comments (user_id,vdp_id,body,zip,upvotes,downvotes,created_at) SELECT id,0,'anyone else just browse these at midnight or is that a me thing','demo',97,0,datetime('now','-48 minutes') FROM users WHERE phone='+13105551053' LIMIT 1;
+INSERT INTO comments (user_id,vdp_id,body,zip,upvotes,downvotes,created_at) SELECT id,0,'the way you can just talk to the actual car about specs instead of a sales guy reading off a brochure','demo',142,1,datetime('now','-55 minutes') FROM users WHERE phone='+13105551066' LIMIT 1;

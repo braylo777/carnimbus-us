@@ -16,16 +16,24 @@ document.addEventListener("DOMContentLoaded",function(){
     if(!cs.length){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Be the first — say something about a car you talked to.</div>';return;}
     list.innerHTML=cs.map(function(c){
       var agent=(c.zip==="agent");
-      var av=agent?'<img src="/assets/logo.png" style="width:100%;height:100%;object-fit:cover">'
+      var av=agent?'<img src="/assets/logo-96.png" style="width:100%;height:100%;object-fit:cover">'
         :(c.avatar?'<img src="'+esc(c.avatar)+'" style="width:100%;height:100%;object-fit:cover">':
           '<span style="font:700 8px Manrope;color:#fff">'+String(c.handle||"R").trim().charAt(0).toUpperCase().replace(/[<&>]/g,"")+'</span>');
+      var score=(c.upvotes||0)-(c.downvotes||0), mine=c.myvote||0;
+      var rail='<div class="col" style="align-items:center;gap:1px;flex:none;width:34px;padding-top:2px">'+
+        '<button class="vote" data-id="'+(+c.id)+'" data-dir="1" aria-label="Upvote" style="background:none;border:none;cursor:pointer;font-size:13px;line-height:1;color:'+(mine>0?"#18C8FF":"#8ca0c4")+'">▲</button>'+
+        '<span style="font:700 11px Manrope;color:'+(mine>0?"#18C8FF":mine<0?"#ff8f8f":"#c9d6ef")+'">'+score+'</span>'+
+        '<button class="vote" data-id="'+(+c.id)+'" data-dir="-1" aria-label="Downvote" style="background:none;border:none;cursor:pointer;font-size:13px;line-height:1;color:'+(mine<0?"#ff8f8f":"#8ca0c4")+'">▼</button></div>';
+      var gallery=(c.images&&c.images.length)?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+c.images.slice(0,4).map(function(u){return '<img src="'+esc(u)+'" loading="lazy" style="height:120px;border-radius:10px;flex:none;object-fit:cover">';}).join('')+'</div>':'';
       var chip=(c.vdp_id&&c.year)?('<div class="row" style="align-items:center;gap:8px;margin-top:9px;background:rgba(6,16,40,.6);border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:7px">'+
         '<span style="width:38px;height:26px;border-radius:6px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+esc(c.photos[0])+'" loading="lazy" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
         '<span style="font:700 10px Manrope;flex:1;color:#fff">'+esc(c.year)+' '+esc(c.make)+' '+esc(c.model)+' · <span class="cy">$'+esc(c.price_mo)+'/mo</span></span></div>'+
         '<a href="/car?id='+(+c.vdp_id)+'" class="btn primary sm" style="text-decoration:none;margin-top:8px;display:inline-flex">Talk to this '+esc(c.make)+' '+esc(c.model)+' →</a>'):'';
-      return '<div class="post" style="padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+
+      var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span style="opacity:.7">💬 Reply</span>')+'</div>';
+      return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+rail+
+        '<div style="flex:1;min-width:0">'+
         '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span></div>'+
-        '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+chip+'</div>';
+        '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+gallery+chip+actions+'</div></div>';
     }).join('');
     var metas=list.querySelectorAll(".post-meta"), bodies=list.querySelectorAll(".post-body");
     cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus AI":(c.handle||"a rider");
@@ -46,6 +54,15 @@ document.addEventListener("DOMContentLoaded",function(){
     if(r.status===401){document.getElementById("post-msg").innerHTML='Sign in to post — <a class="cy" href="/signin">sign in →</a>';document.getElementById("post-msg").style.display="block";return;}
     var d=await r.json().catch(function(){return{};});
     if(d.ok){inEl.value="";document.getElementById("post-msg").style.display="none";load();}
+  });
+  // Vote + share (delegated).
+  list.addEventListener("click",function(e){
+    var v=e.target.closest(".vote");
+    if(v){ fetch("/api/comments/vote",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({commentId:+v.dataset.id,dir:+v.dataset.dir})})
+      .then(function(r){ if(r.status===401){document.getElementById("post-msg").innerHTML='Sign in to vote — <a class="cy" href="/signin">sign in →</a>';document.getElementById("post-msg").style.display="block";return null;} return r.json(); })
+      .then(function(x){ if(x&&x.ok)load(); }).catch(function(){}); return; }
+    var sh=e.target.closest(".act-share");
+    if(sh){ var u=location.origin+"/feed"; if(navigator.share)navigator.share({title:"CarNimbus",url:u}).catch(function(){}); else if(navigator.clipboard){navigator.clipboard.writeText(u);var pm=document.getElementById("post-msg");if(pm){pm.textContent="Link copied.";pm.style.display="block";setTimeout(function(){pm.style.display="none";},1500);}} }
   });
   setInterval(function(){ if(document.visibilityState!=="hidden") load(); }, 20000);   // live refresh
 });

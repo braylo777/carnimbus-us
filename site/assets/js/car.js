@@ -14,6 +14,26 @@ document.addEventListener("DOMContentLoaded",function(){
     if(on){var m=document.createElement("div");m.className="msg car typing";
       m.innerHTML='<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span><div class="bubble car"><span class="tdots"><i></i><i></i><i></i></span></div>';
       thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
+  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+  function renderSpecs(){
+    var specs=[["Trim",CAR.trim||"—"],["Body",CAR.body||"—"],["Miles",CAR.miles!=null?Number(CAR.miles).toLocaleString():"—"],["Drivetrain",CAR.drivetrain||"—"]];
+    var sp=$("v-specs"); if(sp)sp.innerHTML=specs.map(function(s){return '<div style="min-width:120px"><span style="font:700 8px Manrope;color:#8ca0c4;letter-spacing:.06em;text-transform:uppercase">'+esc(s[0])+'</span><br><span style="font:700 12px Manrope;color:#e2e9f2">'+esc(s[1])+'</span></div>';}).join("");
+    var feats=(CAR.features||[]).slice(0,6);
+    if(feats.length){ var fh=$("v-feats-h"); if(fh)fh.style.display=""; var fe=$("v-feats"); if(fe)fe.innerHTML=feats.map(function(f){return '<div style="font:600 11px Manrope;color:#cbd5e1"><span class="cy">•</span> '+esc(f)+'</div>';}).join(""); }
+    // Money line from profile (window.__me set by runtime) — mirrors the pass/profile math.
+    (window.__me||Promise.resolve(null)).then(function(me){ var a=(me&&me.answers)||{};
+      var down=a.max_down!=null?Number(a.max_down):0;
+      var sp=a.softpull, apr=sp?(sp.apr+"%"):(({"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"})[a.fico]||"—");
+      var mm=$("v-money"); if(!mm)return;
+      mm.innerHTML='<span class="cy" style="font-weight:800">$'+CAR.price_mo+'/mo</span> · $'+down.toLocaleString()+' down<br><span style="color:#8ca0c4;font-weight:500">'+apr+' '+(sp?"APR (soft-checked)":"est APR")+' · 72mo</span>'+
+        (sp?'':'<button id="v-soft" type="button" class="btn ghost sm" style="margin-top:9px;width:100%">Run soft check — 0 FICO impact</button>');
+      var sb=$("v-soft"); if(sb)sb.addEventListener("click",function(){ sb.classList.add("loading");
+        fetch("/api/softpull",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({consent:true})})
+          .then(function(r){ if(r.status===401){location.href="/signin";return null;} return r.json(); })
+          .then(function(x){ if(x&&x.ok){ if(me)me.answers=Object.assign({},a,{softpull:x}); renderSpecs(); } sb.classList.remove("loading"); })
+          .catch(function(){ sb.classList.remove("loading"); }); });
+    }).catch(function(){});
+  }
   function render(){
     var P0=((CAR.photos&&CAR.photos[0])||"").split("?")[0];
     var PV=P0?(P0+"?v=6"):"";   // cache-bust past any stale image in the browser cache
@@ -26,6 +46,7 @@ document.addEventListener("DOMContentLoaded",function(){
     setText("v-title",CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:""));
     setText("v-price","$"+CAR.price_mo+"/mo");
     setText("v-meta",CAR.miles+" mi · "+CAR.drivetrain+" · Certified · Los Angeles, CA");
+    renderSpecs();
     setText("fit-budget","$"+CAR.price_mo+"/mo fits your range.");
     setFit(CAR.match!=null?CAR.match+"% match":"Fresh listing");
     setText("c-name",CAR.year+" "+CAR.make+" "+CAR.model);

@@ -15,11 +15,15 @@ document.addEventListener("DOMContentLoaded",function(){
     var a=me.answers||{};
     if(me.answers){document.getElementById("y-preq").style.display="";
       if(a.fico){var yb=document.getElementById("y-band");yb.style.display="";yb.textContent="FICO "+a.fico;}
+      function tc(s){return String(s||"").replace(/\b\w/g,function(m){return m.toUpperCase();});}
+      var APR=(a.softpull&&a.softpull.apr!=null)?(a.softpull.apr+"%"):{"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"}[a.fico];
       var bars=[];
-      if(a.max_monthly)bars.push(["Budget","$"+a.max_monthly+"/mo"+(a.max_down?" · $"+a.max_down+" down":"")]);
-      if(a.buy_method)bars.push(["Paying",String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]);
+      if(a.max_monthly)bars.push(["Monthly","$"+a.max_monthly+"/mo"]);
+      if(a.max_down!=null)bars.push(["Down payment","$"+Number(a.max_down||0).toLocaleString()]);
+      if(a.buy_method)bars.push(["Method",tc(a.buy_method)]);
+      if(APR)bars.push(["Est. APR",APR+" · 72mo"]);
       if(a.income)bars.push(["Income",a.income]);
-      if(a.reason)bars.push(["Why now",a.reason]);
+      if(a.reason)bars.push(["Why now",tc(a.reason)]);
       if(a.zip)bars.push(["Near",a.zip]);
       document.getElementById("y-summary").style.display="block";
       document.getElementById("y-bars").innerHTML=bars.map(function(b){
@@ -46,13 +50,15 @@ document.addEventListener("DOMContentLoaded",function(){
 
   // avatar upload → resize 256² → data-URL → /api/avatar
   var fi=$("y-av-file");
-  if(fi) fi.addEventListener("change",function(){ var f=fi.files[0]; if(!f)return; var img=new Image();
-    img.onload=function(){ var c=document.createElement("canvas");c.width=c.height=256;var g=c.getContext("2d");
-      var m=Math.min(img.width,img.height),sx=(img.width-m)/2,sy=(img.height-m)/2; g.drawImage(img,sx,sy,m,m,0,0,256,256);
-      var data=c.toDataURL("image/webp",0.8); if(data.length>80000)data=c.toDataURL("image/jpeg",0.7);
-      fetch("/api/avatar",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({avatar:data})})
-        .then(function(r){return r.json();}).then(function(x){ if(x.ok)$("y-av").innerHTML='<img src="'+data+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'; }); };
-      img.src=URL.createObjectURL(f); });
+  if(fi) fi.addEventListener("change",function(){ var f=fi.files[0]; if(!f)return;
+    var rd=new FileReader(); rd.onload=function(){ var img=new Image();   // data: URL, not blob: — CSP img-src allows it
+      img.onload=function(){ var c=document.createElement("canvas");c.width=c.height=256;var g=c.getContext("2d");
+        var m=Math.min(img.width,img.height),sx=(img.width-m)/2,sy=(img.height-m)/2; g.drawImage(img,sx,sy,m,m,0,0,256,256);
+        var data=c.toDataURL("image/webp",0.8); if(data.length>80000)data=c.toDataURL("image/jpeg",0.7);
+        fetch("/api/avatar",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({avatar:data})})
+          .then(function(r){return r.json();}).then(function(x){ if(x.ok){ $("y-av").innerHTML='<img src="'+data+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'; try{sessionStorage.removeItem("cn_me");}catch(_){}} }); };
+      img.src=rd.result; };
+    rd.readAsDataURL(f); });
   var avc=$("y-av"); if(avc)avc.addEventListener("click",function(){ if(fi)fi.click(); });
 
   // Format a slot like "2025-07-08 18:00" → "Tue Jul 8 · 18:00" (24h). Falls back to raw text.
