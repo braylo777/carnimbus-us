@@ -1,10 +1,8 @@
 document.addEventListener("DOMContentLoaded",function(){
   var A={hobbies:[]};
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
-  // Signed-in buyers skip the phone gate and land straight on the prefilled list.
+  // The Worker's page gate guarantees a session — just prefill the list from the profile.
   (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(d){ if(!d||!d.ok)return;
-    document.getElementById("ph-auth").style.display="none";
-    document.getElementById("ph-quiz").style.display="block";
     if(!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];
     var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles"};
     for(var m in map){var el=document.getElementById(map[m]);if(el&&a[m]!=null)el.value=a[m];}
@@ -16,24 +14,6 @@ document.addEventListener("DOMContentLoaded",function(){
         if(ob){ ob.classList.add("on"); var oi=sec.querySelector(".other-in"); if(oi){ oi.value=val; oi.style.display="block"; } } }
     });
   }).catch(function(){});
-  var phone="";
-  function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}
-  document.getElementById("au-send").addEventListener("click",async function(){
-    phone=digits(document.getElementById("au-phone").value);
-    if(!/^[2-9]\d{9}$/.test(phone))return msg(document.getElementById("au-msg"),"That number doesn't look right — 10 digits, US for now.");
-    msg(document.getElementById("au-msg"),"");
-    var r=await fetch("/api/auth/start",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone})});
-    var d=await r.json();
-    if(!d.ok)return msg(document.getElementById("au-msg"),"Couldn't send the code — try again.");
-    document.getElementById("au-step1").style.display="none";document.getElementById("au-step2").style.display="block";
-    if(d.dev)document.getElementById("au-code").value=d.dev;
-  });
-  document.getElementById("au-verify").addEventListener("click",async function(){
-    var r=await fetch("/api/auth/verify",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:phone,code:document.getElementById("au-code").value})});
-    var d=await r.json();
-    if(!d.ok)return msg(document.getElementById("au-msg"),"Wrong or expired code — try again.");
-    document.getElementById("ph-auth").style.display="none";document.getElementById("ph-quiz").style.display="block";
-  });
   // Chip selection (single + multi) — same data model, no wizard.
   document.querySelectorAll("#quiz .opts").forEach(function(o){o.addEventListener("click",function(e){
     var b=e.target.closest(".opt");if(!b)return;

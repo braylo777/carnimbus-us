@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded",function(){
-  function step(id){["choice","buyer","dealer","dealer-done"].forEach(function(x){document.getElementById(x).style.display=(x===id?"":"none");});}
+  function step(id){["choice","buyer","dealer","dealer-done"].forEach(function(x){document.getElementById(x).style.display=(x===id?(x==="dealer-done"?"flex":""):"none");});}   // done-card fills the viewport, vertically centered
   document.getElementById("pick-buyer").addEventListener("click",function(){step("buyer");});
   document.getElementById("pick-dealer").addEventListener("click",function(){step("dealer");});
   var gd=document.getElementById("go-dealer"); if(gd)gd.addEventListener("click",function(e){e.preventDefault();step("dealer");});

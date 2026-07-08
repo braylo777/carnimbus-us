@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function setText(x,t){var e=$(x);if(e)e.textContent=t;}
   function setSrc(x,s){var e=$(x);if(e&&s)e.src=s;}
   function setFit(t){var e=$("fit-match");if(!e)return;var b=e.querySelector("b");if(b)b.textContent=t;}
-  function fail(m){var v=$("vdp");if(v)v.innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">'+m+' <a class="cy" href="/browse">Back to browse</a></div>';}
+  function fail(m){var v=$("vdp");if(v)v.innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">'+m+' <a class="cy" href="/matches">Back to matches</a></div>';}
   function bubble(who,txt){if(!thread)return null;var m=document.createElement("div");m.className="msg "+who;
     m.innerHTML=(who==="car"?'<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span>':'')+'<div class="bubble '+who+'"></div>';
     m.querySelector(".bubble").textContent=txt;thread.appendChild(m);thread.scrollTop=thread.scrollHeight;return m;}

@@ -26,14 +26,14 @@
         <h1 class="disp" style="font-size:26px;margin:14px 0 4px">Welcome to CarNimbus.</h1>
         <div style="font:500 13px/1.5 Manrope;color:#aebfdf">Buyers and dealers both drive here.</div>
         <div class="col" style="gap:12px;margin-top:18px">
-          <button type="button" id="pick-buyer" class="glass pd hoverable" style="text-align:left;cursor:pointer;color:#fff;border-radius:18px"><div class="disp" style="font-size:16px">🚗 I'm buying a car</div><div style="font:500 11.5px Manrope;color:#8ca0c4;margin-top:4px">Ten quick questions, then your ranked matches.</div></button>
+          <button type="button" id="pick-buyer" class="glass pd hoverable" style="text-align:left;cursor:pointer;color:#fff;border-radius:18px"><div class="disp" style="font-size:16px">🚗 I'm buying a car</div><div style="font:500 11.5px Manrope;color:#8ca0c4;margin-top:4px">New or returning — your number is your key. Ten quick questions, then your matches.</div></button>
           <button type="button" id="pick-dealer" class="glass pd hoverable" style="text-align:left;cursor:pointer;color:#fff;border-radius:18px"><div class="disp" style="font-size:16px">🏢 I'm a dealer</div><div style="font:500 11.5px Manrope;color:#8ca0c4;margin-top:4px">GM, manager, sales — everyone. Get Drive Now for your store.</div></button>
         </div>
       </div>
       <div id="buyer" style="display:none">
         <div class="col" style="align-items:center;gap:7px;margin:6px 0 4px"><img src="/assets/logo.png" style="width:64px;height:64px;filter:drop-shadow(0 0 24px rgba(24,200,255,.55))" alt=""><div class="disp" style="font-size:22px">CarNimbus</div></div>
-        <h1 class="disp" style="font-size:24px;margin:14px 0 4px">Log in</h1>
-        <div style="font:500 13px/1.5 Manrope;color:#aebfdf">Enter your mobile number to continue.</div>
+        <h1 class="disp" style="font-size:24px;margin:14px 0 4px">Sign in or sign up.</h1>
+        <div style="font:500 13px/1.5 Manrope;color:#aebfdf">Enter your mobile number — new here, we'll set you up in one step. No passwords, ever.</div>
         <div style="margin-top:6px;font:500 12px Manrope;color:#8ca0c4">Not a buyer? <a id="go-dealer" href="#" style="color:#18C8FF">Dealer sign in →</a></div>
         <div class="glass pd" style="margin-top:16px;border-radius:18px">
           <div id="au-step1"><label class="vh" for="au-phone">Mobile number</label><input id="au-phone" type="tel" class="pill" placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel"><button id="au-send" class="btn primary md" style="width:100%;margin-top:10px">Text me a code</button>
@@ -55,12 +55,13 @@
           <div class="wl-msg" id="dl-msg" style="display:none"></div>
         </div>
       </div>
-      <div id="dealer-done" style="display:none">
-        <div class="glass pd" style="border-radius:20px;text-align:center;margin-top:16px">
+      <div id="dealer-done" style="display:none;flex-direction:column;justify-content:center;flex:1">
+        <div class="glass pd" style="border-radius:20px;text-align:center">
           <img src="/assets/logo-96.png" width="40" height="40" alt="" style="width:40px;height:40px">
           <div class="disp" style="font-size:20px;margin-top:8px">Demo requested 🤝</div>
           <div style="font:500 13px/1.6 Manrope;color:#aebfdf;margin-top:6px">We'll reach out to set up your Drive Now dealer dashboard — pre-qualified, ready-to-drive buyers routed to your store.</div>
-          <a class="btn primary md" href="https://carnimbus.com/" style="text-decoration:none;width:100%;margin-top:16px;display:inline-flex;justify-content:center">Back to CarNimbus</a>
+          <a class="btn primary md" href="https://calendar.app.google/f4takf46LRZSxFMr6" target="_blank" rel="noopener" style="text-decoration:none;width:100%;margin-top:16px;display:inline-flex;justify-content:center">Book a live demo →</a>
+          <a class="btn md" href="https://carnimbus.com/" style="text-decoration:none;width:100%;margin-top:8px;display:inline-flex;justify-content:center;border:1px solid rgba(24,200,255,.3);border-radius:999px;color:#cbd5e1">Back to CarNimbus</a>
         </div>
       </div>
     </div>
@@ -68,7 +69,7 @@
 </div></div>
 </main>
 <script src="/assets/signals.js" defer></script>
-<script src="/assets/runtime.js?v=2" defer></script>
+<script src="/assets/runtime.js?v=3" defer></script>
 <script src="/assets/js/signin.js" defer></script>
 </body>
 </html>

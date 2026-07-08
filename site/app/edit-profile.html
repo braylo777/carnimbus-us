@@ -34,27 +34,8 @@
 <main class="pw">
   <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 4px;margin:-20px 0 14px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
 
-  <!-- phase 1: phone OTP (new users only — signed-in buyers skip straight to the list) -->
-  <div id="ph-auth">
-    <h1>Let's find your car.</h1>
-    <div class="sub">Sign in with your number — we text you a code. No passwords, ever.</div>
-    <div class="card" style="padding:20px">
-      <div id="au-step1">
-        <label class="vh" for="au-phone">Mobile number</label>
-        <input id="au-phone" type="tel" class="pill" placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel">
-        <button id="au-send" class="btn primary" style="width:100%;margin-top:10px">Text me a code</button>
-      </div>
-      <div id="au-step2" style="display:none">
-        <label class="vh" for="au-code">6-digit code</label>
-        <input id="au-code" type="text" class="pill" placeholder="6-digit code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
-        <button id="au-verify" class="btn primary" style="width:100%;margin-top:10px">Verify</button>
-      </div>
-      <div class="wl-msg" id="au-msg" style="display:none"></div>
-    </div>
-  </div>
-
-  <!-- phase 2: one scrollable list, one save -->
-  <div id="ph-quiz" style="display:none">
+  <!-- the Worker's page gate guarantees a session — the quiz is the whole page (no in-page OTP; /signin is the only door) -->
+  <div id="ph-quiz">
     <form id="quiz" class="card" style="margin-top:0">
       <section data-q="full_name"><div class="qnum">01 · YOU</div><div class="q">Name</div><label class="vh" for="f-name">Full name</label><input id="f-name" class="pill tin" type="text" placeholder="Brandon Lopez" maxlength="60"></section>
       <section data-q="zip"><div class="qnum">02 · LOCATION</div><div class="q">ZIP code</div><label class="vh" for="f-zip">ZIP</label><input id="f-zip" class="pill tin" type="text" inputmode="numeric" placeholder="90064" maxlength="5"></section>
@@ -88,7 +69,7 @@
   </div>
 </main>
 <script src="/assets/signals.js" defer></script>
-<script src="/assets/runtime.js?v=2" defer></script>
-<script src="/assets/js/edit-profile.js?v=3" defer></script>
+<script src="/assets/runtime.js?v=3" defer></script>
+<script src="/assets/js/edit-profile.js?v=4" defer></script>
 </body>
 </html>

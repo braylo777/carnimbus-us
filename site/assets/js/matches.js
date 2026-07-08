@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function lang(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}}
   var mobile=function(){return matchMedia("(max-width:700px)").matches;};
   function skipped(){try{return JSON.parse(localStorage.cn_skipped||"[]");}catch(_){return [];}}
+  function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(!isFinite(s))return "";if(s<3600)return Math.max(1,Math.round(s/60))+"m ago";if(s<86400)return Math.round(s/3600)+"h ago";if(s<172800)return "yesterday";return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric"});}
   function skip(id){try{var s=skipped();if(s.indexOf(id)<0){s.push(id);localStorage.cn_skipped=JSON.stringify(s);}}catch(_){}}
 
   // New matches (ranked + affordable) as small talk/skip cards.
@@ -16,7 +17,8 @@ document.addEventListener("DOMContentLoaded",function(){
       return '<div class="glass" data-id="'+c.id+'" style="flex:none;width:150px;border-radius:14px;overflow:hidden">'+
         '<div style="height:84px;background:#0a1f4d '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></div>'+
         '<div style="padding:9px 10px"><div style="font:700 11px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</div>'+
-        '<div class="cy" style="font:700 11px Manrope;margin:2px 0 7px">$'+esc(c.price_mo)+'/mo</div>'+
+        '<div class="cy" style="font:700 11px Manrope;margin:2px 0 4px">$'+esc(c.price_mo)+'/mo</div>'+
+        '<div style="font:600 9px Manrope;color:#8ca0c4;margin-bottom:7px">Matched today</div>'+
         '<div class="row" style="gap:5px"><button class="btn primary sm mtalk" data-slug="'+slug(c)+'" data-id="'+c.id+'" style="flex:1;padding:0 8px">Talk</button>'+
         '<button class="btn ghost sm mskip" data-id="'+c.id+'" style="flex:none;padding:0 8px">✕</button></div></div></div>';
     }).join('')||'<div style="font:500 11px Manrope;color:#8ca0c4;padding:8px">No new matches — adjust your budget in Profile.</div>';
@@ -32,7 +34,9 @@ document.addEventListener("DOMContentLoaded",function(){
     el.innerHTML=th.map(function(t){
       return '<button class="thread row" data-id="'+t.vdpId+'" data-slug="'+String(t.year+'-'+t.make+'-'+t.model).toLowerCase().replace(/[^a-z0-9]+/g,'-')+'" style="align-items:center;gap:9px;width:100%;text-align:left;background:none;border:none;border-radius:10px;padding:8px;cursor:pointer">'+
         '<span style="width:44px;height:32px;border-radius:7px;overflow:hidden;flex:none;background:#0a1f4d">'+(t.photos&&t.photos[0]?'<img src="'+esc(t.photos[0])+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
-        '<span style="flex:1;min-width:0"><span style="display:block;font:700 11px Manrope;color:#e2e9f2">'+esc(t.year+" "+t.make+" "+t.model)+'</span><span style="display:block;font:500 10px Manrope;color:#8ca0c4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.last||"")+'</span></span></button>';
+        '<span style="flex:1;min-width:0"><span style="display:block;font:700 11px Manrope;color:#e2e9f2">'+esc(t.year+" "+t.make+" "+t.model)+(t.price_mo?' · <span class="cy">$'+esc(t.price_mo)+'/mo</span>':'')+'</span>'+
+        '<span style="display:block;font:500 10px Manrope;color:#8ca0c4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.last||"")+(t.when?' · '+rel(t.when):'')+'</span>'+
+        (t.matched_at?'<span style="display:block;font:600 9px Manrope;color:#5f7397;margin-top:2px">Matched '+rel(t.matched_at)+'</span>':'')+'</span></button>';
     }).join('');
     el.addEventListener("click",function(e){ var b=e.target.closest(".thread"); if(b)openChat(+b.dataset.id,b.dataset.slug); });
   }).catch(function(){});

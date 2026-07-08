@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded",function(){
     else if(me.cid)$("y-cid").textContent="CID# "+me.cid;
     var a=me.answers||{};
     if(me.answers){document.getElementById("y-preq").style.display="";
-      if(a.fico){var yb=document.getElementById("y-band");yb.style.display="";yb.textContent="FICO "+a.fico;}
+      // (FICO badge removed — the "FICO range" row in YOUR FINANCES is the single source.)
       function tc(s){return String(s||"").replace(/\b\w/g,function(m){return m.toUpperCase();});}
       var aprNum=(a.softpull&&a.softpull.apr!=null)?a.softpull.apr:({"800+":6.4,"740-799":7.1,"670-739":9.3,"580-669":13.5,"under 580":17.9}[a.fico]);
       // Financial dashboard only — numbers, in priority order. No "Why now", no "Near".
@@ -24,7 +24,8 @@ document.addEventListener("DOMContentLoaded",function(){
       if(a.max_monthly)bars.push(["Max monthly","$"+a.max_monthly+"/mo"]);
       if(a.income)bars.push(["Income range",a.income]);
       if(a.fico)bars.push(["FICO range",a.fico]);
-      if(a.trade_value)bars.push(["Trade-in value",a.trade_value]);
+      var TRADE={"0-2k":"$0–$2,000","2-5k":"$2,000–$5,000","5-10k":"$5,000–$10,000","10k+":"$10,000+"};   // quiz chip values → dollar ranges
+      if(a.trade_value)bars.push(["Trade-in value",TRADE[a.trade_value]||(/^\$/.test(a.trade_value)?a.trade_value:"$"+a.trade_value)]);
       document.getElementById("y-summary").style.display="block";
       document.getElementById("y-bars").innerHTML=bars.map(function(b){
         return '<div class="row" style="justify-content:space-between;font:500 12px Manrope"><span style="color:#8ca0c4">'+b[0]+'</span><span style="color:#e2e9f2;font-weight:600;text-align:right">'+b[1]+'</span></div>';}).join('');

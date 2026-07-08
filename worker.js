@@ -50,6 +50,16 @@ export default {
     // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
     if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
       if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
+      // Closed system: every app page requires a session — only doors are /signin (+ assets/legal).
+      { const p=url.pathname.toLowerCase();
+        const open = p==="/signin"||p==="/privacy"||p.startsWith("/assets/")||p==="/site.webmanifest"||
+                     p.startsWith("/favicon")||p==="/robots.txt"||p.startsWith("/sitemap")||
+                     p.startsWith("/api/")||                    // APIs keep their own withUser/adminOnly gates
+                     /^\/pass\/[A-Za-z0-9_-]+$/.test(url.pathname); // tokened pass link is bearer-gated
+        if(!open){
+          const uid=await readSession(env,request);             // SESSION_SECRET unset → throws → top catch 500 (fail-close)
+          if(!uid) return Response.redirect(url.origin+"/signin",302);
+        } }
       // Vanity car URL: /talk/2025-porsche-macan → resolve slug to a vdp id, serve the car page.
       const tm=url.pathname.match(/^\/talk\/([a-z0-9-]+)$/i);
       if(tm){ const slug=tm[1];
@@ -919,11 +929,15 @@ async function chatList(request,env,uid){ const curl=new URL(request.url); const
   if(vdpId){ const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 100").bind(uid,vdpId).all();
     return json({ok:true,messages:rows.results||[]}); }
   const rows=await env.DB.prepare(
-    "SELECT c.vdp_id, MAX(c.id) mid, v.year,v.make,v.model,v.trim,v.price_mo,v.photos FROM chats c JOIN vdps v ON v.id=c.vdp_id "+
+    "SELECT c.vdp_id, MAX(c.id) mid, MIN(c.created_at) matched_at, v.year,v.make,v.model,v.trim,v.price_mo,v.price,v.photos FROM chats c "+
+    "JOIN vdps v ON v.id=c.vdp_id AND v.active=1 "+                       // never list threads for cars the car page will 404 on
     "WHERE c.user_id=? GROUP BY c.vdp_id ORDER BY mid DESC LIMIT 20").bind(uid).all();
+  const prof=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
+  const ans=prof?JSON.parse(prof.answers||"{}"):{};
   const out=[]; for(const r of (rows.results||[])){
     const last=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE id=?").bind(r.mid).first();
-    out.push({vdpId:r.vdp_id,year:r.year,make:r.make,model:r.model,trim:r.trim,price_mo:r.price_mo,
+    const mo=r.price?monthlyFor(r.price,ans.max_down,aprFor(ans.fico),72):r.price_mo;   // computed per-buyer, never the stored placeholder
+    out.push({vdpId:r.vdp_id,year:r.year,make:r.make,model:r.model,trim:r.trim,price_mo:mo,matched_at:r.matched_at,
       photos:JSON.parse(r.photos||"[]"),last:last?last.body:"",when:last?last.created_at:""}); }
   return json({ok:true,threads:out}); }
 async function dealerChat(request,env,uid,dealer){ const curl=new URL(request.url); const driveId=+curl.searchParams.get("driveId")||0;
@@ -1002,15 +1016,22 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
   const lat=parseFloat(curl.searchParams.get("lat")), lng=parseFloat(curl.searchParams.get("lng"));
   const radius=parseFloat(curl.searchParams.get("radius")||"40"); let geo=Number.isFinite(lat)&&Number.isFinite(lng);
   const meUid=await readSession(env,request);                            // optional — to surface the caller's own vote
+  const lang=curl.searchParams.get("lang")==="es"?"es":"en";
   const geoCols=geo?"u.lat,u.lng,":"";                                   // only touch lat/lng columns when actually ranking
   let rows=await env.DB.prepare(
-    "SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,c.upvotes,c.downvotes,c.images,u.handle,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c "+
+    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.upvotes,c.downvotes,c.images,u.handle,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
     "LEFT JOIN post_votes pv ON pv.comment_id=c.id AND pv.user_id=? "+
     "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").bind(meUid||0).all().catch(async()=>{
-      geo=false;                                                          // votes/lat columns not migrated yet → fall back to recency, no votes
+      geo=false;                                                          // votes/lat/body_es columns not migrated yet → fall back to recency, no votes
       return env.DB.prepare("SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all(); });
-  let out=(rows.results||[]).map(r=>({...r,photos:r.photos?JSON.parse(r.photos):[],images:r.images?JSON.parse(r.images):[]}));
+  // Buyer-true monthlies on car chips: compute from the real price + the caller's numbers (anon = honest defaults).
+  let mans={}; if(meUid){ const mp=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(meUid).first(); mans=mp?JSON.parse(mp.answers||"{}"):{}; }
+  const mapr=aprFor(mans.fico);
+  let out=(rows.results||[]).map(r=>({...r,
+    body:(lang==="es"&&r.zip==="agent"&&r.body_es)?r.body_es:r.body,      // agent posts speak the buyer's language; rider posts stay as written
+    price_mo:r.price?monthlyFor(r.price,meUid?mans.max_down:0,mapr,72):r.price_mo,
+    photos:r.photos?JSON.parse(r.photos):[],images:r.images?JSON.parse(r.images):[]}));
   if(geo){ const R=3959, rad=x=>x*Math.PI/180;
     out=out.map(r=>{ if(r.zip==="agent") return {...r,_d:-1};                 // agent/AI posts stay pinned
         if(r.lat==null||r.lng==null) return {...r,_d:1e9};
@@ -1018,7 +1039,7 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
         const a=Math.sin(dLat/2)**2+Math.cos(rad(lat))*Math.cos(rad(r.lat))*Math.sin(dLng/2)**2;
         return {...r,_d:R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}; })
       .filter(r=>r._d<0||r._d<=radius).sort((x,y)=>x._d-y._d); }
-  out=out.slice(0,100).map(({lat,lng,_d,...r})=>r);
+  out=out.slice(0,100).map(({lat,lng,_d,body_es,price,...r})=>r);
   return json({ok:true,comments:out}); }
 
 async function voteComment(request,env,uid){ const {commentId,dir}=await request.json().catch(()=>({}));

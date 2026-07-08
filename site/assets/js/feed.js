@@ -2,19 +2,26 @@ document.addEventListener("DOMContentLoaded",function(){
   var list=document.getElementById("posts");
   var ZIPS={ "90045":[33.9585,-118.3970],"90066":[34.0,-118.43],"90230":[33.997,-118.396],"90232":[34.019,-118.391],"90291":[33.991,-118.465],"90501":[33.836,-118.298],"90504":[33.872,-118.326],"90277":[33.836,-118.39],"90266":[33.892,-118.411],"90254":[33.862,-118.4],"90245":[33.917,-118.402],"90802":[33.768,-118.193],"90740":[33.757,-118.079],"90803":[33.759,-118.129],"90731":[33.736,-118.292] };
   var GEO=null;
-  function feedUrl(){ return "/api/comments"+(GEO?("?lat="+GEO[0]+"&lng="+GEO[1]+"&radius=40"):""); }
+  function lang(){ try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";} }
+  function feedUrl(){ return "/api/comments?lang="+lang()+(GEO?("&lat="+GEO[0]+"&lng="+GEO[1]+"&radius=40"):""); }
+  function saveGeo(){ try{localStorage.cn_geo=JSON.stringify(GEO);}catch(_){} }
+  function storedGeo(){ try{var g=JSON.parse(localStorage.cn_geo||"null");return (Array.isArray(g)&&g.length===2)?g:null;}catch(_){return null;} }
   function live(){ var el=document.getElementById("nm-live"); if(el)el.style.display="inline-flex"; }
   function scope(v){ try{localStorage.cn_feedscope=v;}catch(_){} }
   function getScope(){ try{return localStorage.cn_feedscope||"";}catch(_){return "";} }
   var nl=document.getElementById("nm-loc");
-  function toNear(p){ GEO=[p.coords.latitude,p.coords.longitude]; if(nl)nl.textContent="📍 Near you  ✕"; live(); scope("near"); load(); }
-  function toMaster(){ GEO=null; if(nl)nl.textContent="🌎 Everyone"; scope("master"); load(); }
+  function toNear(p){ GEO=[p.coords.latitude,p.coords.longitude]; saveGeo(); if(nl)nl.textContent="📍 Near you  ✕"; live(); scope("near"); load(); }
+  function toMaster(){ GEO=null; try{delete localStorage.cn_geo;}catch(_){} if(nl)nl.textContent="🌎 Everyone"; scope("master"); load(); }
   if(nl)nl.addEventListener("click",function(){
     if(GEO){ toMaster(); return; }                                   // ✕ → global master feed
     if(!navigator.geolocation)return; nl.textContent="Locating…";
     navigator.geolocation.getCurrentPosition(toNear,function(){ nl.textContent="📍 Use my location"; }); });
-  // Auto-default to near-me on load (unless they chose the master feed before).
-  if(navigator.geolocation && getScope()!=="master"){ navigator.geolocation.getCurrentPosition(toNear,function(){}); }
+  // Near-me on load: stored coords win — no permission re-prompt on refresh. Only ask on the first-ever visit.
+  var sg=storedGeo();
+  if(getScope()!=="master"){
+    if(sg){ GEO=sg; if(nl)nl.textContent="📍 Near you  ✕"; live(); }
+    else if(navigator.geolocation){ navigator.geolocation.getCurrentPosition(toNear,function(){}); }
+  }
   var nz=document.getElementById("nm-zip");
   if(nz)nz.addEventListener("input",function(e){ var z=e.target.value.trim(); if(ZIPS[z]){ GEO=ZIPS[z]; live(); load(); } });
   function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(s<3600)return Math.max(1,Math.round(s/60))+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d";}
@@ -33,10 +40,11 @@ document.addEventListener("DOMContentLoaded",function(){
         '<span style="font:700 11px Manrope;color:'+(mine>0?"#18C8FF":mine<0?"#ff8f8f":"#c9d6ef")+'">'+score+'</span>'+
         '<button class="vote" data-id="'+(+c.id)+'" data-dir="-1" aria-label="Downvote" style="background:none;border:none;cursor:pointer;font-size:13px;line-height:1;color:'+(mine<0?"#ff8f8f":"#8ca0c4")+'">▼</button></div>';
       var gallery=(c.images&&c.images.length)?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+c.images.slice(0,4).map(function(u){return '<img src="'+esc(u)+'" loading="lazy" style="height:120px;border-radius:10px;flex:none;object-fit:cover">';}).join('')+'</div>':'';
-      var chip=(c.vdp_id&&c.year)?('<div class="row" style="align-items:center;gap:8px;margin-top:9px;background:rgba(6,16,40,.6);border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:7px">'+
+      var chip=(c.vdp_id&&c.year)?('<a href="/talk/'+String(c.year+"-"+c.make+"-"+c.model).toLowerCase().replace(/[^a-z0-9]+/g,"-")+'" style="text-decoration:none;display:block;margin-top:9px">'+
+        '<div class="row hoverable" style="align-items:center;gap:8px;background:rgba(6,16,40,.6);border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:7px">'+
         '<span style="width:38px;height:26px;border-radius:6px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+esc(c.photos[0])+'" loading="lazy" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
-        '<span style="font:700 10px Manrope;flex:1;color:#fff">'+esc(c.year)+' '+esc(c.make)+' '+esc(c.model)+' · <span class="cy">$'+esc(c.price_mo)+'/mo</span></span></div>'+
-        '<a href="/talk/'+String(c.year+"-"+c.make+"-"+c.model).toLowerCase().replace(/[^a-z0-9]+/g,"-")+'" class="btn primary sm" style="text-decoration:none;margin-top:8px;display:inline-flex">Talk to this '+esc(c.make)+' '+esc(c.model)+' →</a>'):'';
+        '<span style="font:700 10px Manrope;flex:1;color:#fff">'+esc(c.year)+' '+esc(c.make)+' '+esc(c.model)+' · <span class="cy">$'+esc(c.price_mo)+'/mo</span></span>'+
+        '<span class="cy" style="font:700 10px Manrope;flex:none">Talk →</span></div></a>'):'';
       var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span class="act-reply" data-h="'+esc(c.handle||"")+'" style="cursor:pointer">💬 Reply</span>')+'</div>';
       return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+rail+
         '<div style="flex:1;min-width:0">'+
@@ -50,12 +58,14 @@ document.addEventListener("DOMContentLoaded",function(){
   }
   function load(){fetch(feedUrl()).then(function(r){return r.json();}).then(function(d){
     var cs=d.comments||[];
-    try{ if(!GEO)sessionStorage.cn_feed=JSON.stringify(cs.slice(0,30)); }catch(_){}
+    try{ if(!GEO)sessionStorage.cn_feed2=JSON.stringify(cs.slice(0,30)); }catch(_){}
     paint(cs);
   }).catch(function(){ if(!list.childElementCount)list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Feed unavailable — refresh to retry.</div>';});}
   // Instant paint from session cache, then refresh from network.
-  try{ var cf=sessionStorage.cn_feed; if(cf)paint(JSON.parse(cf)); }catch(_){}
+  try{ var cf=sessionStorage.cn_feed2; if(cf)paint(JSON.parse(cf)); }catch(_){}
   load();
+  // EN/ES toggle → refetch so agent posts come back in the chosen language.
+  document.addEventListener("click",function(e){ if(e.target.closest("#appnav .seg button")) setTimeout(load,60); });
   document.getElementById("post-send").addEventListener("click",async function(){
     var inEl=document.getElementById("post-in"),body=inEl.value.trim();if(!body)return;
     var r=await fetch("/api/comments?vdpId=0",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({body:body})});
