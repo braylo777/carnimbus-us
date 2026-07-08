@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded",function(){
 
   // Inline chat surface in the right pane (compact reuse of /api/chats + /api/car-chat).
   function openChat(id, cslug){
+    location.href="/talk/"+cslug; return;                   // use the full car-page flow (real slot chips + booking + congrats) for every match
     if(mobile()){ location.href="/talk/"+cslug; return; }   // mobile: full car page
     var pane=$("m-chat"), hist=[], firstMsg=true;
     pane.innerHTML='<div class="row" style="align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(24,200,255,.12)">'+
