@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded",function(){
   // New matches (ranked + affordable) as small talk/skip cards.
   fetch("/api/feed?lang="+lang()).then(function(r){return r.json();}).then(function(d){
     if(d.authed===false)$("m-gate").style.display="flex";
-    var sk=skipped(), cars=(d.cars||[]).filter(function(c){return sk.indexOf(c.id)<0;}).slice(0,8);
+    var sk=skipped(), cars=(d.cars||[]).filter(function(c){return sk.indexOf(c.id)<0;}).slice(0,24);
     var el=$("m-new");
     el.innerHTML=cars.map(function(c){
       return '<div class="glass" data-id="'+c.id+'" style="flex:none;width:150px;border-radius:14px;overflow:hidden">'+
@@ -27,8 +27,8 @@ document.addEventListener("DOMContentLoaded",function(){
       var s=e.target.closest(".mskip"); if(s){ skip(+s.dataset.id); var card=s.closest(".glass"); if(card)card.remove(); } });
   }).catch(function(){});
 
-  // Conversations (existing threads).
-  fetch("/api/chats").then(function(r){return r.ok?r.json():{threads:[]};}).then(function(d){
+  // Conversations (existing threads) — reloadable so a brand-new chat bumps into the list (Bumble-style).
+  function loadThreads(){ return fetch("/api/chats").then(function(r){return r.ok?r.json():{threads:[]};}).then(function(d){
     var el=$("m-threads"), th=(d&&d.threads)||[];
     if(!th.length){ el.innerHTML='<div style="font:500 11px Manrope;color:#8ca0c4">No conversations yet — talk to a match to start one.</div>'; return; }
     el.innerHTML=th.map(function(t){
@@ -39,32 +39,52 @@ document.addEventListener("DOMContentLoaded",function(){
         (t.matched_at?'<span style="display:block;font:600 9px Manrope;color:#5f7397;margin-top:2px">Matched '+rel(t.matched_at)+'</span>':'')+'</span></button>';
     }).join('');
     el.addEventListener("click",function(e){ var b=e.target.closest(".thread"); if(b)openChat(+b.dataset.id,b.dataset.slug); });
-  }).catch(function(){});
+  }).catch(function(){}); }
+  loadThreads();
 
   // Inline chat surface in the right pane (compact reuse of /api/chats + /api/car-chat).
   function openChat(id, cslug){
     if(mobile()){ location.href="/talk/"+cslug; return; }   // mobile: full car page
-    var pane=$("m-chat"), hist=[];
+    var pane=$("m-chat"), hist=[], firstMsg=true;
     pane.innerHTML='<div class="row" style="align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(24,200,255,.12)">'+
       '<span style="width:30px;height:30px;border-radius:50%;overflow:hidden;flex:none;border:1px solid rgba(24,200,255,.3)"><img src="/assets/logo-96.png" style="width:100%;height:100%;object-fit:cover"></span>'+
       '<div id="mc-name" style="font:700 12px Manrope;color:#fff;flex:1">Loading…</div>'+
       '<a class="btn ghost sm" href="/talk/'+cslug+'">Open full →</a></div>'+
       '<div id="mc-thread" class="col" style="flex:1;padding:13px 14px;gap:8px;overflow-y:auto;min-height:0"></div>'+
-      '<div class="row" style="padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)"><input id="mc-in" class="pill" style="flex:1;height:42px" placeholder="Message the car…"><button id="mc-send" class="btn primary md" style="margin-left:8px">Send</button></div>';
+      '<div class="row" style="padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)"><input id="mc-in" class="pill" style="flex:1;height:42px" placeholder="Message the car"><button id="mc-send" class="btn primary md" style="margin-left:8px">Send</button></div>';
     var thread=$("mc-thread");
     function bubble(who,txt){var m=document.createElement("div");m.className="msg "+who;
       m.innerHTML=(who==="car"?'<span class="msg-av"><img class="msg-logo" src="/assets/logo-96.png" alt=""></span>':'')+'<div class="bubble '+who+'"></div>';
-      m.querySelector(".bubble").textContent=txt;thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}
+      m.querySelector(".bubble").textContent=txt;thread.appendChild(m);thread.scrollTop=thread.scrollHeight;return m;}
+    function typing(on){ var t=thread.querySelector(".typing"); if(t)t.remove();
+      if(on){ var m=document.createElement("div"); m.className="msg car typing";
+        m.innerHTML='<span class="msg-av"><img class="msg-logo" src="/assets/logo-96.png" alt=""></span><div class="bubble car"><span class="tdots"><i></i><i></i><i></i></span></div>';
+        thread.appendChild(m); thread.scrollTop=thread.scrollHeight; } }
     fetch("/api/vdp?id="+id).then(function(r){return r.json();}).then(function(d){ if(d&&d.car)$("mc-name").textContent=d.car.year+" "+d.car.make+" "+d.car.model; }).catch(function(){});
     fetch("/api/chats?vdpId="+id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
       var ms=(h&&h.messages)||[];
       if(!ms.length)bubble("car","Ask me anything — or tell me when you want to drive.");
+      else firstMsg=false;
       ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body); hist.push({role:m.role==="user"?"user":"assistant",content:m.body});});
     }).catch(function(){});
+    function renderSlots(slots){ var w=document.createElement("div"); w.className="msg car"; w.style.marginLeft="34px";
+      w.innerHTML='<div class="row" style="flex-wrap:wrap;gap:7px">'+slots.map(function(s){
+        return '<button type="button" class="bopt slot-chip" data-v="'+String(s.label).replace(/"/g,"")+'">'+String(s.label).replace(/[<&>]/g,"")+'</button>';}).join('')+'</div>';
+      thread.appendChild(w); thread.scrollTop=thread.scrollHeight;
+      w.querySelectorAll(".slot-chip").forEach(function(b){ b.addEventListener("click",function(){
+        $("mc-in").value=b.dataset.v; send(); w.querySelectorAll(".slot-chip").forEach(function(x){x.disabled=true;}); }); }); }
     function send(){var inEl=$("mc-in"),msg=inEl.value.trim();if(!msg)return;inEl.value="";bubble("you",msg);hist.push({role:"user",content:msg});
+      typing(true);
       fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:id,messages:hist,lang:lang()})})
-        .then(function(r){return r.json();}).then(function(x){ if(x&&x.ok){hist.push({role:"assistant",content:x.reply});bubble("car",x.reply);
-          if(x.pass){bubble("car","🎉 You're booked — see your pass in Profile.");}} }).catch(function(){}); }
+        .then(function(r){return r.json();}).then(function(x){ typing(false);
+          if(x&&x.ok){hist.push({role:"assistant",content:x.reply});bubble("car",x.reply);
+            if(x.slots&&x.slots.length)renderSlots(x.slots);                // tappable real-availability chips
+            if(x.pass){bubble("car","🎉 You're booked — see your pass in Profile.");}
+            if(firstMsg){ firstMsg=false;                                  // first message → this match becomes a conversation (Bumble-style), leave New Matches
+              var card=document.querySelector('#m-new [data-id="'+id+'"]'); if(card)card.remove();
+              loadThreads(); } }
+          else bubble("car","Static on the line — try that again."); })
+        .catch(function(){ typing(false); bubble("car","Static on the line — try that again."); }); }
     $("mc-send").addEventListener("click",send);
     $("mc-in").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
   }

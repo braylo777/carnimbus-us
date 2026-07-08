@@ -29,28 +29,32 @@ document.addEventListener("DOMContentLoaded",function(){
       document.getElementById("y-summary").style.display="block";
       document.getElementById("y-bars").innerHTML=bars.map(function(b){
         return '<div class="row" style="justify-content:space-between;font:500 12px Manrope"><span style="color:#8ca0c4">'+b[0]+'</span><span style="color:#e2e9f2;font-weight:600;text-align:right">'+b[1]+'</span></div>';}).join('');
-      document.getElementById("y-hobbies").innerHTML=(a.hobbies||[]).map(function(h){return '<span class="badge cyan">'+h+'</span>';}).join('');
-      // Computed estimate box — its own card.
+      // Hobbies now render in their own top block.
+      var hb=(a.hobbies||[]);
+      if(hb.length){document.getElementById("y-hobwrap").style.display="block";
+        document.getElementById("y-hobbies").innerHTML=hb.map(function(h){return '<span class="badge cyan">'+h+'</span>';}).join('');}
+      // Computed estimate box — its own card. Each label is its own text node so the ES observer can translate it.
       var est=document.getElementById("y-estimate");
       if(est&&aprNum!=null){ est.style.display="block";
-        est.innerHTML='<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:8px">YOUR ESTIMATE'+(a.softpull?" · SOFT-CHECKED":"")+'</div>'+
+        // Est. loan principal: buyer's max monthly implies a financed amount at their APR/term (honest, budget-derived).
+        var r=aprNum/1200, term=72, mo=+a.max_monthly||0, principal=r?Math.round(mo*(1-Math.pow(1+r,-term))/r):mo*term;
+        var loanStr=principal?("$"+principal.toLocaleString()):"—";
+        est.innerHTML='<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:8px"><span>YOUR ESTIMATE</span>'+(a.softpull?'<span> · SOFT-CHECKED</span>':"")+'</div>'+
           '<div class="row" style="justify-content:space-between;font:600 13px Manrope"><span style="color:#8ca0c4">Est. APR</span><span class="cy" style="font-weight:800">'+aprNum+'% · 72 mo</span></div>'+
-          '<div style="font:500 10px Manrope;color:#8ca0c4;margin-top:6px">Loan partners: <span style="color:#c9d6ef">Chase Auto · Ally · Capital One</span> <span style="opacity:.6">(sample)</span></div>'+
-          '<div style="font:500 9px/1.5 Manrope;color:#7f93b8;margin-top:9px;border-top:1px solid rgba(24,200,255,.12);padding-top:8px">These are estimates based only on the information you provided. CarNimbus isn\'t responsible for inaccurate details you enter — we estimate your rate from your inputs and our dealer &amp; lender partners. Your final terms are confirmed at signing.</div>'; }
+          '<div class="row" style="justify-content:space-between;font:600 13px Manrope;margin-top:5px"><span style="color:#8ca0c4">Est. loan amount</span><span style="color:#e2e9f2;font-weight:700">'+loanStr+'</span></div>'+
+          '<div style="font:500 10px Manrope;color:#8ca0c4;margin-top:6px"><span>Loan partners:</span> <span style="color:#c9d6ef">Chase Auto · Ally · Capital One</span> <span style="opacity:.6">(sample)</span></div>'+
+          '<div style="font:500 9px/1.5 Manrope;color:#7f93b8;margin-top:9px;border-top:1px solid rgba(24,200,255,.12);padding-top:8px"><span>These are estimates based only on the information you provided. CarNimbus isn\'t responsible for inaccurate details you enter — we estimate your rate from your inputs and our dealer &amp; lender partners. Your final terms are confirmed at signing.</span></div>'; }
     }
+    // YOUR PASSES — the scheduled drive as a pass card (empty state otherwise).
     if(me.drive){var d=me.drive;$("y-up").style.display="block";
       $("y-veh").textContent=d.year+" "+d.make+" "+d.model;
       $("y-status").textContent=d.status;
-      $("y-center").textContent="Porsche South Bay · LA Car Guy";
+      $("y-center").textContent=(d.center||"your CarNimbus center");
       $("y-slot").textContent=fmtSlot(d.slot);
       if(d.photos&&d.photos[0])$("y-photo").innerHTML='<img src="'+d.photos[0]+'" style="width:100%;height:100%;object-fit:cover" alt="">';
       $("y-pass").addEventListener("click",function(e){e.preventDefault();openPass(d);});
-      $("y-chat").href="/car?id="+d.vdp_id;}
-    fetch("/api/feed?lang="+(function(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}})()).then(function(r){return r.json();}).then(function(f){
-      document.getElementById("y-matches").innerHTML=(f.cars||[]).slice(0,3).map(function(c){
-        return '<a href="/car?id='+c.id+'" class="row" style="align-items:center;gap:10px;text-decoration:none;padding:6px 0">'+
-        '<span style="width:52px;height:36px;border-radius:8px;overflow:hidden;flex:none">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</span>'+
-        '<span style="flex:1"><span style="display:block;font:600 11px Manrope;color:#fff">'+c.year+' '+c.make+' '+c.model+'</span><span class="cy" style="font:700 10px Manrope">$'+c.price_mo+'/mo</span></span>'+(c.match!=null?'<span class="badge cyan">'+c.match+'%</span>':'')+'</a>';}).join('');}).catch(function(){});
+      $("y-chat").href="/car?id="+d.vdp_id;
+    } else { var np=$("y-nopass"); if(np)np.style.display="block"; }
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });
   var yo=$("y-out");
   if(yo)yo.addEventListener("click",async function(){
