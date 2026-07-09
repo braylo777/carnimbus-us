@@ -6,7 +6,9 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("s-who").textContent="✓ "+d.who+(status==="sold"?" — marked sold. 🏁":" checked in — keys ready.");
     setTimeout(function(){location.href="/dealer/";},1800);}
   function fail(t){var m=document.getElementById("s-msg");m.textContent=t;m.style.display="block";}
-  async function submit(tok){var r=await fetch("/api/dealer/checkin",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:tok,status:status})});
+  async function submit(tok){var payload={token:tok,status:status};
+    if(status==="sold"){ var sp=prompt("Sale price? (optional — leave blank to skip)"); var n=parseInt(String(sp||"").replace(/[^0-9]/g,""),10); if(Number.isFinite(n))payload.sale_price=n; }
+    var r=await fetch("/api/dealer/checkin",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     var d=await r.json().catch(function(){return{};}); if(d.ok)done(d.drive); else fail("Pass not found — check the code.");}
   navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(function(st){
     v.srcObject=st;v.setAttribute("playsinline","");v.play();

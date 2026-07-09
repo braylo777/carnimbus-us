@@ -49,6 +49,20 @@
           <div class="metric"><div class="v" id="k-showed">0</div><div class="l">Showed</div><div class="mono" id="k-showed-sub" style="font-size:9px;color:#18C8FF;margin-top:4px"></div></div>
           <div class="metric"><div class="v" id="k-closed">0</div><div class="l">Closed</div><div class="mono" id="k-closed-sub" style="font-size:9px;color:#18C8FF;margin-top:4px"></div></div>
         </div>
+        <div id="roi" class="glass pd" style="display:none;margin-top:14px;border-radius:16px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">DEALER VALUE · LAST <span id="roi-days">30</span> DAYS</div>
+            <div class="row" style="gap:6px" id="roi-toggle">
+              <button type="button" class="opt" data-d="7">7d</button><button type="button" class="opt on" data-d="30">30d</button><button type="button" class="opt" data-d="90">90d</button></div>
+          </div>
+          <div class="row" style="gap:22px;margin-top:10px;align-items:baseline;flex-wrap:wrap">
+            <div><div id="roi-score" class="disp" style="font-size:30px;color:#18C8FF">—</div><div style="font:600 9px Manrope;color:#8ca0c4">VALUE SCORE</div></div>
+            <div><div id="roi-gross" class="disp" style="font-size:20px">—</div><div style="font:600 9px Manrope;color:#8ca0c4">GROSS ATTRIBUTED</div></div>
+            <div><div id="roi-ttc" class="disp" style="font-size:20px">—</div><div style="font:600 9px Manrope;color:#8ca0c4">AVG DAYS TO CLOSE</div></div>
+          </div>
+          <div id="roi-waterfall" class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"></div>
+          <table style="width:100%;margin-top:12px;font:500 11px Manrope;border-collapse:collapse"><thead><tr><th style="text-align:left;color:#8ca0c4;font:700 8px Manrope;padding:4px 6px">VEHICLE</th><th style="color:#8ca0c4;font:700 8px Manrope;padding:4px 6px">ROUTED</th><th style="color:#8ca0c4;font:700 8px Manrope;padding:4px 6px">SHOWED</th><th style="color:#8ca0c4;font:700 8px Manrope;padding:4px 6px">SOLD</th></tr></thead><tbody id="roi-per"></tbody></table>
+        </div>
         <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-top:16px" id="dc-split">
           <div>
             <div class="row" style="align-items:center;justify-content:space-between"><span class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">APPOINTMENTS · SCAN QR TO ADVANCE</span><span class="mono" style="font-size:8px;color:#7f93b8">CONFIRMED → ARRIVED → SOLD</span></div>

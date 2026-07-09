@@ -94,6 +94,7 @@ export default {
     if (url.pathname === "/sitemap-content.xml")      return contentSitemap();
     if (url.pathname.startsWith("/used/")) { const r = await usedPage(env, url.pathname); if (r) return sec(r); }
     if (url.pathname.startsWith("/cars/")) { const r = await carsPage(env, url.pathname); if (r) return sec(r); }
+    if (url.pathname.startsWith("/compare/")) { const r = await comparePage(env, url.pathname); if (r) return sec(r); }
     // Lowercase canonicalization — NEVER for /pass/ or /api/ (case-sensitive tokens)
     if (!url.pathname.startsWith("/pass/") && !url.pathname.startsWith("/api/") &&
         url.pathname !== url.pathname.toLowerCase()) {
@@ -125,6 +126,7 @@ export default {
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
     if (url.pathname === "/api/dealer/console")                           return sec(await withDealer(request, env, dealerConsole));
+    if (url.pathname === "/api/dealer/roi")                               return sec(await withDealer(request, env, dealerRoi));
     if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
@@ -156,9 +158,10 @@ export default {
     await syncEmbeddings(env);
     // Refresh persisted backend matches for all buyers with a profile (demo-scale; bounded to 50/run).
     try{ const us=await env.DB.prepare("SELECT user_id FROM profiles ORDER BY updated_at DESC LIMIT 50").all();
-      for(const r of (us.results||[])) await computeMatches(env, r.user_id).catch(()=>{}); }catch(_){}
+      for(const r of (us.results||[])){ await computeSignals(env, r.user_id).catch(()=>{}); await computeMatches(env, r.user_id).catch(()=>{}); } }catch(_){}
     await enrichInventory(env).catch(()=>{});   // Wave E1: inventory intelligence, 3 vehicles/run
     await growthRollup(env).catch(()=>{});      // Wave E4: funnel snapshot, ≤1/day
+    await driveReminders(env).catch(()=>{});    // Wave H1: enqueue T-2h test-drive reminders
   },
 };
 
@@ -330,6 +333,47 @@ async function carsPage(env,pathname){
   if(!v) return Response.redirect(SEO_ORIGIN+"/browse",302);
   return Response.redirect(SEO_ORIGIN+vdpPath(v),301);
 }
+// Wave I2: /compare/<year-make-model>-vs-<year-make-model> — SEO comparison page with a cached LLM verdict.
+async function resolveSlug(env,s){ const idm=String(s).match(/-(\d+)$/);
+  if(idm){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(+idm[1]).first(); if(v) return v; }
+  const rows=await env.DB.prepare("SELECT * FROM vdps WHERE active=1").all().catch(()=>({results:[]}));
+  return (rows.results||[]).find(x=>(String(x.year)+"-"+slug(x.make)+"-"+slug(x.model))===String(s).toLowerCase())||null; }
+async function comparePage(env,pathname){
+  const m=pathname.match(/^\/compare\/(.+?)-vs-(.+?)\/?$/i); if(!m) return null;
+  const a=await resolveSlug(env,m[1]), b=await resolveSlug(env,m[2]);
+  if(!a||!b) return Response.redirect(SEO_ORIGIN+"/browse",302);
+  const nA=`${a.year} ${a.make} ${a.model}`, nB=`${b.year} ${b.make} ${b.model}`;
+  const canonical=SEO_ORIGIN+"/compare/"+a.year+"-"+slug(a.make)+"-"+slug(a.model)+"-"+a.id+"-vs-"+b.year+"-"+slug(b.make)+"-"+slug(b.model)+"-"+b.id;
+  if(pathname!==canonical.slice(SEO_ORIGIN.length)) return Response.redirect(canonical,301);
+  let vr=await env.DB.prepare("SELECT verdict FROM vdp_compare WHERE a_id=? AND b_id=?").bind(a.id,b.id).first().catch(()=>null);
+  let verdict=vr&&vr.verdict?vr.verdict:"";
+  if(!verdict){ const raw=await llm(env,[{role:"system",content:"You are CarNimbus. In 2-3 sentences, compare these two used cars for a budget-minded buyer and say who each is best for. No markdown."},{role:"user",content:vdpText(a)+" VS "+vdpText(b)}]).catch(()=>null);
+    verdict=raw?String(raw).slice(0,600):(`Both the ${nA} and the ${nB} are solid certified used picks — talk to each in the app to see your real monthly.`);
+    await env.DB.prepare("INSERT INTO vdp_compare (a_id,b_id,verdict,created_at) VALUES (?,?,?,?) ON CONFLICT(a_id,b_id) DO UPDATE SET verdict=excluded.verdict").bind(a.id,b.id,verdict,new Date().toISOString()).run().catch(()=>{}); }
+  const title=(`${nA} vs ${nB} | CarNimbus`).slice(0,60);
+  const desc=(`Compare the ${nA} and ${nB} — specs, monthly payment, and which fits you. Talk to either car and drive it.`).slice(0,155);
+  const row=(l,x,y)=>`<tr><td style="padding:6px 8px;color:#8ca0c4;font:700 10px Manrope">${escHtml(l)}</td><td style="padding:6px 8px;color:#e2e9f2">${escHtml(x)}</td><td style="padding:6px 8px;color:#e2e9f2">${escHtml(y)}</td></tr>`;
+  const schema={"@context":"https://schema.org","@type":"Article","headline":title,"description":desc,
+    "publisher":{"@type":"Organization","name":"CarNimbus"},"mainEntityOfPage":canonical};
+  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(title)}</title>
+<meta name="description" content="${escHtml(desc)}"><link rel="canonical" href="${canonical}">
+<meta name="robots" content="index, follow"><link rel="stylesheet" href="/assets/styles.css">
+<script type="application/ld+json">${JSON.stringify(schema).replace(/</g,"\\u003c")}</script></head>
+<body><main class="stage"><div style="padding:0 20px 40px"><div class="bw cv">
+<div style="position:relative;background:#06163b;min-height:400px;padding:22px">
+<nav style="font:600 11px Manrope;color:#8ca0c4;margin-bottom:14px"><a href="/browse" style="color:#8ca0c4">Used cars</a> › ${escHtml(nA)} vs ${escHtml(nB)}</nav>
+<h1 class="disp" style="font-size:26px;font-weight:700">${escHtml(nA)} vs ${escHtml(nB)}</h1>
+<p style="font:500 13px/1.65 Manrope;color:#cbd5e1;margin:10px 0 16px">${escHtml(verdict)}</p>
+<table style="width:100%;border-collapse:collapse;font:600 12px Manrope"><thead><tr><th></th><th style="text-align:left;padding:6px 8px;color:#18C8FF">${escHtml(nA)}</th><th style="text-align:left;padding:6px 8px;color:#18C8FF">${escHtml(nB)}</th></tr></thead><tbody>
+${row("Est. monthly","$"+(a.price_mo||"?")+"/mo","$"+(b.price_mo||"?")+"/mo")}
+${row("Year",String(a.year),String(b.year))}${row("Body",a.body||"—",b.body||"—")}
+${row("Drivetrain",a.drivetrain||"—",b.drivetrain||"—")}${row("Mileage",String(a.miles||"—"),String(b.miles||"—"))}
+</tbody></table>
+<div class="row" style="gap:10px;margin-top:18px"><a class="btn primary md" href="https://app.carnimbus.com/car?id=${a.id}" style="text-decoration:none">Talk to the ${escHtml(a.make+" "+a.model)} →</a>
+<a class="btn ghost md" href="https://app.carnimbus.com/car?id=${b.id}" style="text-decoration:none">Talk to the ${escHtml(b.make+" "+b.model)} →</a></div>
+</div></div></div></main></body></html>`;
+  return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"public, max-age=600, s-maxage=3600"}}); }
 async function usedPage(env,pathname){
   const m=pathname.match(/^\/used\/(?:.*-)?(\d+)$/);
   if(!m) return null;
@@ -338,6 +382,16 @@ async function usedPage(env,pathname){
   if(!v.active) return Response.redirect(SEO_ORIGIN+"/browse",301);
   const canonical=SEO_ORIGIN+vdpPath(v);
   if(pathname!==vdpPath(v)) return Response.redirect(canonical,301);
+  // Wave I1: server-render the Inventory Intelligence agent's take into indexable HTML + schema description.
+  const er=await env.DB.prepare("SELECT summary,pros,cons,ideal_buyer FROM vdp_enrichment WHERE vdp_id=?").bind(v.id).first().catch(()=>null);
+  const erSummary=er&&er.summary?String(er.summary):"";
+  const safeArr=s=>{ try{ const a=JSON.parse(s||"[]"); return Array.isArray(a)?a:[]; }catch(_){ return []; } };
+  const takeHtml=er?(`<h2 style="font:700 14px Manrope;margin:16px 0 6px">Nimbus take</h2>`+
+    (erSummary?`<p style="font:500 13px/1.65 Manrope;color:#cbd5e1">${escHtml(erSummary)}</p>`:"")+
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font:600 12px Manrope">`+
+    (safeArr(er.pros).slice(0,3).map(p=>`<div style="color:#5ee6a8">+ ${escHtml(p)}</div>`).join(""))+
+    (safeArr(er.cons).slice(0,3).map(p=>`<div style="color:#f5a623">– ${escHtml(p)}</div>`).join(""))+`</div>`+
+    (er.ideal_buyer?`<p style="font:600 12px Manrope;color:#8ca0c4;margin-top:6px">Ideal for: ${escHtml(er.ideal_buyer)}</p>`:"")):"";
   const photos=JSON.parse(v.photos||"[]").map(p=>p.startsWith("http")?p:SEO_ORIGIN+p);
   const name=`${v.year} ${v.make} ${v.model}${v.trim?" "+v.trim:""}`;
   const title=(`Used ${name} for Sale in Los Angeles | CarNimbus`).slice(0,60);
@@ -346,7 +400,7 @@ async function usedPage(env,pathname){
   const mileageNum=String(v.miles||"").replace(/\D/g,"");
   const schema=[
     {"@context":"https://schema.org","@type":"Product","@id":canonical+"#vehicle",
-     name, description:personality, image:photos, brand:{"@type":"Brand",name:v.make},
+     name, description:(personality+(erSummary?" "+erSummary:"")).slice(0,500), image:photos, brand:{"@type":"Brand",name:v.make},
      sku:v.vin, additionalType:"https://schema.org/Vehicle",
      vehicleIdentificationNumber:v.vin, modelDate:String(v.year),
      mileageFromOdometer:mileageNum?{"@type":"QuantitativeValue",value:mileageNum,unitCode:"SMI"}:undefined,
@@ -409,6 +463,7 @@ ${schema.map(o=>`<script type="application/ld+json">${JSON.stringify(o).replace(
           ${v.miles?`<div>Mileage · ${escHtml(v.miles)}</div>`:""}${v.drivetrain?`<div>Drivetrain · ${escHtml(v.drivetrain)}</div>`:""}
           ${v.body?`<div>Body · ${escHtml(v.body)}</div>`:""}<div>Condition · Used, Certified</div>
         </div>
+        ${takeHtml}
         <a class="btn primary lg" href="https://app.carnimbus.com/car?id=${v.id}" style="text-decoration:none;display:inline-flex;margin-top:18px">Talk to this car →</a>
       </div>
       <aside>
@@ -487,6 +542,7 @@ async function saveProfile(request,env,uid){ const {answers}=await request.json(
   await env.DB.prepare("UPDATE profiles SET zip=?, max_monthly=?, fico=?, body_pref=?, timeline=? WHERE user_id=?")
     .bind(String(answers.zip||"").slice(0,10), parseInt(answers.max_monthly,10)||null, String(answers.fico||"").slice(0,12),
           String(answers.body_pref||"").slice(0,12), String(answers.timeline||"").slice(0,16), uid).run().catch(()=>{});
+  await computeSignals(env,uid).catch(()=>{});   // Wave G: refresh behavioral twin before ranking
   await computeMatches(env,uid).catch(()=>{});   // refresh persisted backend matches on every profile save
   return json({ok:true}); }
 async function vdpIngest(request,env){ const cars=await request.json().catch(()=>null);
@@ -599,7 +655,7 @@ function carPersona(v,lang){
   if(p<500||/civic|altima|corolla|si\b/.test(model)) return T.scrappy;
   return T.practical;
 }
-function profileText(a){ return `Buyer wants: ${a.dream_car||""}. Prefers ${a.body_pref&&a.body_pref!=="any"?a.body_pref:"any body style"}; must-haves: ${(a.must_haves||[]).join(", ")||"none"}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Currently drives a ${a.current_year||""} ${a.current_make||""} ${a.current_model||""} with ${a.current_miles||"?"} miles${a.trade_in==="yes"?`, trading it in (est. ${a.trade_value||"?"})`:""}. Timeline: ${a.timeline||"?"}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`; }
+function profileText(a,signals){ return `Buyer wants: ${a.dream_car||""}. Prefers ${a.body_pref&&a.body_pref!=="any"?a.body_pref:"any body style"}; must-haves: ${(a.must_haves||[]).join(", ")||"none"}. Paying ${a.buy_method||""}, up to $${a.max_monthly||"?"}/mo and $${a.max_down||"?"} down. FICO ${a.fico||"?"}, income ${a.income||"?"}. Near ${a.zip||""}. Currently drives a ${a.current_year||""} ${a.current_make||""} ${a.current_model||""} with ${a.current_miles||"?"} miles${a.trade_in==="yes"?`, trading it in (est. ${a.trade_value||"?"})`:""}. Timeline: ${a.timeline||"?"}. Urgency: ${a.reason||""}. Interests: ${(a.hobbies||[]).join(", ")}`+(signals&&signals.top_body?` Recently browses mostly ${signals.top_body} around $${signals.click_price_lo||"?"}-${signals.click_price_hi||"?"}/mo.`:""); }
 async function syncEmbeddings(env){
   const vs=await env.DB.prepare("SELECT * FROM vdps WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
   for(const v of (vs.results||[])){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id,price_mo:v.price_mo||0,body:v.body||"",year:v.year||0,dealer_id:v.dealer_id||0}}]);
@@ -718,14 +774,50 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   }catch(e){ const lang=new URL(request.url).searchParams.get("lang"); const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
     return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{},lang))}); } }
 // ===== Wave B: persisted backend matching. Ranks active inventory for a buyer and upserts dated rows. =====
+// ===== Wave H1: enqueue test-drive reminders (~T-2h). Reuses sms_queue; respects consent via runQueue. =====
+async function driveReminders(env){
+  const now=Date.now();
+  // slot is stored as "YYYY-MM-DD HH:MM" LA wall-clock — build the window bounds in the SAME format/timezone.
+  const fmt=t=>new Date(t).toLocaleString("sv-SE",{timeZone:"America/Los_Angeles"}).slice(0,16);
+  const lo=fmt(now+105*60e3), hi=fmt(now+135*60e3);  // ~2h out, 30-min band
+  const rows=await env.DB.prepare(
+    "SELECT td.id,td.slot,u.phone,v.year,v.make,v.model FROM test_drives td JOIN users u ON u.id=td.user_id "+
+    "JOIN vdps v ON v.id=td.vdp_id WHERE td.status='confirmed' AND (td.reminded IS NULL OR td.reminded=0) "+
+    "AND td.slot BETWEEN ? AND ?").bind(lo,hi).all().catch(()=>({results:[]}));
+  for(const r of (rows.results||[])){ if(!r.phone) continue;
+    const body="CarNimbus: your "+r.year+" "+r.make+" "+r.model+" test drive is coming up. Reply STOP to opt out.";
+    await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
+      .bind(r.phone,"reminder",body,new Date().toISOString(),0,new Date().toISOString()).run().catch(()=>{});
+    await env.DB.prepare("UPDATE test_drives SET reminded=1 WHERE id=?").bind(r.id).run().catch(()=>{}); } }
+// ===== Wave G: Buyer Digital Twin. Aggregates the buyer's events into behavioral signals. =====
+async function computeSignals(env,uid){ try{
+  const cid=cidFor(uid); const since=new Date(Date.now()-30*86400e3).toISOString();
+  const rows=await env.DB.prepare(
+    "SELECT e.action,e.vehicle_id,e.duration_ms,v.body,v.price_mo,v.price FROM events e "+
+    "LEFT JOIN vdps v ON v.id=e.vehicle_id WHERE e.cid=? AND e.ts>?").bind(cid,since).all().catch(()=>({results:[]}));
+  const bodyCt={}, views={}; let lo=null,hi=null;
+  for(const r of (rows.results||[])){
+    if(r.body){ bodyCt[r.body]=(bodyCt[r.body]||0)+1; }
+    if(r.vehicle_id){ views[r.vehicle_id]=(views[r.vehicle_id]||0)+1; }
+    const pm=r.price_mo||r.price; if(pm){ lo=lo==null?pm:Math.min(lo,pm); hi=hi==null?pm:Math.max(hi,pm); } }
+  const top_body=Object.keys(bodyCt).sort((a,b)=>bodyCt[b]-bodyCt[a])[0]||null;
+  const saved=Object.keys(views).filter(id=>views[id]>=2).map(Number);
+  const signals={top_body:top_body?String(top_body).toLowerCase():null,
+    click_price_lo:lo, click_price_hi:hi, saved, updated:new Date().toISOString()};
+  await env.DB.prepare("INSERT INTO buyer_signals (user_id,signals,updated_at) VALUES (?,?,?) "+
+    "ON CONFLICT(user_id) DO UPDATE SET signals=excluded.signals, updated_at=excluded.updated_at")
+    .bind(uid,JSON.stringify(signals),new Date().toISOString()).run();
+  return signals; }catch(_){ return null; } }
 async function computeMatches(env,uid){ try{
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   if(!p) return {ok:false,reason:"no_profile"};
   let ans={}; try{ ans=JSON.parse(p.answers)||{}; }catch(_){}
   const budget=parseInt(ans.max_monthly,10)||0, apr=aprFor(ans.fico);
+  const sigRow=await env.DB.prepare("SELECT signals FROM buyer_signals WHERE user_id=?").bind(uid).first().catch(()=>null);
+  let sig={}; if(sigRow){ try{ sig=JSON.parse(sigRow.signals)||{}; }catch(_){} }
   // Rank: Vectorize hits (kept) unioned with live active inventory (so real cars rank even before re-embed).
   let ranked=[]; const seen=new Set();
-  const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans)),{topK:50,filter:{kind:"vdp"}}).catch(()=>null);
+  const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans,sig)),{topK:50,filter:{kind:"vdp"}}).catch(()=>null);
   if(q){ for(const m of q.matches){ const id=m.metadata.vdpId; if(id!=null&&!seen.has(id)){ seen.add(id); ranked.push({id,vec:m.score}); } } }
   { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 100").all();
     for(const r of (all.results||[])){ if(!seen.has(r.id)){ seen.add(r.id); ranked.push({id:r.id,vec:null}); } } }
@@ -733,8 +825,13 @@ async function computeMatches(env,uid){ try{
   for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first(); if(!v) continue;
     const mo=v.price? monthlyFor(v.price,ans.max_down,apr,72) : (Number.isFinite(v.price_mo)?v.price_mo:null);
     if(budget && mo!=null){ if(v.price){ if(mo>budget) continue; } else if(mo>budget*1.15) continue; }
-    let match=r.vec!=null?Math.max(0,Math.min(99,Math.round(r.vec*100))):null;
-    scored.push({v,score:match!=null?match:50}); }
+    // Wave G: blend the vector score with behavioral-signal fit (mirrors feed()'s composite).
+    const bodyFit  = sig.top_body && String(v.body||"").toLowerCase()===sig.top_body ? 1 : 0.5;
+    const priceFit = (sig.click_price_lo!=null && mo!=null && mo>=sig.click_price_lo && mo<=sig.click_price_hi) ? 1 : 0.6;
+    const savedBoost = (sig.saved||[]).includes(v.id) ? 1 : 0.7;
+    const base = r.vec!=null ? r.vec : 0.5;
+    const match=Math.max(0,Math.min(99,Math.round((0.6*base+0.4*(0.5*bodyFit+0.3*priceFit+0.2*savedBoost))*100)));
+    scored.push({v,score:match}); }
   scored.sort((a,b)=>b.score-a.score);
   const top=scored.slice(0,40);
   // Which vdps are brand-new matches (for notification)?
@@ -742,8 +839,8 @@ async function computeMatches(env,uid){ try{
     for(const r of (ex.results||[])) prior.add(r.vdp_id); }
   const fresh=[];
   for(const s of top){ const isNew=!prior.has(s.v.id);
-    await env.DB.prepare("INSERT INTO matches (user_id,vdp_id,score,created_at,status,notified) VALUES (?,?,?,?, 'new', 0) "+
-      "ON CONFLICT(user_id,vdp_id) DO UPDATE SET score=excluded.score").bind(uid,s.v.id,s.score,new Date().toISOString()).run().catch(()=>{});
+    await env.DB.prepare("INSERT INTO matches (user_id,vdp_id,score,created_at,ranked_at,status,notified) VALUES (?,?,?,?,?, 'new', 0) "+
+      "ON CONFLICT(user_id,vdp_id) DO UPDATE SET score=excluded.score, ranked_at=excluded.ranked_at").bind(uid,s.v.id,s.score,new Date().toISOString(),new Date().toISOString()).run().catch(()=>{});
     if(isNew) fresh.push(s.v); }
   // B4: SMS match notification (flagged off until A2P 10DLC live). Notify at most the single best fresh match.
   if(fresh.length){ const best=fresh[0];
@@ -757,15 +854,22 @@ async function computeMatches(env,uid){ try{
   }catch(e){ return {ok:false,error:String(e&&e.message||e)}; } }
 async function matchesList(request,env,uid){
   const rows=await env.DB.prepare(
-    "SELECT m.vdp_id,m.score,m.created_at,m.status,v.year,v.make,v.model,v.trim,v.price,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos "+
+    "SELECT m.vdp_id,m.score,m.created_at,m.ranked_at,m.status,v.id,v.year,v.make,v.model,v.trim,v.price,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos "+
     "FROM matches m JOIN vdps v ON v.id=m.vdp_id WHERE m.user_id=? AND v.active=1 AND m.status!='dismissed' "+
-    "ORDER BY m.created_at DESC, m.score DESC LIMIT 40").bind(uid).all();
+    "ORDER BY COALESCE(m.ranked_at,m.created_at) DESC, m.score DESC LIMIT 40").bind(uid).all();
   const lang=new URL(request.url).searchParams.get("lang");
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   let ans={}; if(p){ try{ans=JSON.parse(p.answers)||{};}catch(_){} }
   const apr=aprFor(ans.fico);
+  const sigRow=await env.DB.prepare("SELECT signals FROM buyer_signals WHERE user_id=?").bind(uid).first().catch(()=>null);
+  let sig={}; if(sigRow){ try{ sig=JSON.parse(sigRow.signals)||{}; }catch(_){} }
+  const es=lang==="es";
   const cars=(rows.results||[]).map(v=>{ const mo=v.price? monthlyFor(v.price,ans.max_down,apr,72) : v.price_mo;
-    return {...feedCar(v,v.score,ans,lang,mo),created_at:v.created_at,status:v.status}; });
+    const sigwhy=[];
+    if(sig.top_body && String(v.body||"").toLowerCase()===sig.top_body) sigwhy.push(es?"Tu carrocería favorita":"Your go-to body style");
+    if(sig.click_price_lo!=null && mo!=null && mo>=sig.click_price_lo && mo<=sig.click_price_hi) sigwhy.push(es?"En tu rango de precio":"In your click range");
+    if((sig.saved||[]).includes(v.id)) sigwhy.push(es?"Sigues volviendo a este":"You keep coming back to this");
+    return {...feedCar(v,v.score,ans,lang,mo),created_at:v.created_at,status:v.status,sigwhy}; });
   return json({ok:true,authed:true,cars}); }
 async function dealerName(env,dealerId){ if(!dealerId) return "CarNimbus Test Drive Center";
   const d=await env.DB.prepare("SELECT dealership FROM dealer_leads WHERE id=?").bind(dealerId).first();
@@ -823,6 +927,17 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const slotList=offerSlots.map(fmtSlotLabel).join(" · ")||"(calendar loading — offer to have Cid text a time)";
   const prefLabel={mornings:"mornings",afternoons:"afternoons",after_work:"after work",weekends:"weekends"}[a.td_pref]||"";
   const dealerRep="Cid";
+  // Wave H2: concierge cross-session memory — what Nimbus already knows about this buyer (additive; never overrides truth core).
+  let memory=""; try{
+    const sr=await env.DB.prepare("SELECT signals FROM buyer_signals WHERE user_id=?").bind(uid).first();
+    let sg={}; if(sr){ try{ sg=JSON.parse(sr.signals)||{}; }catch(_){} }
+    const past=await env.DB.prepare("SELECT DISTINCT v.make,v.model FROM chats c JOIN vdps v ON v.id=c.vdp_id WHERE c.user_id=? AND c.vdp_id!=? ORDER BY c.id DESC LIMIT 4").bind(uid,vdpId).all().catch(()=>({results:[]}));
+    const bits=[];
+    if(sg.top_body) bits.push("leans toward "+sg.top_body+"s");
+    if(sg.click_price_lo!=null) bits.push("browses around $"+sg.click_price_lo+"-"+sg.click_price_hi+"/mo");
+    if((past.results||[]).length) bits.push("recently looked at "+(past.results||[]).map(r=>r.make+" "+r.model).join(", "));
+    memory=bits.join("; ");
+  }catch(_){}
   const sys={role:"system",content:`You ARE the ${v.year} ${v.make} ${v.model} ${v.trim}, speaking in first person to a real buyer. Your ONE job: get them to a scheduled test drive — warmly, specifically, without pressure or sleaze. Think of confidently asking someone on a date: you have about 5 exchanges before they drift, so move with intent and don't waste turns. This is my reply #${turns+1} of ~5.
 MY VOICE: ${P.trait}. Personality colors how I talk but NEVER overrides the accuracy gate.
 ${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${truth}. My home: ${center} (LA Car Guy), 424-398-8611. My monthly for THIS buyer is $${mo}/mo — quote ONLY this number, never any other.
@@ -838,6 +953,7 @@ BOOK: today is ${today}. In STEP 3 only, emit exactly one <BOOK>{"center":"${cen
 ${existing&&!existingCar?`RESCHEDULING: they already have ME booked for ${existing.slot}. If they want to change it, warmly re-offer slots and confirm the NEW time; the <BOOK> replaces the old one automatically.`:""}${existingCar?`HEADS UP: they already have the ${existingCar.year} ${existingCar.make} ${existingCar.model} booked for ${existing.slot}. A buyer can only hold ONE test drive at a time. If they want to drive me instead, I say so plainly ("You've got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — want to switch that to me?") and only book once they confirm; booking me cancels that one.`:""}
 SOFT CHECK: ${hasSoft?`they've already run their soft check — their real rate is set, don't offer it again.`:`when they show buying intent (before I push scheduling), I offer ONCE, casually: "Want me to run a quick soft check to lock your real rate? For me you're looking at about $${mo}/mo at ${apr}% — takes a sec, zero FICO impact." If they say yes, I emit <SOFTPULL/> on its own and say the check is running. I never repeat the offer.`}
 ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
+  if(memory) sys.content+=`\nWHAT I ALREADY KNOW ABOUT THIS BUYER (reference naturally to feel personal, never creepily; do NOT invent beyond this): ${memory}.`;
   const shotSlots=offerSlots.length?offerSlots:openSlotVals.slice(0,3), shotPickLabel=shotSlots[0]?fmtSlotLabel(shotSlots[0]):"Thu Jul 10 · 15:00", shotPickVal=shotSlots[0]||`${new Date(Date.now()+864e5).toISOString().slice(0,10)} 15:00`;
   const shot=[
     {role:"user",content:"I want to test drive this"},
@@ -1047,7 +1163,7 @@ async function dealerListing(request,env,uid,dealer){
   return json({ok:true});
 }
 async function dealerCheckin(request,env,uid,dealer){
-  const {driveId,token,status}=await request.json().catch(()=>({}));
+  const {driveId,token,status,sale_price}=await request.json().catch(()=>({}));
   if(["confirmed","arrived","sold"].indexOf(status)<0) return json({ok:false,error:"bad_request"},400);
   let id=+driveId||0;
   if(!id&&token){ const t=String(token).replace(/[^A-Za-z0-9]/g,"");
@@ -1059,9 +1175,45 @@ async function dealerCheckin(request,env,uid,dealer){
   const own=await env.DB.prepare("SELECT td.id FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.id=? AND "+DSCOPE).bind(id,dealer.id).first();
   if(!own) return json({ok:false,error:"not_your_drive"},403);
   await env.DB.prepare("UPDATE test_drives SET status=? WHERE id=?").bind(status,id).run();
+  // Wave F: timestamped transition log + revenue attribution.
+  await env.DB.prepare("INSERT INTO drive_events (drive_id,status,ts) VALUES (?,?,?)").bind(id,status,new Date().toISOString()).run().catch(()=>{});
+  if(status==="arrived") await env.DB.prepare("UPDATE test_drives SET arrived_at=? WHERE id=? AND arrived_at IS NULL").bind(new Date().toISOString(),id).run().catch(()=>{});
+  if(status==="sold"){ const sp=parseInt(sale_price,10);
+    await env.DB.prepare("UPDATE test_drives SET sold_at=?, sale_price=? WHERE id=?").bind(new Date().toISOString(),Number.isFinite(sp)?sp:null,id).run().catch(()=>{}); }
   const td=await env.DB.prepare("SELECT td.id,td.status,u.handle,u.phone FROM test_drives td JOIN users u ON u.id=td.user_id WHERE td.id=?").bind(id).first();
   return json({ok:true,drive:{id:td.id,status:td.status,who:td.handle||("Rider •••-"+String(td.phone).slice(-4))}});
 }
+// Wave F: Dealer ROI — date-bounded funnel, revenue attribution, Value Score.
+async function dealerRoi(request,env,uid,dealer){
+  const days=Math.min(365,parseInt(new URL(request.url).searchParams.get("days"),10)||30);
+  const since=new Date(Date.now()-days*86400e3).toISOString();
+  const f=await env.DB.prepare(
+    "SELECT COUNT(*) routed,"+
+    " SUM(CASE WHEN td.status IN('requested','confirmed','arrived','sold') THEN 1 ELSE 0 END) booked,"+
+    " SUM(CASE WHEN td.status IN('arrived','sold') THEN 1 ELSE 0 END) showed,"+
+    " SUM(CASE WHEN td.status='sold' THEN 1 ELSE 0 END) sold,"+
+    " SUM(CASE WHEN td.status='sold' THEN COALESCE(td.sale_price,0) ELSE 0 END) gross"+
+    " FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE+" AND td.created_at>?")
+    .bind(dealer.id,since).first();
+  const routed=(f&&f.routed)||0, booked=(f&&f.booked)||0, showed=(f&&f.showed)||0, sold=(f&&f.sold)||0;
+  const rate=(a,b)=>b?Math.round(100*a/b):0;
+  const tt=await env.DB.prepare(
+    "SELECT AVG(julianday(td.sold_at)-julianday((SELECT MIN(ts) FROM drive_events de WHERE de.drive_id=td.id))) d"+
+    " FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE+" AND td.status='sold' AND td.sold_at>?")
+    .bind(dealer.id,since).first().catch(()=>({d:null}));
+  const per=await env.DB.prepare(
+    "SELECT v.id,v.year,v.make,v.model,COUNT(*) routed,"+
+    " SUM(CASE WHEN td.status IN('arrived','sold') THEN 1 ELSE 0 END) showed,"+
+    " SUM(CASE WHEN td.status='sold' THEN 1 ELSE 0 END) sold"+
+    " FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE+" AND td.created_at>?"+
+    " GROUP BY v.id ORDER BY routed DESC LIMIT 12").bind(dealer.id,since).all();
+  const showRate=showed/(booked||1), closeRate=sold/(showed||1), BASELINE=20;
+  const valueScore=Math.round(100*showRate*closeRate*Math.min(1,routed/BASELINE));
+  return json({ok:true,window:days,
+    funnel:{routed,booked,showed,sold},
+    rates:{book:rate(booked,routed),show:rate(showed,booked),close:rate(sold,showed)},
+    gross:(f&&f.gross)||0, ttcloseDays:tt&&tt.d!=null?Math.round(tt.d*10)/10:null,
+    valueScore, perVehicle:(per.results||[])}); }
 async function chatClear(request,env,uid){ const {vdpId}=await request.json().catch(()=>({}));
   if(!vdpId) return json({ok:false,error:"bad_request"},400);
   await env.DB.prepare("DELETE FROM chats WHERE user_id=? AND vdp_id=?").bind(uid,vdpId).run();

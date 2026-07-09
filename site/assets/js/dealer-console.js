@@ -76,6 +76,32 @@ document.addEventListener("DOMContentLoaded",function(){
       el.addEventListener("click",function(e){ if(e.target.closest("a"))return;
         var a=(d.appointments||[]).filter(function(x){return x.id===+el.dataset.drive;})[0]; loadChat(a); });});
   }).catch(function(){});}
+  // Wave F: Dealer ROI panel.
+  function money(n){ return "$"+Number(n||0).toLocaleString(); }
+  function loadRoi(days){ fetch("/api/dealer/roi?days="+(days||30)).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(!d||!d.ok)return; var roi=document.getElementById("roi"); if(!roi)return; roi.style.display="";
+    document.getElementById("roi-days").textContent=d.window;
+    document.getElementById("roi-score").textContent=d.valueScore;
+    document.getElementById("roi-gross").textContent=money(d.gross);
+    document.getElementById("roi-ttc").textContent=(d.ttcloseDays!=null?d.ttcloseDays+"d":"—");
+    var F=d.funnel||{}, R=d.rates||{};
+    var stages=[["Routed",F.routed,null],["Booked",F.booked,R.book],["Showed",F.showed,R.show],["Sold",F.sold,R.close]];
+    document.getElementById("roi-waterfall").innerHTML=stages.map(function(s,i){
+      return (i?'<span style="align-self:center;font:700 10px Manrope;color:#8ca0c4">'+(s[2]!=null?s[2]+"% →":"→")+'</span>':'')+
+        '<div class="glass" style="padding:8px 12px;border-radius:10px;text-align:center;min-width:64px"><div class="disp" style="font-size:18px;color:#e2e9f2">'+(s[1]||0)+'</div><div style="font:700 8px Manrope;color:#8ca0c4">'+s[0].toUpperCase()+'</div></div>';
+    }).join('');
+    document.getElementById("roi-per").innerHTML=(d.perVehicle||[]).map(function(v){
+      return '<tr><td style="padding:4px 6px;color:#e2e9f2">'+v.year+' '+v.make+' '+v.model+'</td>'+
+        '<td style="padding:4px 6px;text-align:center;color:#aebfdf">'+(v.routed||0)+'</td>'+
+        '<td style="padding:4px 6px;text-align:center;color:#aebfdf">'+(v.showed||0)+'</td>'+
+        '<td style="padding:4px 6px;text-align:center;color:#54d699">'+(v.sold||0)+'</td></tr>';
+    }).join('');
+  }).catch(function(){}); }
+  (function(){ var tg=document.getElementById("roi-toggle"); if(tg) tg.addEventListener("click",function(e){
+    var b=e.target.closest("[data-d]"); if(!b)return;
+    tg.querySelectorAll("[data-d]").forEach(function(x){x.classList.remove("on");}); b.classList.add("on");
+    loadRoi(+b.dataset.d); }); })();
+  loadRoi(30);
   load(); setInterval(load,30000);
   document.getElementById("dcc-open").addEventListener("click",function(){
     var c=document.getElementById("dc-chat"); c.style.maxHeight=(c.style.maxHeight==="none"?"420px":"none");});

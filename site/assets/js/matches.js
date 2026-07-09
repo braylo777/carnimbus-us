@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded",function(){
         '<div style="padding:9px 10px"><div style="font:700 11px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</div>'+
         '<div class="cy" style="font:700 11px Manrope;margin:2px 0 4px">$'+esc(c.price_mo)+'/mo</div>'+
         '<div style="font:600 9px Manrope;color:#8ca0c4;margin-bottom:7px">Matched today</div>'+
+        ((c.sigwhy&&c.sigwhy.length)?'<div style="font:700 8px Manrope;color:#18C8FF;background:rgba(24,200,255,.1);border-radius:6px;padding:3px 6px;margin-bottom:7px">✦ '+esc(c.sigwhy[0])+'</div>':'')+
         '<div class="row" style="gap:5px"><button class="btn primary sm mtalk" data-slug="'+slug(c)+'" data-id="'+c.id+'" style="flex:1;padding:0 8px">Talk</button>'+
         '<button class="btn ghost sm mskip" data-id="'+c.id+'" style="flex:none;padding:0 8px">✕</button></div></div></div>';
     }).join('')||'<div style="font:500 11px Manrope;color:#8ca0c4;padding:8px">No new matches — adjust your budget in Profile.</div>';
