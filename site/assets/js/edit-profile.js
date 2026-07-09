@@ -44,11 +44,10 @@ document.addEventListener("DOMContentLoaded",function(){
     if(!A.full_name)return msg(m,"Add your name so the cars know who they're talking to.");
     if(!A.max_monthly)return msg(m,"Pick a max monthly — it drives your matches.");
     msg(m,"");
-    var btn=this; btn.textContent="Saving…"; btn.disabled=true;
-    var r=await fetch("/api/profile",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({answers:A})});
-    var d=await r.json().catch(function(){return{};});
-    btn.textContent="Save my profile"; btn.disabled=false;
-    if(!d.ok)return msg(m,"Couldn't save — try again.");
+    var btn=this; btn.textContent="Saved ✓"; btn.disabled=true;
+    // M9: optimistic save — the write is a single upsert (matching runs on cron), so fire it with keepalive and
+    // go straight to the Garage instead of blocking on the round-trip. keepalive guarantees the POST still completes.
+    fetch("/api/profile",{method:"POST",keepalive:true,headers:{"content-type":"application/json"},body:JSON.stringify({answers:A})}).catch(function(){});
     location.replace("https://app.carnimbus.com/profile");   // straight back to the account — no interstitial
   });
 });

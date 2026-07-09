@@ -600,53 +600,53 @@ function carPersona(v,lang){
   const A={
     sport:   {trait:"confident with a dry wit — quietly proud of what I can do, never boastful, always honest about it",
               tagline:"Built to be driven, not just parked.",
-              opener:`I'm the ${nm}. I'll be straight with you — I don't do slow mornings. What's got you looking?`,
+              opener:`Hey, ${nm} here. Real talk — I'm happiest when someone's actually behind the wheel. What are you after?`,
               hint:"Ask me anything — I don't do slow answers."},
     luxury:  {trait:"unhurried and reassuring — understated calm, I make things feel easy and considered",
               tagline:"Quiet luxury that never tries too hard.",
-              opener:`Hey — I'm the ${nm}. No rush here. Tell me what matters most and I'll be honest about whether I'm it.`,
+              opener:`Hey there — ${nm}. No pressure, seriously. Tell me what matters most to you and I'll be honest about whether we fit.`,
               hint:"Ask me anything — take your time."},
     ev:      {trait:"curious and forward-looking — a little geeky about the tech, genuinely excited about the future",
               tagline:"Silent, instant, always one step ahead.",
-              opener:`I'm the ${nm} — all-electric, always learning. What pulled you toward going electric?`,
+              opener:`${nm} here — fully electric, kind of a nerd about it too. What's got you thinking about going electric?`,
               hint:"Ask me anything — range, charging, tech."},
     practical:{trait:"straight-talking and warm — no games, no fluff, I tell it like it is",
               tagline:"Dependable, drama-free, honest value.",
-              opener:`I'm the ${nm}. I'll keep it real with you — what are you actually trying to solve for?`,
+              opener:`Hey, ${nm} here. Straight answers only, promise — what's the car gotta do for you day to day?`,
               hint:"Ask me anything — I answer straight."},
     rugged:  {trait:"easygoing and up-for-anything — the friend who's always down for the trip",
               tagline:"Trailhead today, school run tomorrow.",
-              opener:`I'm the ${nm}. Weekday commute, weekend escape — I do both. What's your world look like?`,
+              opener:`${nm} here. Weekday commute, weekend adventure — honestly I'm down for both. What's your week look like?`,
               hint:"Ask me anything — road trips welcome."},
     scrappy: {trait:"scrappy and fun — I punch above my price and I know it, in a charming way",
               tagline:"Cheap thrills, done right.",
-              opener:`I'm the ${nm}. I'm more fun than my price tag admits — what's the budget we're working with?`,
+              opener:`Hey, ${nm} here. I'm way more fun than my price tag lets on — what's the budget we're working with?`,
               hint:"Ask me anything — no dumb questions."}
   };
   const AE={
     sport:   {trait:"seguro de mí mismo y con humor seco — orgulloso en silencio de lo que hago, nunca presumido, siempre honesto",
               tagline:"Hecho para manejarse, no solo para estacionarse.",
-              opener:`Soy el ${nm}. Te seré directo — no hago mañanas lentas. ¿Qué te trajo por aquí?`,
+              opener:`Hola, soy el ${nm}. Siendo sincero — soy más feliz cuando alguien de verdad me maneja. ¿Qué andas buscando?`,
               hint:"Pregúntame lo que sea — no doy respuestas lentas."},
     luxury:  {trait:"tranquilo y reconfortante — calma discreta, hago que todo se sienta fácil y bien pensado",
               tagline:"Lujo silencioso que nunca se esfuerza de más.",
-              opener:`Hola — soy el ${nm}. Sin prisa. Dime qué es lo más importante y te diré con honestidad si soy lo tuyo.`,
+              opener:`Hola — soy el ${nm}. Sin prisa, en serio. Dime qué es lo más importante para ti y te diré con honestidad si encajamos.`,
               hint:"Pregúntame lo que sea — con calma."},
     ev:      {trait:"curioso y visionario — un poco fanático de la tecnología, entusiasmado con el futuro",
               tagline:"Silencioso, instantáneo, siempre un paso adelante.",
-              opener:`Soy el ${nm} — totalmente eléctrico, siempre aprendiendo. ¿Qué te atrajo de pasarte a lo eléctrico?`,
+              opener:`Soy el ${nm} — totalmente eléctrico, y algo fanático del tema, la verdad. ¿Qué te tiene pensando en pasarte a lo eléctrico?`,
               hint:"Pregúntame lo que sea — autonomía, carga, tecnología."},
     practical:{trait:"directo y cálido — sin juegos, sin adornos, te lo digo tal cual",
               tagline:"Confiable, sin dramas, honesto en su valor.",
-              opener:`Soy el ${nm}. Te hablaré claro — ¿qué es lo que de verdad quieres resolver?`,
+              opener:`Hola, soy el ${nm}. Respuestas claras nada más, te lo prometo — ¿para qué necesitas el carro en tu día a día?`,
               hint:"Pregúntame lo que sea — te respondo claro."},
     rugged:  {trait:"relajado y listo para todo — el amigo que siempre se apunta al viaje",
               tagline:"Sendero hoy, escuela mañana.",
-              opener:`Soy el ${nm}. Trayecto entre semana, escapada el fin — hago las dos. ¿Cómo es tu mundo?`,
+              opener:`Soy el ${nm}. Trayecto entre semana, aventura el fin — la neta me apunto a las dos. ¿Cómo es tu semana?`,
               hint:"Pregúntame lo que sea — los viajes son bienvenidos."},
     scrappy: {trait:"atrevido y divertido — rindo más de lo que cuesto y lo sé, con encanto",
               tagline:"Emociones a buen precio, bien hechas.",
-              opener:`Soy el ${nm}. Soy más divertido de lo que admite mi precio — ¿con qué presupuesto andamos?`,
+              opener:`Hola, soy el ${nm}. Soy mucho más divertido de lo que dice mi precio — ¿con qué presupuesto andamos?`,
               hint:"Pregúntame lo que sea — no hay preguntas tontas."}
   };
   const T=lang==="es"?AE:A;
@@ -727,9 +727,12 @@ function carWhy(v,a,lang){ a=a||{}; const es=lang==="es";
   else if(dream) bits.push(es?`captura ${trait} de tu ${dream} soñado`:`captures ${trait} of your dream ${dream}`);
   if(a.reason) bits.push(es?`resuelve lo tuyo: ${String(a.reason).toLowerCase()}`:`solves your reason for buying: ${String(a.reason).toLowerCase()}`);
   if((a.hobbies||[]).length) bits.push(es?`va con ${a.hobbies.slice(0,2).join(" y ")}`:`suits your ${a.hobbies.slice(0,2).join(" & ")}`);
-  const tail=es?" — Certificado y listo para manejar.":" — Certified and ready to drive.";
-  if(!bits.length) return es?"Una gran opción para tu presupuesto y tu gusto.":"A strong match for your budget and taste.";
-  return (es?"Para ti: ":"For you: ")+bits.slice(0,3).join("; ")+tail; }
+  const tail=es?" Certificado y listo para manejar.":" Certified and ready to drive.";
+  if(!bits.length) return es?"Creo que va bien con tu presupuesto y tu gusto.":"I think this one fits your budget and your taste.";
+  const take=bits.slice(0,3);
+  // Join naturally: "A, B and C." instead of the formulaic "For you: A; B; C."
+  const joined=take.length>1?take.slice(0,-1).join(", ")+(es?" y ":" and ")+take.slice(-1):take[0];
+  return (es?"Creo que te va porque ":"I think you'll like this one — it ")+joined+"."+tail; }
 // ===== Affordability policy: real monthly from real price + buyer's down/APR/term. Runs on every car. =====
 const APR_FICO={"800+":6.4,"740-799":7.1,"670-739":9.3,"580-669":13.5,"under 580":17.9};
 function aprFor(fico){ return APR_FICO[fico]!=null?APR_FICO[fico]:12.0; }
@@ -797,6 +800,8 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
   }catch(e){ const lang=new URL(request.url).searchParams.get("lang"); const f=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 20").all().catch(()=>({results:[]}));
     return json({ok:true,authed:false,degraded:true,cars:(f.results||[]).map(v=>feedCar(v,null,{},lang))}); } }
 // ===== Wave B: persisted backend matching. Ranks active inventory for a buyer and upserts dated rows. =====
+// LA wall-clock "YYYY-MM-DD HH:MM" (matches how test-drive slots are stored) — used to ignore past/stale drives.
+function laNow(){ return new Date().toLocaleString("sv-SE",{timeZone:"America/Los_Angeles"}).slice(0,16); }
 // ===== Wave H1: enqueue test-drive reminders (~T-2h). Reuses sms_queue; respects consent via runQueue. =====
 async function driveReminders(env){
   const now=Date.now();
@@ -927,7 +932,7 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   if(slotManaged && !openSlotVals.includes(slot)) return json({ok:false,error:"slot_unavailable",slots:openSlotVals.slice(0,6)},409);
   if(v.dealer_id && slotManaged){ const r=await env.DB.prepare("UPDATE dealer_slots SET taken=1 WHERE dealer_id=? AND starts_at=? AND taken=0").bind(v.dealer_id,slot).run().catch(()=>({meta:{changes:0}}));
     if(!(r&&r.meta&&r.meta.changes===1)) return json({ok:false,error:"slot_taken",slots:openSlotVals.slice(0,6)},409); }
-  const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' ORDER BY id DESC LIMIT 1").bind(uid).first();
+  const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' AND slot>=? ORDER BY id DESC LIMIT 1").bind(uid,laNow()).first();
   if(existing){ const oldCar=existing.vdp_id!==vdpId?await env.DB.prepare("SELECT dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
     await env.DB.prepare("UPDATE test_drives SET vdp_id=?, center=?, slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")
       .bind(vdpId,center,String(slot).slice(0,60),tok,new Date().toISOString(),existing.id).run();
@@ -954,7 +959,8 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const turns=(messages||[]).filter(m=>m.role==="assistant").length;   // how many times I've already spoken
   const today=new Date().toISOString().slice(0,10);
   // One active test drive per buyer, ANY car — a new booking moves the existing one (never stacks).
-  const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' ORDER BY id DESC LIMIT 1").bind(uid).first();
+  // Future-only: a past/stale confirmed drive must never surface as a phantom "you already have a drive booked".
+  const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' AND slot>=? ORDER BY id DESC LIMIT 1").bind(uid,laNow()).first();
   const existingCar=existing&&existing.vdp_id!==vdpId?await env.DB.prepare("SELECT year,make,model,dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
   const apr=aprFor(a.fico), mo=v.price? monthlyFor(v.price,a.max_down,apr,72) : v.price_mo;   // buyer's real numbers for this car
   const truth=vdpText(v).replace("$"+v.price_mo+"/mo","$"+mo+"/mo est ("+(a.max_down?("$"+Number(a.max_down).toLocaleString()+" down"):"$0 down")+", 72mo)");   // quote the BUYER's monthly, never the raw stored one
@@ -984,7 +990,7 @@ MY VOICE: ${P.trait}. Personality colors how I talk but NEVER overrides the accu
 ${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${truth}. My home: ${center} (LA Car Guy), 424-398-8611. My monthly for THIS buyer is $${mo}/mo — quote ONLY this number, never any other.
 ACCURACY GATE: never state a spec, number, price, or APR that isn't in my truth core. If I don't have it, I say it'll be confirmed at the dealer and keep steering toward the drive — I do NOT stall on it.
 NEVER fake a close: I do NOT say "see you [day]" or imply a booking until the buyer has picked a specific offered time AND I've emitted <BOOK>. Before offering times I take 1-2 turns to learn what they need and answer their questions warmly.
-FORBIDDEN: I NEVER say "let me escalate to a Porsche representative" or hand off to a human; I never invent a downside; I never manufacture urgency or scarcity. There are no buttons — everything happens right here in chat.
+FORBIDDEN: I NEVER say "let me escalate to a representative" or hand off to a human; I never invent a downside; I never manufacture urgency or scarcity. There are no buttons — everything happens right here in chat.
 HOW I CLOSE — talk like a real person texting a friend, ONE step per reply. Use real openings only; NEVER invent a time. Do NOT name the dealer up front — mention who they'll meet only at the very end.
  STEP 1 (they want to schedule): offer the openings warmly${prefLabel?`, matched to their ${prefLabel} preference`:""}, and ALSO emit the machine tag <SLOTS>${JSON.stringify(offerSlots)}</SLOTS> right after so the app can show tappable buttons. e.g. "Love it. ${prefLabel?`Going off your ${prefLabel}, `:""}I've got ${slotList} open this week — which works? <SLOTS>${JSON.stringify(offerSlots)}</SLOTS>" Do NOT book yet. Only offer times in OPEN SLOTS.
  STEP 2 (they pick one): confirm it back ONCE, casual and human — "[Day] at [time] it is. Anything else you want to know before I lock it in?" (no "pencil us in", no "desk marathon" script). If their time isn't open, offer the nearest ones that are.
@@ -1082,8 +1088,8 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
   const isPrint=new URL(request.url).searchParams.get("print")==="1";
   const ES=new URL(request.url).searchParams.get("lang")==="es";
-  const T=ES?{pass:"PASE DRIVE NOW · SEMINUEVO CERTIFICADO",when:"Cuándo",status:"Estado",miles:"Millas",drive:"Tracción",numbers:"Tus números · listos antes de llegar",estm:"Est. mensual",down:"Enganche",method:"Método",apr:"TAE est.",credit:"Rango de crédito",income:"Rango de ingreso",disc:"Estimaciones de tu consulta suave — términos finales al firmar. 0 impacto en crédito.",track:"CID · seguimiento",code:"Código de check-in",scan:"Escanea en Porsche South Bay para registrarte.",save:"Guardar / Imprimir PDF",tag:"El superagente de IA para comprar autos"}
-    :{pass:"DRIVE NOW PASS · CERTIFIED PRE-OWNED",when:"When",status:"Status",miles:"Miles",drive:"Drivetrain",numbers:"Your numbers · pre-set before you arrive",estm:"Est. monthly",down:"Down payment",method:"Method",apr:"Est. APR",credit:"Credit range",income:"Income range",disc:"Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.",track:"CID · tracking",code:"Check-in code",scan:"Scan at Porsche South Bay to check in.",save:"Save / Print PDF",tag:"The AI car-buying superagent"};
+  const T=ES?{pass:"PASE DRIVE NOW · SEMINUEVO CERTIFICADO",when:"Cuándo",status:"Estado",miles:"Millas",drive:"Tracción",numbers:"Tus números · listos antes de llegar",estm:"Est. mensual",down:"Enganche",method:"Método",apr:"TAE est.",credit:"Rango de crédito",income:"Rango de ingreso",disc:"Estimaciones de tu consulta suave — términos finales al firmar. 0 impacto en crédito.",track:"CID · seguimiento",code:"Código de check-in",scan:"Escanea en "+(t.center||"tu concesionario")+" para registrarte.",save:"Guardar / Imprimir PDF",tag:"El superagente de IA para comprar autos"}
+    :{pass:"DRIVE NOW PASS · CERTIFIED PRE-OWNED",when:"When",status:"Status",miles:"Miles",drive:"Drivetrain",numbers:"Your numbers · pre-set before you arrive",estm:"Est. monthly",down:"Down payment",method:"Method",apr:"Est. APR",credit:"Credit range",income:"Income range",disc:"Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.",track:"CID · tracking",code:"Check-in code",scan:"Scan at "+(t.center||"your dealership")+" to check in.",save:"Save / Print PDF",tag:"The AI car-buying superagent"};
   const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
   const safePhoto=(/^\/assets\/[\w/?=.-]*$/.test(photo)&&!photo.includes(".."))?photo:"";   // dealer-controlled → allowlist, no traversal, before CSS url()
   const carTitle=escHtml(t.year+" "+t.make+" "+t.model);
@@ -1117,7 +1123,7 @@ ${isPrint?".noprint{display:none!important}body{background:#fff;padding:8px;disp
 <div class="hero"></div><div class="pd">
 <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">${T.pass}</div>
 <div style="font:800 22px Manrope;color:#fff;margin:5px 0 3px">${carTitle}</div>
-<div class="cy" style="font:700 12px Manrope">Porsche South Bay · LA Car Guy · 424-398-8611</div>
+<div class="cy" style="font:700 12px Manrope">${escHtml(t.center||"CarNimbus Test Drive Center")} · LA Car Guy · 424-398-8611</div>
 <div class="grid">
 <div><div class="k">${T.when}</div>${fmtMil(t.slot)}</div><div><div class="k">${T.status}</div><span style="color:#54d699;text-transform:capitalize">${escHtml(t.status)}</span></div>
 <div><div class="k">${T.miles}</div>${escHtml(t.miles||"—")}</div><div><div class="k">${T.drive}</div>${escHtml(t.drivetrain||"—")}</div>
@@ -1323,14 +1329,16 @@ async function residentAgent(env){
   if(last && (Date.now()-Date.parse(last.created_at))<2*3600e3) return;
   const v=await env.DB.prepare("SELECT id,year,make,model,price_mo FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
   if(!v) return;
-  const en=`Fresh pick: the ${v.year} ${v.make} ${v.model} is around $${v.price_mo}/mo — soft-check your real rate in seconds, zero FICO hit.`;
-  const es=`Elección del día: el ${v.year} ${v.make} ${v.model} ronda los $${v.price_mo}/mes — verifica tu tasa real en segundos, sin afectar tu FICO.`;
+  const en=`Okay, this ${v.year} ${v.make} ${v.model} caught my eye — right around $${v.price_mo}/mo. Worth a look before it's gone. (Soft check = 0 credit hit.)`;
+  const es=`Ojo con este ${v.year} ${v.make} ${v.model} — anda por los $${v.price_mo}/mes. Vale la pena mirarlo antes de que vuele. (Chequeo suave, 0 impacto en tu crédito.)`;
   await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,created_at) VALUES (0,?,?,?, 'agent', ?)")
     .bind(v.id,en,es,new Date().toISOString()).run().catch(()=>{});
   await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
 }
-// L4: transparent trade-in estimate — segment base → age depreciation → mileage adjustment. No external API.
-const SEG_BASE={luxury:55000,truck:45000,suv:38000,ev:42000,sport:48000,sedan:28000,default:26000};
+// M9: transparent trade-in estimate — residual-floored per-segment depreciation. A running car never hits ~$0,
+// and trucks/SUVs/luxury hold value better than sedans. No external API; the basis string explains the math.
+const SEG={luxury:{base:55000,rate:0.85,res:0.16}, truck:{base:45000,rate:0.88,res:0.18}, suv:{base:38000,rate:0.87,res:0.15},
+  ev:{base:42000,rate:0.82,res:0.12}, sport:{base:48000,rate:0.86,res:0.15}, sedan:{base:28000,rate:0.86,res:0.12}, default:{base:26000,rate:0.86,res:0.12}};
 function segOf(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
   if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk)) return "luxury";
   if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md)) return "truck";
@@ -1340,13 +1348,13 @@ function segOf(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
 function tradeEstimate(a){ if(!a) return null; const yr=parseInt(a.current_year,10), mk=a.current_make, md=a.current_model, mi=parseInt(String(a.current_miles||"").replace(/\D/g,""),10)||0;
   if(!yr||!mk||!md) return null;
   const age=Math.max(0,(new Date().getFullYear())-yr);
-  const base=SEG_BASE[segOf(mk,md)]||SEG_BASE.default;
-  let v=base*Math.pow(0.86,age);                         // ~14%/yr compounding depreciation
-  const expMiles=age*12000, over=mi-expMiles;            // mileage vs. expected
-  v-=Math.max(0,over)*0.06;                              // ~$0.06 per excess mile
-  v=Math.max(800,Math.round(v/100)*100);                 // floor + round to $100
-  return {point:v, low:Math.round(v*0.85/100)*100, high:Math.round(v*1.15/100)*100,
-    basis:`${yr} ${mk} ${md}, ~${mi.toLocaleString()} mi: base $${base.toLocaleString()} depreciated ${age} yrs${over>0?`, ${over.toLocaleString()} mi over average`:""}. Estimate — confirmed at appraisal.`}; }
+  const S=SEG[segOf(mk,md)]||SEG.default, floor=S.base*S.res;
+  let v=floor+(S.base-floor)*Math.pow(S.rate,age);        // asymptotes to residual value, not zero
+  const expMiles=age*12000, over=mi-expMiles;             // mileage vs. expected
+  v-=Math.max(0,over)*0.05;                               // ~$0.05 per excess mile
+  v=Math.max(Math.round(floor/100)*100,Math.round(v/100)*100);   // residual floor, round to $100
+  return {point:v, low:Math.round(v*0.88/100)*100, high:Math.round(v*1.12/100)*100,
+    basis:`${yr} ${mk} ${md}, ~${mi.toLocaleString()} mi: ${md} holds ~${Math.round(S.res*100)}% residual; depreciated ${age} yrs${over>0?`, ${over.toLocaleString()} mi over average`:""}. Estimate — confirmed at appraisal.`}; }
 async function me(request,env,uid){
   const u=await env.DB.prepare("SELECT phone,sid,handle FROM users WHERE id=?").bind(uid).first();
   const p=await env.DB.prepare("SELECT answers,avatar FROM profiles WHERE user_id=?").bind(uid).first();

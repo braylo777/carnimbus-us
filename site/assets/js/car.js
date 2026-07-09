@@ -58,9 +58,10 @@ document.addEventListener("DOMContentLoaded",function(){
     setSrc("c-img",PV);
     var ci=$("chat-in"); if(ci&&CAR.persona&&CAR.persona.hint) ci.placeholder=CAR.persona.hint;
     fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
-      var m=((f&&f.cars)||[]).filter(function(c){return c.id===id;})[0];
+      var m=((f&&f.cars)||[]).filter(function(c){return c.id===CAR.id;})[0];
       if(m&&m.match!=null)setFit(m.match+"% match");}).catch(function(){});
-    fetch("/api/chats?vdpId="+id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
+    // History keys on the RESOLVED CAR.id, not the URL id (which is 0 on /talk/<slug> routes → would wipe the thread).
+    fetch("/api/chats?vdpId="+CAR.id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
       var ms=(h&&h.messages)||[];
       if(!ms.length){bubble("car",(CAR.persona&&CAR.persona.opener)||(CAR.model+" here. Ask me anything — or tell me when you want to drive."));return;}
       ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body);
@@ -81,7 +82,7 @@ document.addEventListener("DOMContentLoaded",function(){
         '<div style="padding:16px 18px">'+
         '<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.2em">DRIVE NOW PASS</div>'+
         '<div style="font:800 18px Manrope;color:#fff;margin-top:4px" id="cg-car"></div>'+
-        '<div style="font:700 11px Manrope;color:#18C8FF;margin-top:2px">Certified · Porsche South Bay · LA Car Guy</div>'+
+        '<div style="font:700 11px Manrope;color:#18C8FF;margin-top:2px" id="cg-center">Certified · LA Car Guy</div>'+
         '<div style="font:600 12px Manrope;color:#e2e9f2;margin-top:8px" id="cg-slot"></div>'+
         '<div style="font:600 11px Manrope;color:#aebfdf;margin-top:4px" id="cg-fin"></div>'+
         '</div></div>'+
@@ -91,7 +92,8 @@ document.addEventListener("DOMContentLoaded",function(){
     var f=o.querySelector("a.btn"); if(f)f.focus();   // move focus into the dialog
     var cg=document.getElementById("cg-car"); if(cg&&CAR)cg.textContent=CAR.year+" "+CAR.make+" "+CAR.model;
     fetch("/api/me").then(function(r){return r.json();}).then(function(m){ var s=document.getElementById("cg-slot");
-      if(s&&m&&m.drive&&window.fmtSlotCar)s.textContent=window.fmtSlotCar(m.drive.slot); }).catch(function(){});
+      if(s&&m&&m.drive&&window.fmtSlotCar)s.textContent=window.fmtSlotCar(m.drive.slot);
+      var ct=document.getElementById("cg-center"); if(ct&&m&&m.drive&&m.drive.center)ct.textContent="Certified · "+m.drive.center+" · LA Car Guy"; }).catch(function(){});
   }
   function fmtSlotCar(s){ s=String(s||""); var m=s.match(/(\d{4})-(\d{2})-(\d{2})[ T]?(\d{2}:\d{2})?/);
     if(!m)return s; var dt=new Date(m[1]+"-"+m[2]+"-"+m[3]+"T"+(m[4]||"00:00")+":00");

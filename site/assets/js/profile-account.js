@@ -1,5 +1,12 @@
 document.addEventListener("DOMContentLoaded",function(){
   function $(x){return document.getElementById(x);}
+  // Mirror of worker.js segOf — picks which self-hosted garage image to show for the user's current car.
+  function segForCar(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
+    if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk))return "luxury";
+    if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md))return "truck";
+    if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md))return "ev";
+    if(/tahoe|yukon|suburban|explorer|pilot|highlander|4runner|suv|rav4|cr-v|crv/.test(md))return "suv";
+    return "sedan"; }
   var ME=null;
   (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(me){if(!me||!me.ok){$("gate").style.display="block";throw 0;}return me;}).then(function(me){
     ME=me;
@@ -27,6 +34,8 @@ document.addEventListener("DOMContentLoaded",function(){
       // L4: Garage — current car + a specific trade-in estimate (replaces the old range row).
       if(a.current_year&&a.current_make){ $("y-garage").style.display="block";
         $("y-car").textContent=a.current_year+" "+a.current_make+" "+(a.current_model||"")+(a.current_miles?(" · "+Number(String(a.current_miles).replace(/\D/g,"")||0).toLocaleString()+" mi"):"");
+        // M9: mock car image chosen by body/segment (self-hosted — CSP forbids external hosts).
+        var img=$("y-img"); if(img){ var seg=segForCar(a.current_make,a.current_model); img.onload=function(){img.style.display="block";}; img.onerror=function(){img.style.display="none";}; img.src="/assets/img/garage/"+seg+".webp"; }
         if(me.trade){ $("y-trade").textContent="Est. trade-in $"+me.trade.point.toLocaleString()+"  ($"+me.trade.low.toLocaleString()+"–$"+me.trade.high.toLocaleString()+")";
           $("y-trade-basis").textContent=me.trade.basis; } }
       document.getElementById("y-summary").style.display="block";

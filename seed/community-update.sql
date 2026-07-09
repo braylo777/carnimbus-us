@@ -149,7 +149,7 @@ UPDATE users SET zip='90740', lat=33.7580, lng=-118.0800 WHERE phone='+131055511
 UPDATE users SET zip='90803', lat=33.7530, lng=-118.1230 WHERE phone='+13105551148';
 UPDATE users SET zip='90731', lat=33.7430, lng=-118.2990 WHERE phone='+13105551149';
 UPDATE users SET zip='90045', lat=33.9585, lng=-118.3970 WHERE phone='+13105551150';
-UPDATE users SET handle='Cid Condoluci', sid='CID-LACARGUY', zip='90501', lat=33.8360, lng=-118.2980 WHERE phone='+13104647885';
+UPDATE users SET handle='Marisol R.', sid='CID-LACARGUY', zip='90501', lat=33.8360, lng=-118.2980 WHERE phone='+13104647885';
 UPDATE comments SET body='Huge thanks to Cid at Porsche South Bay — drove home in my 2025 Macan today. No games, no all-day desk grind. This is how it should be.' WHERE body LIKE 'Huge thanks to Sid at Porsche South Bay%';
 UPDATE comments SET body='matched me with something so close to my dream car I did a double take. not mad about it' WHERE body LIKE 'Just got matched with a certified %' AND zip='demo';
 UPDATE comments SET body='ngl I was dreading the whole dealer thing but I asked the car my questions at like midnight and it actually answered straight. weird but I''m into it' WHERE body LIKE 'Talked to a car at 1am%' AND zip='demo';
