@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var sk=skipped(), cars=(d.cars||[]).filter(function(c){return sk.indexOf(c.id)<0;}).slice(0,24);
     var el=$("m-new");
     el.innerHTML=cars.map(function(c){
-      return '<div class="glass" data-id="'+c.id+'" style="flex:none;width:150px;border-radius:14px;overflow:hidden">'+
+      return '<div class="glass" data-id="'+c.id+'" style="flex:none;width:150px;border-radius:14px;overflow:hidden;scroll-snap-align:start">'+
         '<div style="height:84px;background:#0a1f4d '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></div>'+
         '<div style="padding:9px 10px"><div style="font:700 11px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</div>'+
         '<div class="cy" style="font:700 11px Manrope;margin:2px 0 4px">$'+esc(c.price_mo)+'/mo</div>'+
@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded",function(){
         ((c.sigwhy&&c.sigwhy.length)?'<div style="font:700 8px Manrope;color:#18C8FF;background:rgba(24,200,255,.1);border-radius:6px;padding:3px 6px;margin-bottom:7px">✦ '+esc(c.sigwhy[0])+'</div>':'')+
         '<div class="row" style="gap:5px"><button class="btn primary sm mtalk" data-slug="'+slug(c)+'" data-id="'+c.id+'" style="flex:1;padding:0 8px">Talk</button>'+
         '<button class="btn ghost sm mskip" data-id="'+c.id+'" style="flex:none;padding:0 8px">✕</button></div></div></div>';
-    }).join('')||'<div style="font:500 11px Manrope;color:#8ca0c4;padding:8px">No new matches — adjust your budget in Profile.</div>';
+    }).join('')||'<div style="font:500 11px Manrope;color:#8ca0c4;padding:8px">No new matches — adjust your budget in Garage.</div>';
     el.addEventListener("click",function(e){
       var t=e.target.closest(".mtalk"); if(t){ openChat(+t.dataset.id, t.dataset.slug); return; }
       var s=e.target.closest(".mskip"); if(s){ skip(+s.dataset.id); var card=s.closest(".glass"); if(card)card.remove(); } });
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded",function(){
         .then(function(r){return r.json();}).then(function(x){ typing(false);
           if(x&&x.ok){hist.push({role:"assistant",content:x.reply});bubble("car",x.reply);
             if(x.slots&&x.slots.length)renderSlots(x.slots);                // tappable real-availability chips
-            if(x.pass){bubble("car","🎉 You're booked — see your pass in Profile.");}
+            if(x.pass){bubble("car","🎉 You're booked — see your pass in Garage.");}
             if(firstMsg){ firstMsg=false;                                  // first message → this match becomes a conversation (Bumble-style), leave New Matches
               var card=document.querySelector('#m-new [data-id="'+id+'"]'); if(card)card.remove();
               loadThreads(); } }

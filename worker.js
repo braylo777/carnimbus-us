@@ -157,6 +157,7 @@ export default {
   async scheduled(event, env) {
     await runQueue(env);
     await syncEmbeddings(env);
+    await residentAgent(env).catch(()=>{});   // L9: one labeled community post per ≤2h
     // Refresh persisted backend matches for all buyers with a profile (demo-scale; bounded to 50/run).
     try{ const us=await env.DB.prepare("SELECT user_id FROM profiles ORDER BY updated_at DESC LIMIT 50").all();
       for(const r of (us.results||[])){ await computeSignals(env, r.user_id).catch(()=>{}); await computeMatches(env, r.user_id).catch(()=>{}); } }catch(_){}
@@ -899,7 +900,10 @@ async function dealerName(env,dealerId){ if(!dealerId) return "CarNimbus Test Dr
   const d=await env.DB.prepare("SELECT dealership FROM dealer_leads WHERE id=?").bind(dealerId).first();
   return (d&&d.dealership)||"CarNimbus Test Drive Center"; }
 async function vdpOne(request,env){ const u=new URL(request.url); const id=+(u.searchParams.get("id")||0); const lang=u.searchParams.get("lang");
-  const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first();
+  const sl=String(u.searchParams.get("slug")||"").toLowerCase();
+  let v=id?await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(id).first():null;
+  if(!v && sl){ const rows=await env.DB.prepare("SELECT * FROM vdps WHERE active=1").all().catch(()=>({results:[]}));
+    v=(rows.results||[]).find(x=>(String(x.year)+"-"+x.make+"-"+x.model).toLowerCase().replace(/[^a-z0-9]+/g,"-")===sl)||null; }
   if(!v) return json({ok:false,error:"not_found"},404);
   // Compute the buyer's real monthly from real price when signed in with a profile.
   let a={}; const uid=await readSession(env,request);
@@ -1313,13 +1317,45 @@ async function adminStats(request,env){
 }
 function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
+// L9: first resident agent — a labeled, bounded community presence. Posts one useful bilingual pick per ≤2h.
+async function residentAgent(env){
+  const last=await env.DB.prepare("SELECT created_at FROM comments WHERE user_id=0 AND zip='agent' ORDER BY id DESC LIMIT 1").first().catch(()=>null);
+  if(last && (Date.now()-Date.parse(last.created_at))<2*3600e3) return;
+  const v=await env.DB.prepare("SELECT id,year,make,model,price_mo FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
+  if(!v) return;
+  const en=`Fresh pick: the ${v.year} ${v.make} ${v.model} is around $${v.price_mo}/mo — soft-check your real rate in seconds, zero FICO hit.`;
+  const es=`Elección del día: el ${v.year} ${v.make} ${v.model} ronda los $${v.price_mo}/mes — verifica tu tasa real en segundos, sin afectar tu FICO.`;
+  await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,created_at) VALUES (0,?,?,?, 'agent', ?)")
+    .bind(v.id,en,es,new Date().toISOString()).run().catch(()=>{});
+  await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
+}
+// L4: transparent trade-in estimate — segment base → age depreciation → mileage adjustment. No external API.
+const SEG_BASE={luxury:55000,truck:45000,suv:38000,ev:42000,sport:48000,sedan:28000,default:26000};
+function segOf(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
+  if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk)) return "luxury";
+  if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md)) return "truck";
+  if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md)) return "ev";
+  if(/tahoe|yukon|suburban|explorer|pilot|highlander|4runner|suv|rav4|cr-v|crv/.test(md)) return "suv";
+  return "sedan"; }
+function tradeEstimate(a){ if(!a) return null; const yr=parseInt(a.current_year,10), mk=a.current_make, md=a.current_model, mi=parseInt(String(a.current_miles||"").replace(/\D/g,""),10)||0;
+  if(!yr||!mk||!md) return null;
+  const age=Math.max(0,(new Date().getFullYear())-yr);
+  const base=SEG_BASE[segOf(mk,md)]||SEG_BASE.default;
+  let v=base*Math.pow(0.86,age);                         // ~14%/yr compounding depreciation
+  const expMiles=age*12000, over=mi-expMiles;            // mileage vs. expected
+  v-=Math.max(0,over)*0.06;                              // ~$0.06 per excess mile
+  v=Math.max(800,Math.round(v/100)*100);                 // floor + round to $100
+  return {point:v, low:Math.round(v*0.85/100)*100, high:Math.round(v*1.15/100)*100,
+    basis:`${yr} ${mk} ${md}, ~${mi.toLocaleString()} mi: base $${base.toLocaleString()} depreciated ${age} yrs${over>0?`, ${over.toLocaleString()} mi over average`:""}. Estimate — confirmed at appraisal.`}; }
 async function me(request,env,uid){
   const u=await env.DB.prepare("SELECT phone,sid,handle FROM users WHERE id=?").bind(uid).first();
   const p=await env.DB.prepare("SELECT answers,avatar FROM profiles WHERE user_id=?").bind(uid).first();
   const td=await env.DB.prepare(
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
-  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:p?JSON.parse(p.answers):null,avatar:p?p.avatar:null,
+  let ans=p?JSON.parse(p.answers):null;
+  return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:ans,avatar:p?p.avatar:null,
+    trade:tradeEstimate(ans),
     drive:td?{...td,cid:cidFor(td.id),photos:JSON.parse(td.photos||"[]")}:null});
 }
 async function saveAvatar(request,env,uid){ const {avatar}=await request.json().catch(()=>({}));

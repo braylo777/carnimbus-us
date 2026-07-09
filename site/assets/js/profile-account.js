@@ -24,8 +24,11 @@ document.addEventListener("DOMContentLoaded",function(){
       if(a.max_monthly)bars.push(["Max monthly","$"+a.max_monthly+"/mo"]);
       if(a.income)bars.push(["Income range",a.income]);
       if(a.fico)bars.push(["FICO range",a.fico]);
-      var TRADE={"0-2k":"$0–$2,000","2-5k":"$2,000–$5,000","5-10k":"$5,000–$10,000","10k+":"$10,000+"};   // quiz chip values → dollar ranges
-      if(a.trade_value)bars.push(["Trade-in value",TRADE[a.trade_value]||(/^\$/.test(a.trade_value)?a.trade_value:"$"+a.trade_value)]);
+      // L4: Garage — current car + a specific trade-in estimate (replaces the old range row).
+      if(a.current_year&&a.current_make){ $("y-garage").style.display="block";
+        $("y-car").textContent=a.current_year+" "+a.current_make+" "+(a.current_model||"")+(a.current_miles?(" · "+Number(String(a.current_miles).replace(/\D/g,"")||0).toLocaleString()+" mi"):"");
+        if(me.trade){ $("y-trade").textContent="Est. trade-in $"+me.trade.point.toLocaleString()+"  ($"+me.trade.low.toLocaleString()+"–$"+me.trade.high.toLocaleString()+")";
+          $("y-trade-basis").textContent=me.trade.basis; } }
       document.getElementById("y-summary").style.display="block";
       document.getElementById("y-bars").innerHTML=bars.map(function(b){
         return '<div class="row" style="justify-content:space-between;font:500 12px Manrope"><span style="color:#8ca0c4">'+b[0]+'</span><span style="color:#e2e9f2;font-weight:600;text-align:right">'+b[1]+'</span></div>';}).join('');

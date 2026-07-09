@@ -81,13 +81,21 @@ No inline `<script>`. New JS = a new static file under `site/assets/`. `connect-
 - Waitlist PII (email/ip/consent) stays in D1; see `/privacy`. Soft-pull FICO is stored **only as a band**,
   never a raw score (see `TWIN-SCHEMA.md`).
 
-## Branch rules (BRAY-502)
+## Branching & releases
 
-- `main` — Brandon's vibe-code deploys ONLY; wrangler auto-deploy pins here. Never force-push.
-- `linux-js-migration` — Jono's secured rebuild. Private until reviewed.
-- Cross-merges ONLY via reviewed PR (both operators approve). No direct commits to the other's branch.
+- `main` is the release branch — Cloudflare auto-deploys from it. Never force-push.
+- Feature work happens on branches and merges via reviewed PR. No direct pushes to another branch's work.
+- Deploys are gated on explicit sign-off; migrations apply in order before the Worker deploy.
+
+## The Nimbus platform
+
+Beneath the app is **Nimbus** — a behavioral operating system for local vehicle retail. An append-only event
+spine captures every interaction, a per-buyer **Digital Twin** turns those signals into matches and predictions,
+and a layer of **living agents** (cron-driven, one KPI each, reading and writing the same Brain) does the work:
+inventory enrichment, concierge, scheduling, growth analytics, and a resident community presence. Every agent
+action is a logged event, so the whole system is auditable — and it compounds: more usage, better predictions.
 
 ## Canonical docs
 
-`MASTERPLAN.md` · `EVENT-TAXONOMY.md` · `AGENT-REGISTRY.md` · `TWIN-SCHEMA.md` · `MODEL-REGISTRY.md` ·
-`AUTONOMY-POLICY.md` · `docs/HTML-TO-JS-MIGRATION.md`
+`MASTERPLAN.md` · `EVENT-TAXONOMY.md` · `AGENT-REGISTRY.md` · `LIVING-AGENTS.md` · `TWIN-SCHEMA.md` ·
+`MODEL-REGISTRY.md` · `AUTONOMY-POLICY.md` · `docs/HTML-TO-JS-MIGRATION.md`

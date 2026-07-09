@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded",function(){
   var id=+(new URLSearchParams(location.search).get("id")||0),CAR=null,hist=[];
+  var slugFromPath=(location.pathname.match(/^\/(?:talk|car)\/([a-z0-9-]+)/i)||[])[1]||"";
   var thread=document.getElementById("thread");
   function lang(){ try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";} }
   function $(x){return document.getElementById(x);}
@@ -97,12 +98,16 @@ document.addEventListener("DOMContentLoaded",function(){
     var wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     return wd[dt.getDay()]+" "+mo[dt.getMonth()]+" "+dt.getDate()+(m[4]?" · "+m[4]:""); }
   window.fmtSlotCar=fmtSlotCar;
-  fetch("/api/vdp?id="+id+"&lang="+lang()).then(function(r){return r.text();}).then(function(txt){
+  fetch("/api/vdp?"+(id?("id="+id):("slug="+encodeURIComponent(slugFromPath)))+"&lang="+lang()).then(function(r){return r.text();}).then(function(txt){
     var d=null; try{ d=JSON.parse(txt); }catch(e){ d=null; }
     CAR=d&&d.car;
     if(!CAR){ fail("Car not found."); return; }
     try{ render(); }catch(e){ /* never let a render hiccup hide the car */ }
   }).catch(function(){ fail("Couldn’t load this car — refresh to retry."); });
+  // L5: EN/ES toggle → re-fetch the car in the chosen language and re-render (persona/specs come localized).
+  document.addEventListener("click",function(e){ if(e.target.closest("#appnav .seg button")) setTimeout(function(){
+    fetch("/api/vdp?"+(CAR&&CAR.id?("id="+CAR.id):("slug="+encodeURIComponent(slugFromPath)))+"&lang="+lang())
+      .then(function(r){return r.json();}).then(function(d){ if(d&&d.car){ CAR=d.car; try{render();}catch(_){}} }).catch(function(){}); },60); });
   async function send(){var inEl=$("chat-in"),msg=inEl?inEl.value.trim():"";if(!msg||!CAR)return;
     inEl.value="";bubble("you",msg);hist.push({role:"user",content:msg});typing(true);
     var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id,messages:hist,lang:lang()})});
