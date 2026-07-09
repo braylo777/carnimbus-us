@@ -113,6 +113,7 @@ export default {
     if (url.pathname === "/api/profile" && request.method === "POST")     return sec(await withUser(request, env, saveProfile));
     if (url.pathname === "/api/avatar" && request.method === "POST")      return sec(await withUser(request, env, saveAvatar));
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
+    if (url.pathname === "/api/search")                                   return sec(await search(request, env));
     if (url.pathname === "/api/matches")                                  return sec(await withUser(request, env, matchesList));
     if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
     if (url.pathname === "/api/slots")                                    return sec(await openSlots(request, env));
@@ -737,6 +738,26 @@ function feedCar(v,score,ans,lang,mo){ return {id:v.id,year:v.year,make:v.make,m
   price_mo:(mo!=null?mo:v.price_mo),price:v.price||null,miles:v.miles,
   drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
   match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
+// TASK-001: no-auth affordability search. Accepts the numbers as params (feed() only reads a stored profile).
+async function search(request,env){ try{
+  const u=new URL(request.url); const lang=u.searchParams.get("lang");
+  const monthly=parseInt(u.searchParams.get("monthly"),10)||0;
+  const down=parseInt(u.searchParams.get("down"),10)||0;
+  const zip=String(u.searchParams.get("zip")||"").slice(0,10);
+  const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
+  const all=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const out=[];
+  for(const v of (all.results||[])){
+    if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
+    const mo=monthlyFor(v.price,down,apr,72);
+    if(monthly && mo>monthly) continue;              // strict: over their number is out
+    out.push({...feedCar(v,null,{},lang,mo)});
+  }
+  out.sort((a,b)=>(a.price_mo||0)-(b.price_mo||0));   // cheapest-first (best headroom)
+  const anon=readAnon(request);
+  await logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null});
+  return json({ok:true,count:out.length,cars:out.slice(0,24)});
+  }catch(e){ return json({ok:true,cars:[],degraded:true}); } }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
   const lang=new URL(request.url).searchParams.get("lang");
   let ranked=[], ans={}; const seen=new Set();
@@ -750,6 +771,7 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
     for(const r of (all.results||[])){ if(!seen.has(r.id)){ seen.add(r.id); ranked.push({id:r.id,vec:null}); } } }
   const budget=parseInt(ans.max_monthly,10)||0, CAP=budget?budget*1.15:0;
   const apr=aprFor(ans.fico);
+  const prio=new Set(); { const pr=await env.DB.prepare("SELECT id FROM dealer_leads WHERE tier='priority'").all().catch(()=>({results:[]})); for(const r of (pr.results||[])) prio.add(r.id); }  // K3: paid-placement dealers
   const scored=[]; for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first();
     if(!v) continue;
     // Real per-buyer monthly when we have a real price; else fall back to the stored price_mo (pre-inventory-dump).
@@ -764,7 +786,7 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
       const bodyFit=(!bp||bp==="any"||bp===String(v.body||"").toLowerCase())?1:0.4;
       const dl=(ans.dream_car||"").toLowerCase();
       const dreamFit=(dl&&(dl.includes(String(v.make||"").toLowerCase())||dl.includes(String(v.model||"").toLowerCase())))?1:0.5;
-      match=Math.max(0,Math.min(99,Math.round((0.6*r.vec+0.4*(0.5*budgetFit+0.3*bodyFit+0.2*dreamFit))*100)))||0;
+      match=Math.max(0,Math.min(99,Math.round((0.6*r.vec+0.4*(0.5*budgetFit+0.3*bodyFit+0.2*dreamFit)+(prio.has(v.dealer_id)?0.08:0))*100)))||0;
     }
     scored.push({v,match,mo});
   }
@@ -821,6 +843,7 @@ async function computeMatches(env,uid){ try{
   if(q){ for(const m of q.matches){ const id=m.metadata.vdpId; if(id!=null&&!seen.has(id)){ seen.add(id); ranked.push({id,vec:m.score}); } } }
   { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 100").all();
     for(const r of (all.results||[])){ if(!seen.has(r.id)){ seen.add(r.id); ranked.push({id:r.id,vec:null}); } } }
+  const prio=new Set(); { const pr=await env.DB.prepare("SELECT id FROM dealer_leads WHERE tier='priority'").all().catch(()=>({results:[]})); for(const r of (pr.results||[])) prio.add(r.id); }  // K3: paid-placement dealers
   const scored=[];
   for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first(); if(!v) continue;
     const mo=v.price? monthlyFor(v.price,ans.max_down,apr,72) : (Number.isFinite(v.price_mo)?v.price_mo:null);
@@ -830,7 +853,8 @@ async function computeMatches(env,uid){ try{
     const priceFit = (sig.click_price_lo!=null && mo!=null && mo>=sig.click_price_lo && mo<=sig.click_price_hi) ? 1 : 0.6;
     const savedBoost = (sig.saved||[]).includes(v.id) ? 1 : 0.7;
     const base = r.vec!=null ? r.vec : 0.5;
-    const match=Math.max(0,Math.min(99,Math.round((0.6*base+0.4*(0.5*bodyFit+0.3*priceFit+0.2*savedBoost))*100)));
+    const sponsorBoost = prio.has(v.dealer_id) ? 0.08 : 0;   // K3: additive, bounded — priority, not takeover
+    const match=Math.max(0,Math.min(99,Math.round((0.6*base+0.4*(0.5*bodyFit+0.3*priceFit+0.2*savedBoost)+sponsorBoost)*100)));
     scored.push({v,score:match}); }
   scored.sort((a,b)=>b.score-a.score);
   const top=scored.slice(0,40);
@@ -892,7 +916,20 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   if(!slot||typeof slot!=="string") return json({ok:false,error:"bad_request"},400);
   const center=await dealerName(env,v.dealer_id);
   const tok=await hmac(env,uid+":"+vdpId+":"+slot);
-  await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
+  // Slot discipline (mirrors carChat): if the dealer runs a calendar, the slot must be open and is claimed atomically;
+  // a buyer keeps exactly ONE active drive (booking again moves it + frees the old slot). Prevents double-booking.
+  const openSlotVals=await dealerSlotsFor(env, v.dealer_id, 24);
+  const slotManaged=openSlotVals.length>0;
+  if(slotManaged && !openSlotVals.includes(slot)) return json({ok:false,error:"slot_unavailable",slots:openSlotVals.slice(0,6)},409);
+  if(v.dealer_id && slotManaged){ const r=await env.DB.prepare("UPDATE dealer_slots SET taken=1 WHERE dealer_id=? AND starts_at=? AND taken=0").bind(v.dealer_id,slot).run().catch(()=>({meta:{changes:0}}));
+    if(!(r&&r.meta&&r.meta.changes===1)) return json({ok:false,error:"slot_taken",slots:openSlotVals.slice(0,6)},409); }
+  const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' ORDER BY id DESC LIMIT 1").bind(uid).first();
+  if(existing){ const oldCar=existing.vdp_id!==vdpId?await env.DB.prepare("SELECT dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
+    await env.DB.prepare("UPDATE test_drives SET vdp_id=?, center=?, slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")
+      .bind(vdpId,center,String(slot).slice(0,60),tok,new Date().toISOString(),existing.id).run();
+    const oldDealer=oldCar?oldCar.dealer_id:v.dealer_id;                          // free the OLD car's slot on the OLD dealer
+    if(oldDealer) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(oldDealer,existing.slot).run().catch(()=>{}); }
+  else await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
     .bind(uid,vdpId,center,String(slot).slice(0,60),"confirmed",tok,new Date().toISOString()).run();
   const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
   const smsBody=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`;
@@ -1152,12 +1189,14 @@ async function dealerConsole(request,env,uid,dealer){
 }
 async function dealerListing(request,env,uid,dealer){
   const c=await request.json().catch(()=>({}));
-  if(!c.year||!c.make||!c.model||!c.price_mo) return json({ok:false,error:"bad_request"},400);
+  const pm=parseInt(c.price_mo,10);
+  if(!c.year||!c.make||!c.model||!Number.isFinite(pm)) return json({ok:false,error:"bad_request"},400);
+  if(pm<50||pm>5000) return json({ok:false,error:"price_out_of_range"},422);   // server-authoritative price bounds
   const vin=c.vin||("DLR-"+dealer.id+"-"+Date.now());
   await env.DB.prepare(
     "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at) "+
     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)")
-    .bind(vin,+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),+c.price_mo,
+    .bind(vin,+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),pm,
       String(c.miles||"").slice(0,20),String(c.drivetrain||"").slice(0,20),String(c.body||"").slice(0,20),
       JSON.stringify(c.features||[]),String(c.description||"").slice(0,500),JSON.stringify(c.photos||[]),dealer.id,new Date().toISOString()).run();
   return json({ok:true});
@@ -1317,7 +1356,7 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
     "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.upvotes,c.downvotes,c.images,c.sponsored,u.handle,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
     "LEFT JOIN post_votes pv ON pv.comment_id=c.id AND pv.user_id=? "+
-    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").bind(meUid||0).all().catch(async()=>{
+    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.sponsored DESC, c.id DESC LIMIT 300").bind(meUid||0).all().catch(async()=>{
       geo=false;                                                          // votes/lat/body_es columns not migrated yet → fall back to recency, no votes
       return env.DB.prepare("SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all(); });
   // Buyer-true monthlies on car chips: compute from the real price + the caller's numbers (anon = honest defaults).

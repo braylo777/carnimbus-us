@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Find your car</title>
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.opt{font:600 13px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:11px 18px;cursor:pointer;background:transparent}
+.opt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
+.step{display:none}.step.on{display:block}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(24,200,255,.25)}.dot.on{background:#18C8FF}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh;display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+    <div class="z row" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:8px">
+      <a href="/" style="text-decoration:none"><img src="/assets/logo.png" alt="CarNimbus" style="width:26px;height:26px"></a>
+      <div class="row" style="gap:6px;margin-left:auto" id="dots">
+        <span class="dot on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+    </div>
+    <div class="z" style="flex:1;width:100%;max-width:520px;margin:0 auto;padding:28px 20px;color:#e2e9f2;display:flex;flex-direction:column;justify-content:center">
+
+      <div class="step on" id="s1">
+        <h1 class="disp" style="font-size:24px;margin:0 0 4px">How do you want to pay?</h1>
+        <div style="font:500 13px Manrope;color:#aebfdf;margin-bottom:18px">No account needed. Takes 20 seconds.</div>
+        <div class="row" style="gap:10px;flex-wrap:wrap"><button class="opt" data-k="buy_method" data-v="Finance">Finance</button><button class="opt" data-k="buy_method" data-v="Lease">Lease</button><button class="opt" data-k="buy_method" data-v="Cash">Cash</button></div>
+      </div>
+
+      <div class="step" id="s2">
+        <h1 class="disp" style="font-size:24px;margin:0 0 4px">How much down?</h1>
+        <div style="font:500 13px Manrope;color:#aebfdf;margin-bottom:18px">Ballpark is fine.</div>
+        <div class="row" style="gap:10px;flex-wrap:wrap"><button class="opt" data-k="max_down" data-v="0">$0</button><button class="opt" data-k="max_down" data-v="2000">$2k</button><button class="opt" data-k="max_down" data-v="5000">$5k</button><button class="opt" data-k="max_down" data-v="10000">$10k</button><button class="opt" data-k="max_down" data-v="15000">$15k+</button></div>
+      </div>
+
+      <div class="step" id="s3">
+        <h1 class="disp" style="font-size:24px;margin:0 0 4px">Monthly budget?</h1>
+        <div style="font:500 13px Manrope;color:#aebfdf;margin-bottom:18px">What feels comfortable each month.</div>
+        <input id="mo" class="pill" inputmode="numeric" placeholder="e.g. 500" style="width:100%;height:50px;font-size:16px">
+        <button id="s3-go" class="btn primary lg" type="button" style="width:100%;margin-top:14px">See my cars →</button>
+      </div>
+
+      <div class="step" id="s4">
+        <h1 class="disp" style="font-size:22px;margin:0 0 4px">Cars you can drive</h1>
+        <div style="font:500 12px Manrope;color:#aebfdf;margin-bottom:14px" id="s4-sub">Matched to your budget.</div>
+        <div id="results"></div>
+        <button id="s4-back" class="btn ghost md" type="button" style="width:100%;margin-top:14px">← Adjust budget</button>
+      </div>
+
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js?v=3" defer></script>
+<script src="/assets/nimbus-sensor.js" defer></script>
+<script src="/assets/js/start.js" defer></script>
+</body>
+</html>
