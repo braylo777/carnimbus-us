@@ -58,7 +58,7 @@ export default {
                      /^\/pass\/[A-Za-z0-9_-]+$/.test(url.pathname); // tokened pass link is bearer-gated
         if(!open){
           const uid=await readSession(env,request);             // SESSION_SECRET unset → throws → top catch 500 (fail-close)
-          if(!uid) return Response.redirect(url.origin+"/signin",302);
+          if(!uid){ const nxt=url.pathname+url.search; return Response.redirect(url.origin+"/signin?next="+encodeURIComponent(nxt),302); }
         } }
       // Vanity car URL: /talk/2025-porsche-macan → resolve slug to a vdp id, serve the car page.
       const tm=url.pathname.match(/^\/talk\/([a-z0-9-]+)$/i);
@@ -84,7 +84,7 @@ export default {
        !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") && !url.pathname.startsWith("/used/") &&
        !url.pathname.startsWith("/sitemap") && url.pathname!=="/robots.txt" &&
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
-      url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":"/index.html") : url.pathname);
+      url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/index.html") : url.pathname);
       request = new Request(url, request);
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
@@ -130,6 +130,7 @@ export default {
     if (url.pathname === "/api/dealer/roi")                               return sec(await withDealer(request, env, dealerRoi));
     if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
+    if (url.pathname === "/api/dealer/feedback")                             return sec(await withDealer(request, env, dealerFeedback));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
     if (url.pathname === "/api/admin/reindex" && request.method === "POST") return sec(await adminOnly(request, env, reindexAll));
@@ -1211,6 +1212,22 @@ async function dealerListing(request,env,uid,dealer){
       JSON.stringify(c.features||[]),String(c.description||"").slice(0,500),JSON.stringify(c.photos||[]),dealer.id,new Date().toISOString()).run();
   return json({ok:true});
 }
+// N7: dealer post-test-drive voice feedback — transcribe with Workers AI whisper, store, list.
+async function dealerFeedback(request,env,uid,dealer){
+  if(request.method==="GET"){ const rows=await env.DB.prepare("SELECT id,drive_id,transcript,created_at FROM dealer_feedback WHERE dealer_id=? ORDER BY id DESC LIMIT 20").bind(dealer.id).all().catch(()=>({results:[]}));
+    return json({ok:true,notes:rows.results||[]}); }
+  const b=await request.json().catch(()=>({}));
+  const driveId=+b.driveId||0;
+  let audio=null;
+  if(b.audio_b64){ const bin=atob(b.audio_b64); audio=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)audio[i]=bin.charCodeAt(i); }
+  if(!audio) return json({ok:false,error:"no_audio"},400);
+  let transcript="";
+  try{ const r=await env.AI.run("@cf/openai/whisper",{audio:[...audio]}); transcript=(r&&r.text)||""; }catch(_){}
+  await env.DB.prepare("INSERT INTO dealer_feedback (dealer_id,drive_id,transcript,created_at) VALUES (?,?,?,?)")
+    .bind(dealer.id, driveId||null, transcript.slice(0,4000), new Date().toISOString()).run().catch(()=>{});
+  await logEvent(env,{action:"dealer.feedback",source:"dealer-voice"});
+  return json({ok:true,transcript});
+}
 async function dealerCheckin(request,env,uid,dealer){
   const {driveId,token,status,sale_price}=await request.json().catch(()=>({}));
   if(["confirmed","arrived","sold"].indexOf(status)<0) return json({ok:false,error:"bad_request"},400);
@@ -1343,7 +1360,7 @@ function segOf(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
   if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk)) return "luxury";
   if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md)) return "truck";
   if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md)) return "ev";
-  if(/tahoe|yukon|suburban|explorer|pilot|highlander|4runner|suv|rav4|cr-v|crv/.test(md)) return "suv";
+  if(/jeep|grand cherokee|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|suv|rav4|cr-v|crv/.test(mk+" "+md)) return "suv";
   return "sedan"; }
 function tradeEstimate(a){ if(!a) return null; const yr=parseInt(a.current_year,10), mk=a.current_make, md=a.current_model, mi=parseInt(String(a.current_miles||"").replace(/\D/g,""),10)||0;
   if(!yr||!mk||!md) return null;

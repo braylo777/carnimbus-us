@@ -245,7 +245,9 @@
     el.style.zIndex="70";   // lift the whole bar above sibling .z layers so the dropdown is actually clickable
     var here=location.pathname;
     var onSignin=here.indexOf("/signin")>-1;   // front door: logo + EN/ES only — no account dot/menu until they're in
-    el.innerHTML='<a href="'+(onSignin?"https://carnimbus.com/":"https://app.carnimbus.com/feed")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
+    var detail=/\/(car|talk|edit-profile)/.test(here) && !onSignin;   // N5: detail pages get a back chevron
+    el.innerHTML=(detail?'<button id="appnav-back" type="button" aria-label="Back" style="background:none;border:none;color:#cbd5e1;font:700 15px Manrope;cursor:pointer;margin-right:6px">‹ Back</button>':'')+
+      '<a href="'+(onSignin?"https://carnimbus.com/":"https://app.carnimbus.com/feed")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
       '<img src="/assets/logo-96.png" alt="" width="26" height="26" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
       '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
       '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
@@ -254,6 +256,8 @@
         '<a href="https://app.carnimbus.com/edit-profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
         '<button id="appnav-out" type="button" style="display:block;width:100%;text-align:left;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;background:none;border:none;cursor:pointer">Sign out</button>'+
       '</div></div>')+'</div>';
+    var bk=document.getElementById("appnav-back");
+    if(bk) bk.addEventListener("click",function(){ if(history.length>1) history.back(); else location.href="https://app.carnimbus.com/matches"; });
     if(onSignin) return;   // no /api/me, no menu wiring on the front door
     function paintAv(d){ if(!d||!d.ok)return; var av=document.getElementById("appnav-av"); if(!av)return;
       if(d.avatar) av.innerHTML='<img src="'+d.avatar+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';

@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded",function(){
     if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk))return "luxury";
     if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md))return "truck";
     if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md))return "ev";
-    if(/tahoe|yukon|suburban|explorer|pilot|highlander|4runner|suv|rav4|cr-v|crv/.test(md))return "suv";
+    if(/jeep|grand cherokee|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|suv|rav4|cr-v|crv/.test(mk+" "+md))return "suv";
     return "sedan"; }
   var ME=null;
   (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(me){if(!me||!me.ok){$("gate").style.display="block";throw 0;}return me;}).then(function(me){

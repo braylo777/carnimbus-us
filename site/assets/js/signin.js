@@ -1,11 +1,14 @@
 document.addEventListener("DOMContentLoaded",function(){
-  function step(id){["choice","buyer","dealer","dealer-done"].forEach(function(x){document.getElementById(x).style.display=(x===id?(x==="dealer-done"?"flex":""):"none");});}   // done-card fills the viewport, vertically centered
+  function step(id){["choice","buyer"].forEach(function(x){var e=document.getElementById(x); if(e)e.style.display=(x===id?"":"none");});}
   document.getElementById("pick-buyer").addEventListener("click",function(){step("buyer");});
-  document.getElementById("pick-dealer").addEventListener("click",function(){step("dealer");});
-  var gd=document.getElementById("go-dealer"); if(gd)gd.addEventListener("click",function(e){e.preventDefault();step("dealer");});
+  // N6: dealer entry points go to the dealer pitch page (dealer.carnimbus.com), not an in-page request form.
+  var pd=document.getElementById("pick-dealer"); if(pd)pd.addEventListener("click",function(){location.href="https://dealer.carnimbus.com/";});
+  var gd=document.getElementById("go-dealer"); if(gd)gd.addEventListener("click",function(e){e.preventDefault();location.href="https://dealer.carnimbus.com/";});
   step("buyer");
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
   var phone="";
+  // N2: remember the car a visitor clicked before signing in (the gate sends ?next=/talk/<slug>).
+  try{ var _nx=new URLSearchParams(location.search).get("next"); if(_nx) localStorage.cn_next=_nx; }catch(_){}
   function digits(v){v=(v||"").replace(/\D/g,"");if(v.length===11&&v[0]==="1")v=v.slice(1);return v;}
   document.getElementById("au-send").addEventListener("click",async function(){
     phone=digits(document.getElementById("au-phone").value);
@@ -24,20 +27,9 @@ document.addEventListener("DOMContentLoaded",function(){
     if(!d.ok)return msg(document.getElementById("au-msg"),"Wrong or expired code — try again.");
     var me=await fetch("/api/me").then(function(x){return x.json();}).catch(function(){return{};});
     var who=await fetch("/api/whoami").then(function(x){return x.json();}).catch(function(){return{};});
-    if(who.dealer)return location.href="/dealer/";
-    location.href=(me.ok&&me.answers)?"/feed":"/edit-profile";   // onboarded → feed; new → questionnaire
-  });
-  var role="";
-  document.querySelectorAll("#roles .opt").forEach(function(b){b.addEventListener("click",function(){
-    document.querySelectorAll("#roles .opt").forEach(function(x){x.classList.remove("on");});
-    b.classList.add("on");role=b.dataset.v;});});
-  document.getElementById("dl-send").addEventListener("click",async function(){
-    var name=document.getElementById("dl-name").value.trim(),dealership=document.getElementById("dl-store").value.trim();
-    if(!name||!dealership)return msg(document.getElementById("dl-msg"),"Name and dealership are required.");
-    var r=await fetch("/api/dealer",{method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({name:name,dealership:dealership,role:role,phone:document.getElementById("dl-phone").value.trim(),email:document.getElementById("dl-email").value.trim()})});
-    var d=await r.json().catch(function(){return{};});
-    if(!d.ok)return msg(document.getElementById("dl-msg"),"Couldn't send — try again.");
-    step("dealer-done");
+    if(who.dealer)return location.href="https://dealer.carnimbus.com/console";
+    var nx=""; try{ nx=localStorage.cn_next||""; }catch(_){}
+    if(me.ok&&me.answers){ if(nx){ try{localStorage.removeItem("cn_next");}catch(_){} return location.href=nx; } return location.href="/feed"; }
+    location.href="/edit-profile";   // new user → quiz; cn_next stays for post-quiz replay
   });
 });

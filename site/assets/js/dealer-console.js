@@ -20,17 +20,6 @@ document.addEventListener("DOMContentLoaded",function(){
       '<div class="row" style="justify-content:space-between;font:600 9px Manrope;color:#8ca0c4;margin:3px 0 8px"><span>$'+a.price_mo+'/mo · $0 down</span><span>'+aprFor(a.price_mo)+'% APR · 72 mo</span></div>'+
       '<div class="row" style="justify-content:space-between;font:600 8px Manrope;color:#7f93b8;margin-bottom:8px"><span class="mono" style="color:#18C8FF">FICO 700-739</span><span>'+a.slot+'</span></div>'+act+'</div>';
   }
-  function loadChat(a){ if(!a)return; CUR=a.id;
-    document.getElementById("dcc-head").textContent="CarNimbus AI ↔ "+a.who;
-    document.getElementById("dcc-sub").textContent=a.year+" "+a.make+" "+a.model+" · buyer only sees \"the car\"";
-    document.getElementById("dcc-cid").textContent="AI BOOKED THIS APPOINTMENT · CID "+a.cid;
-    fetch("/api/dealer/chat?driveId="+a.id).then(function(r){return r.json();}).then(function(d){
-      document.getElementById("dc-chat").innerHTML=(d.messages||[]).map(function(m){
-        return '<div class="bubble '+(m.role==="car"?"car":"you")+'" style="max-width:90%;align-self:'+(m.role==="car"?"flex-start":"flex-end")+'"></div>';
-      }).join('')||'<div style="font:600 11px Manrope;color:#7f93b8;text-align:center;padding:20px">No conversation yet.</div>';
-      var bs=document.querySelectorAll("#dc-chat .bubble");(d.messages||[]).forEach(function(m,i){if(bs[i])bs[i].textContent=m.body;});
-    }).catch(function(){});
-  }
   function load(){fetch("/api/dealer/console").then(function(r){
     if(r.status===401){show("gate401");throw 0;} if(r.status===403){show("gate403");throw 0;} return r.json();
   }).then(function(d){ show("console");
@@ -40,16 +29,6 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("dc-av").textContent=ini(d.dealer.name);
     document.getElementById("dc-today").textContent="TODAY · "+new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}).toUpperCase();
     if(d.dealer.client_no)document.getElementById("dc-cn").textContent="CN · ••••-"+String(d.dealer.client_no).slice(-4);
-    var K=d.kpis||{};
-    document.getElementById("k-routed").textContent=K.routed||0;
-    document.getElementById("k-booked").textContent=K.booked||0;
-    document.getElementById("k-showed").textContent=K.showed||0;
-    document.getElementById("k-closed").textContent=K.closed||0;
-    var dd=(d.deltas||{}),dv=(dd.today||0)-(dd.yesterday||0);
-    document.getElementById("k-routed-sub").textContent=(dv>=0?"+":"")+dv+" vs yesterday";
-    document.getElementById("k-booked-sub").textContent=pct(K.booked,K.routed)+"% of routed";
-    document.getElementById("k-showed-sub").textContent=pct(K.showed,K.booked)+"% show rate";
-    document.getElementById("k-closed-sub").textContent=pct(K.closed,K.showed)+"% of shows";
     var live=(d.appointments||[]).filter(function(a){return a.status!=="sold";});
     var soon=document.getElementById("dc-soon");
     soon.style.display=live.length?"":"none"; soon.textContent="● "+live.length+" arriving within the hour";
@@ -70,39 +49,36 @@ document.addEventListener("DOMContentLoaded",function(){
       return '<div class="row" style="align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(24,200,255,.08);font:600 11px Manrope">'+
       '<span style="flex:1">'+l.year+' '+l.make+' '+l.model+(l.trim?' '+l.trim:'')+'</span><span class="cy">$'+l.price_mo+'/mo</span>'+
       (l.active?'<span class="badge green">Live</span>':'<span class="badge red">Off</span>')+'</div>';}).join('');
-    var sel=(d.appointments||[]).filter(function(a){return a.id===CUR;})[0]||next||(d.appointments||[])[0];
-    loadChat(sel);
-    document.getElementById("appts").querySelectorAll("[data-drive]").forEach(function(el){
-      el.addEventListener("click",function(e){ if(e.target.closest("a"))return;
-        var a=(d.appointments||[]).filter(function(x){return x.id===+el.dataset.drive;})[0]; loadChat(a); });});
   }).catch(function(){});}
-  // Wave F: Dealer ROI panel.
-  function money(n){ return "$"+Number(n||0).toLocaleString(); }
-  function loadRoi(days){ fetch("/api/dealer/roi?days="+(days||30)).then(function(r){return r.ok?r.json():null;}).then(function(d){
-    if(!d||!d.ok)return; var roi=document.getElementById("roi"); if(!roi)return; roi.style.display="";
-    document.getElementById("roi-days").textContent=d.window;
-    document.getElementById("roi-score").textContent=d.valueScore;
-    document.getElementById("roi-gross").textContent=money(d.gross);
-    document.getElementById("roi-ttc").textContent=(d.ttcloseDays!=null?d.ttcloseDays+"d":"—");
-    var F=d.funnel||{}, R=d.rates||{};
-    var stages=[["Routed",F.routed,null],["Booked",F.booked,R.book],["Showed",F.showed,R.show],["Sold",F.sold,R.close]];
-    document.getElementById("roi-waterfall").innerHTML=stages.map(function(s,i){
-      return (i?'<span style="align-self:center;font:700 10px Manrope;color:#8ca0c4">'+(s[2]!=null?s[2]+"% →":"→")+'</span>':'')+
-        '<div class="glass" style="padding:8px 12px;border-radius:10px;text-align:center;min-width:64px"><div class="disp" style="font-size:18px;color:#e2e9f2">'+(s[1]||0)+'</div><div style="font:700 8px Manrope;color:#8ca0c4">'+s[0].toUpperCase()+'</div></div>';
-    }).join('');
-    document.getElementById("roi-per").innerHTML=(d.perVehicle||[]).map(function(v){
-      return '<tr><td style="padding:4px 6px;color:#e2e9f2">'+v.year+' '+v.make+' '+v.model+'</td>'+
-        '<td style="padding:4px 6px;text-align:center;color:#aebfdf">'+(v.routed||0)+'</td>'+
-        '<td style="padding:4px 6px;text-align:center;color:#aebfdf">'+(v.showed||0)+'</td>'+
-        '<td style="padding:4px 6px;text-align:center;color:#54d699">'+(v.sold||0)+'</td></tr>';
-    }).join('');
-  }).catch(function(){}); }
-  (function(){ var tg=document.getElementById("roi-toggle"); if(tg) tg.addEventListener("click",function(e){
-    var b=e.target.closest("[data-d]"); if(!b)return;
-    tg.querySelectorAll("[data-d]").forEach(function(x){x.classList.remove("on");}); b.classList.add("on");
-    loadRoi(+b.dataset.d); }); })();
-  loadRoi(30);
   load(); setInterval(load,30000);
-  document.getElementById("dcc-open").addEventListener("click",function(){
-    var c=document.getElementById("dc-chat"); c.style.maxHeight=(c.style.maxHeight==="none"?"420px":"none");});
+  // N7: dealer voice feedback — record → POST → transcribe (Whisper) → store + list.
+  (function(){
+    var recBtn=document.getElementById("fb-rec"); if(!recBtn) return;
+    var statusEl=document.getElementById("fb-status"), listEl=document.getElementById("fb-list");
+    var mediaRec=null, chunks=[], recording=false;
+    function refresh(){ fetch("/api/dealer/feedback").then(function(r){return r.ok?r.json():{notes:[]};}).then(function(d){
+      listEl.innerHTML=((d&&d.notes)||[]).map(function(n){
+        return '<div class="glass" style="border-radius:10px;padding:9px 11px"><div style="font:500 12px/1.45 Manrope;color:#e2e9f2"></div>'+
+               '<div class="mono" style="font-size:8px;color:#7f93b8;margin-top:4px">'+(n.created_at||"").slice(0,16).replace("T"," ")+'</div></div>';
+      }).join('');
+      var bodies=listEl.querySelectorAll("div>div:first-child");((d&&d.notes)||[]).forEach(function(n,i){ if(bodies[i])bodies[i].textContent=n.transcript||"(no transcript)"; });
+    }).catch(function(){}); }
+    recBtn.addEventListener("click",function(){
+      if(recording){ mediaRec&&mediaRec.stop(); return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+        chunks=[]; mediaRec=new MediaRecorder(stream); recording=true; recBtn.textContent="■ Stop"; statusEl.textContent="recording…";
+        mediaRec.ondataavailable=function(e){ if(e.data.size)chunks.push(e.data); };
+        mediaRec.onstop=function(){ recording=false; recBtn.textContent="🎙 Record"; statusEl.textContent="transcribing…";
+          stream.getTracks().forEach(function(t){t.stop();});
+          var blob=new Blob(chunks,{type:"audio/webm"}); var fr=new FileReader();
+          fr.onload=function(){ var b64=String(fr.result).split(",")[1];
+            fetch("/api/dealer/feedback",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({audio_b64:b64})})
+              .then(function(r){return r.json();}).then(function(x){ statusEl.textContent=x&&x.ok?"saved ✓":"couldn't save"; refresh(); })
+              .catch(function(){ statusEl.textContent="couldn't save"; }); };
+          fr.readAsDataURL(blob); };
+        mediaRec.start();
+      }).catch(function(){ statusEl.textContent="mic blocked — allow access to record"; });
+    });
+    refresh();
+  })();
 });

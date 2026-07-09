@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded",function(){
       vimg.src=PV; }
     setText("v-title",CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:""));
     setText("v-price","$"+CAR.price_mo+"/mo");
-    setText("v-meta",CAR.miles+" mi · "+CAR.drivetrain+" · Certified · Los Angeles, CA");
+    setText("v-meta",[CAR.trim,CAR.body,"Certified",CAR.dealer].filter(Boolean).join(" · "));
     renderSpecs();
     setText("fit-budget","$"+CAR.price_mo+"/mo fits your range.");
     setFit(CAR.match!=null?CAR.match+"% match":"Fresh listing");
