@@ -17,7 +17,14 @@ document.addEventListener("DOMContentLoaded",function(){
       thread.appendChild(m);thread.scrollTop=thread.scrollHeight;}}
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
   function renderSpecs(){
-    var specs=[["Trim",CAR.trim||"—"],["Body",CAR.body||"—"],["Miles",CAR.miles!=null?Number(CAR.miles).toLocaleString():"—"],["Drivetrain",CAR.drivetrain||"—"]];
+    var s=CAR.specs||{};
+    var specs=[["Miles",CAR.miles!=null?Number(CAR.miles).toLocaleString():"—"],["Drivetrain",CAR.drivetrain||"—"]];
+    if(s.mpg_combined||s.mpg_city)specs.push(["MPG",(s.mpg_city||"?")+" city / "+(s.mpg_hwy||"?")+" hwy"]);
+    if(s.range_mi)specs.push(["Range","~"+s.range_mi+" mi"]);
+    if(s.engine)specs.push(["Engine",s.engine]);
+    if(s.transmission)specs.push(["Transmission",s.transmission]);
+    if(s.exterior_color)specs.push(["Color",s.exterior_color]);
+    if(s.seating)specs.push(["Seats",String(s.seating)]);
     var sp=$("v-specs"); if(sp)sp.innerHTML=specs.map(function(s){return '<div style="min-width:120px"><span style="font:700 8px Manrope;color:#8ca0c4;letter-spacing:.06em;text-transform:uppercase">'+esc(s[0])+'</span><br><span style="font:700 12px Manrope;color:#e2e9f2">'+esc(s[1])+'</span></div>';}).join("");
     var feats=(CAR.features||[]).slice(0,6);
     if(feats.length){ var fh=$("v-feats-h"); if(fh)fh.style.display=""; var fe=$("v-feats"); if(fe)fe.innerHTML=feats.map(function(f){return '<div style="font:600 11px Manrope;color:#cbd5e1"><span class="cy">•</span> '+esc(f)+'</div>';}).join(""); }
@@ -49,7 +56,7 @@ document.addEventListener("DOMContentLoaded",function(){
       vimg.src=PV; }
     setText("v-title",CAR.year+" "+CAR.make+" "+CAR.model+(CAR.trim?" "+CAR.trim:""));
     setText("v-price","$"+CAR.price_mo+"/mo");
-    setText("v-meta",[CAR.trim,CAR.body,"Certified",CAR.dealer].filter(Boolean).join(" · "));
+    setText("v-meta",["Certified",CAR.dealer].filter(Boolean).join(" · "));   // O2: dealership only — title has trim, specs grid has the rest
     renderSpecs();
     setText("fit-budget","$"+CAR.price_mo+"/mo fits your range.");
     setFit(CAR.match!=null?CAR.match+"% match":"Fresh listing");
@@ -132,11 +139,10 @@ document.addEventListener("DOMContentLoaded",function(){
       w.querySelectorAll(".slot-chip").forEach(function(x){x.disabled=true;}); }); }); }
   var cs=$("chat-send");if(cs)cs.addEventListener("click",send);
   var ci=$("chat-in");if(ci)ci.addEventListener("keydown",function(e){if(e.key==="Enter")send();});
-  var cr=$("chat-reset");if(cr)cr.addEventListener("click",async function(){
-    if(thread)thread.innerHTML="";hist=[];
-    var ok=$("approved");if(ok)ok.style.display="none";
-    var btn=$("pass-btn");if(btn)btn.style.display="none";
-    try{await fetch("/api/chats/clear",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:id})});}catch(e){}
-    if(CAR)bubble("car",(CAR.persona&&CAR.persona.opener)||("Hey — I'm the "+CAR.year+" "+CAR.make+" "+CAR.model+". Ask me anything."));
+  // O6: Ask the Feed — post this car to the community and get 5 honest AI critic takes, then jump to the feed.
+  var af=$("ask-feed");if(af)af.addEventListener("click",async function(){ if(!CAR)return;
+    af.disabled=true;af.textContent="Posting…";
+    try{await fetch("/api/feed/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id})});}catch(e){}
+    location.href="https://app.carnimbus.com/feed";
   });
 });

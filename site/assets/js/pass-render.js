@@ -21,6 +21,17 @@
       var lg=/[?&]lang=es/.test(location.search)?"&lang=es":""; location.href=location.pathname+"?print=1"+lg;   // clean print view, keep lang
     });
     if(isPrint){ setTimeout(function(){ try{ window.print(); }catch(e){} },400); }
+    // O4: buyer-initiated cancel — frees the dealer slot + clears the drive so they can book again.
+    var cb=document.getElementById("pm-cancel");
+    if(cb)cb.addEventListener("click",function(){
+      if(!confirm(cb.dataset.confirm||"Cancel this test drive?"))return;
+      cb.disabled=true;
+      fetch("/api/drive/cancel",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:cb.dataset.token})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d&&d.ok){ var done=document.getElementById("pm-cancelled"); if(done)done.style.display="block";
+            if(cb.parentNode)cb.parentNode.style.display="none"; }
+          else cb.disabled=false; }).catch(function(){ cb.disabled=false; });
+    });
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",draw); else draw();
 })();

@@ -121,8 +121,10 @@ export default {
     if (url.pathname === "/api/softpull" && request.method === "POST")     return sec(await withUser(request, env, softPull));
     if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
     if (url.pathname === "/api/book" && request.method === "POST")         return sec(await withUser(request, env, book));
+    if (url.pathname === "/api/drive/cancel" && request.method === "POST")  return sec(await withUser(request, env, driveCancel));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
     if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
+    if (url.pathname === "/api/feed/ask" && request.method === "POST")     return sec(await withUser(request, env, feedAsk));
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
@@ -139,7 +141,6 @@ export default {
     if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
     if (url.pathname === "/api/chats/recent")                             return sec(await withUser(request, env, recentChat));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
-    if (url.pathname === "/api/chats/clear" && request.method === "POST")  return sec(await withUser(request, env, chatClear));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await aiPulse(env));
     if (url.pathname === "/api/events" && request.method === "POST")      return sec(await postEvents(request, env));
@@ -593,7 +594,17 @@ async function poolExport(request,env){ const pool=new URL(request.url).searchPa
   return json({ok:false,error:"pool=buyers|vdps"},400); }
 
 // ==================== matcher + feed + chat + pass + comments ====================
-function vdpText(v){ return `${v.year} ${v.make} ${v.model} ${v.trim}. ${v.body}, ${v.drivetrain}, ${v.miles} miles, $${v.price_mo}/mo. Features: ${JSON.parse(v.features||"[]").join(", ")}. ${v.description}`; }
+function vdpText(v,sp){ let t=`${v.year} ${v.make} ${v.model} ${v.trim}. ${v.body}, ${v.drivetrain}, ${v.miles} miles, $${v.price_mo}/mo. Features: ${JSON.parse(v.features||"[]").join(", ")}. ${v.description}`;
+  if(sp){ const b=[];
+    if(sp.mpg_combined||sp.mpg_city) b.push(`MPG ${sp.mpg_city||"?"} city / ${sp.mpg_hwy||"?"} hwy${sp.mpg_combined?` (${sp.mpg_combined} combined)`:""}`);
+    if(sp.range_mi) b.push(`~${sp.range_mi} mi electric range`);
+    if(sp.engine) b.push(`engine: ${sp.engine}`); if(sp.transmission) b.push(sp.transmission);
+    if(sp.fuel_type) b.push(sp.fuel_type); if(sp.seating) b.push(`seats ${sp.seating}`);
+    if(sp.exterior_color) b.push(`${sp.exterior_color} exterior`); if(sp.interior_color) b.push(`${sp.interior_color} interior`);
+    if(sp.mileage_exact) b.push(`${Number(sp.mileage_exact).toLocaleString()} miles`);
+    if(sp.options_json){ try{ const o=JSON.parse(sp.options_json); if(o&&o.length) b.push("Options: "+o.join(", ")); }catch(_){}}
+    if(b.length) t+=" "+b.join(". ")+"."; }
+  return t; }
 // Deterministic per-car personality (pure function of the row — same car always same voice).
 function carPersona(v,lang){
   const make=(v.make||"").toLowerCase(), model=(v.model||"").toLowerCase(), body=(v.body||"").toLowerCase(),
@@ -917,9 +928,11 @@ async function vdpOne(request,env){ const u=new URL(request.url); const id=+(u.s
   const mo=v.price? monthlyFor(v.price,a.max_down,aprFor(a.fico),72) : v.price_mo;
   const er=await env.DB.prepare("SELECT summary,pros,cons,ideal_buyer,financing_context FROM vdp_enrichment WHERE vdp_id=?").bind(v.id).first().catch(()=>null);
   const enrich=er?{summary:er.summary,pros:JSON.parse(er.pros||"[]"),cons:JSON.parse(er.cons||"[]"),ideal_buyer:er.ideal_buyer,financing_context:er.financing_context}:null;
+  const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);   // O3: master spec row
+  const specs=sp?{exterior_color:sp.exterior_color,interior_color:sp.interior_color,engine:sp.engine,transmission:sp.transmission,mpg_city:sp.mpg_city,mpg_hwy:sp.mpg_hwy,mpg_combined:sp.mpg_combined,range_mi:sp.range_mi,fuel_type:sp.fuel_type,seating:sp.seating,options:JSON.parse(sp.options_json||"[]")}:null;
   return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:mo,price:v.price||null,miles:v.miles,
     drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,
-    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v,lang),enrich}}); }
+    match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v,lang),enrich,specs}}); }
 async function book(request,env,uid){ const {vdpId,slot}=await request.json().catch(()=>({}));
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
@@ -934,6 +947,11 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   if(v.dealer_id && slotManaged){ const r=await env.DB.prepare("UPDATE dealer_slots SET taken=1 WHERE dealer_id=? AND starts_at=? AND taken=0").bind(v.dealer_id,slot).run().catch(()=>({meta:{changes:0}}));
     if(!(r&&r.meta&&r.meta.changes===1)) return json({ok:false,error:"slot_taken",slots:openSlotVals.slice(0,6)},409); }
   const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' AND slot>=? ORDER BY id DESC LIMIT 1").bind(uid,laNow()).first();
+  // O4: one test drive at a time — a DIFFERENT car already booked blocks a new booking (must cancel/reschedule first).
+  if(existing && existing.vdp_id!==vdpId){
+    if(v.dealer_id && slotManaged) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(v.dealer_id,slot).run().catch(()=>{});   // release the slot we just claimed
+    const ec=await env.DB.prepare("SELECT year,make,model FROM vdps WHERE id=?").bind(existing.vdp_id).first();
+    return json({ok:false,error:"already_booked",car:ec||null,slot:existing.slot},409); }
   if(existing){ const oldCar=existing.vdp_id!==vdpId?await env.DB.prepare("SELECT dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
     await env.DB.prepare("UPDATE test_drives SET vdp_id=?, center=?, slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")
       .bind(vdpId,center,String(slot).slice(0,60),tok,new Date().toISOString(),existing.id).run();
@@ -949,6 +967,15 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
     if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${slot}. Reply here to text the buyer. Console: dealer.carnimbus.com`).catch(()=>{}); }
   return json({ok:true,pass:"/pass/"+tok,center:center,slot:slot}); }
+// O4: buyer cancels a drive — clears it on their side (status=cancelled, kept for records) AND frees the dealer slot.
+async function driveCancel(request,env,uid){ const {token}=await request.json().catch(()=>({}));
+  if(!token) return json({ok:false,error:"bad_request"},400);
+  const t=await env.DB.prepare("SELECT td.id,td.slot,td.status,v.dealer_id FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.pass_token=? AND td.user_id=?").bind(token,uid).first();
+  if(!t) return json({ok:false,error:"not_found"},404);
+  await env.DB.prepare("UPDATE test_drives SET status='cancelled' WHERE id=?").bind(t.id).run();
+  if(t.dealer_id) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(t.dealer_id,t.slot).run().catch(()=>{});
+  await logEvent(env,{action:"finance.cancelled",source:"buyer-cancel"});
+  return json({ok:true}); }
 async function carChat(request,env,uid){ const {vdpId,messages,lang}=await request.json().catch(()=>({})); const ES=lang==="es";
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
@@ -964,7 +991,8 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const existing=await env.DB.prepare("SELECT id,slot,vdp_id FROM test_drives WHERE user_id=? AND status='confirmed' AND slot>=? ORDER BY id DESC LIMIT 1").bind(uid,laNow()).first();
   const existingCar=existing&&existing.vdp_id!==vdpId?await env.DB.prepare("SELECT year,make,model,dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
   const apr=aprFor(a.fico), mo=v.price? monthlyFor(v.price,a.max_down,apr,72) : v.price_mo;   // buyer's real numbers for this car
-  const truth=vdpText(v).replace("$"+v.price_mo+"/mo","$"+mo+"/mo est ("+(a.max_down?("$"+Number(a.max_down).toLocaleString()+" down"):"$0 down")+", 72mo)");   // quote the BUYER's monthly, never the raw stored one
+  const carSpecs=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);   // O3: rich specs for the truth core
+  const truth=vdpText(v,carSpecs).replace("$"+v.price_mo+"/mo","$"+mo+"/mo est ("+(a.max_down?("$"+Number(a.max_down).toLocaleString()+" down"):"$0 down")+", 72mo)");   // quote the BUYER's monthly, never the raw stored one
   const hasSoft=!!a.softpull;
   const openSlotVals=await dealerSlotsFor(env, v.dealer_id, 12);
   const inPref=(s,pref)=>{ const hh=+String(s).slice(11,13), d=new Date(String(s).slice(0,10)+"T12:00").getDay();
@@ -998,7 +1026,7 @@ HOW I CLOSE — talk like a real person texting a friend, ONE step per reply. Us
  STEP 3 (they say yes / nothing else): emit the booking and ONE genuine line that FINALLY names the rep — "Done — you're set with ${dealerRep} at ${center}. Pass is ready, I'll be up front. 🏁"
 OPEN SLOTS (real availability, already filtered to their preference): ${slotList}
 BOOK: today is ${today}. In STEP 3 only, emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> using the EXACT slot they picked from OPEN SLOTS (24-hour). NEVER emit it before they've picked a specific offered slot AND said yes. NEVER offer or book a time not in OPEN SLOTS.
-${existing&&!existingCar?`RESCHEDULING: they already have ME booked for ${existing.slot}. If they want to change it, warmly re-offer slots and confirm the NEW time; the <BOOK> replaces the old one automatically.`:""}${existingCar?`HEADS UP: they already have the ${existingCar.year} ${existingCar.make} ${existingCar.model} booked for ${existing.slot}. A buyer can only hold ONE test drive at a time. If they want to drive me instead, I say so plainly ("You've got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — want to switch that to me?") and only book once they confirm; booking me cancels that one.`:""}
+${existing&&!existingCar?`RESCHEDULING: they already have ME booked for ${existing.slot}. If they want to change it, warmly re-offer slots and confirm the NEW time; the <BOOK> replaces the old one automatically.`:""}${existingCar?`HARD RULE: they already have the ${existingCar.year} ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)}. A buyer may hold ONLY ONE test drive at a time. I do NOT offer slots and I NEVER emit <BOOK>. I say warmly, once: "You've already got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — you can hold one drive at a time. Tap your pass to reschedule or cancel it, then I'm all yours." After that I happily answer their questions about me, but I do not schedule.`:""}
 SOFT CHECK: ${hasSoft?`they've already run their soft check — their real rate is set, don't offer it again.`:`when they show buying intent (before I push scheduling), I offer ONCE, casually: "Want me to run a quick soft check to lock your real rate? For me you're looking at about $${mo}/mo at ${apr}% — takes a sec, zero FICO impact." If they say yes, I emit <SOFTPULL/> on its own and say the check is running. I never repeat the offer.`}
 ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
   if(memory) sys.content+=`\nWHAT I ALREADY KNOW ABOUT THIS BUYER (reference naturally to feel personal, never creepily; do NOT invent beyond this): ${memory}.`;
@@ -1040,6 +1068,9 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
         claimed=(r&&r.meta&&r.meta.changes)===1; }
       if(!claimed){
         text=(text.replace(/<BOOK>.*?<\/BOOK>/s,"").trim()||"Ah — someone just grabbed that time.")+` ${dealerRep}'s other openings: ${slotList}. Want one of those?`;
+      } else if(existingCar){   // O4: a DIFFERENT car is already booked — refuse, don't commit (one drive at a time)
+        if(v.dealer_id&&slotManaged) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(v.dealer_id,b.slot).run().catch(()=>{});   // release the slot we just claimed
+        text=(text.replace(/<BOOK>.*?<\/BOOK>/s,"").trim())||`You've already got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — you can hold one drive at a time. Tap your pass to reschedule or cancel it, then I'm all yours.`;
       } else {
     if(existing){ await env.DB.prepare("UPDATE test_drives SET vdp_id=?, center=?, slot=?, status='confirmed', pass_token=?, created_at=? WHERE id=?")   // move the single active drive (may switch cars)
       .bind(vdpId,b.center,b.slot,tok,new Date().toISOString(),existing.id).run();
@@ -1058,7 +1089,10 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     }catch(_){} }
   let slots=null; const slotsTag=text.match(/<SLOTS>(.*?)<\/SLOTS>/s);
   if(slotsTag){ try{ slots=JSON.parse(slotsTag[1]).map(s=>({value:s,label:fmtSlotLabel(s)})); }catch(_){} }
-  const cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").replace(/<SOFTPULL\s*\/?>/g,"").replace(/<SLOTS>.*?<\/SLOTS>/gs,"").trim();
+  let cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").replace(/<SOFTPULL\s*\/?>/g,"").replace(/<SLOTS>.*?<\/SLOTS>/gs,"").trim();
+  // O4: never let the AI imply a booking it didn't make. `pass` is set only when a real <BOOK> committed this turn.
+  if(!pass){ cleanReply=cleanReply.replace(/\b(see you|you're all set|you are all set|you're set with|pass is ready|locked in|see ya)\b[^.!?]*[.!?]?/gis,"").replace(/🏁/g,"").replace(/\s{2,}/g," ").trim();
+    if(!cleanReply) cleanReply="Want me to pull up open times when you're ready?"; }
   const lastUser=(messages||[]).slice(-1)[0];
   if(lastUser&&lastUser.role==="user") await env.DB.prepare("INSERT INTO chats (user_id,vdp_id,role,body,created_at) VALUES (?,?,?,?,?)")
     .bind(uid,vdpId,"user",String(lastUser.content).slice(0,500),new Date().toISOString()).run();
@@ -1089,9 +1123,10 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
   const isPrint=new URL(request.url).searchParams.get("print")==="1";
   const ES=new URL(request.url).searchParams.get("lang")==="es";
-  const T=ES?{pass:"PASE DRIVE NOW · SEMINUEVO CERTIFICADO",when:"Cuándo",status:"Estado",miles:"Millas",drive:"Tracción",numbers:"Tus números · listos antes de llegar",estm:"Est. mensual",down:"Enganche",method:"Método",apr:"TAE est.",credit:"Rango de crédito",income:"Rango de ingreso",disc:"Estimaciones de tu consulta suave — términos finales al firmar. 0 impacto en crédito.",track:"CID · seguimiento",code:"Código de check-in",scan:"Escanea en "+(t.center||"tu concesionario")+" para registrarte.",save:"Guardar / Imprimir PDF",tag:"El superagente de IA para comprar autos"}
-    :{pass:"DRIVE NOW PASS · CERTIFIED PRE-OWNED",when:"When",status:"Status",miles:"Miles",drive:"Drivetrain",numbers:"Your numbers · pre-set before you arrive",estm:"Est. monthly",down:"Down payment",method:"Method",apr:"Est. APR",credit:"Credit range",income:"Income range",disc:"Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.",track:"CID · tracking",code:"Check-in code",scan:"Scan at "+(t.center||"your dealership")+" to check in.",save:"Save / Print PDF",tag:"The AI car-buying superagent"};
+  const T=ES?{pass:"PASE DRIVE NOW · SEMINUEVO CERTIFICADO",when:"Cuándo",status:"Estado",miles:"Millas",drive:"Tracción",numbers:"Tus números · listos antes de llegar",estm:"Est. mensual",down:"Enganche",method:"Método",apr:"TAE est.",credit:"Rango de crédito",income:"Rango de ingreso",disc:"Estimaciones de tu consulta suave — términos finales al firmar. 0 impacto en crédito.",track:"CID · seguimiento",code:"Código de check-in",scan:"Escanea en "+(t.center||"tu concesionario")+" para registrarte.",save:"Guardar / Imprimir PDF",resched:"Reprogramar",cancel:"Cancelar",cancelled:"Cancelada",cancelConfirm:"¿Cancelar este test drive? Se liberará tu lugar.",tag:"El superagente de IA para comprar autos"}
+    :{pass:"DRIVE NOW PASS · CERTIFIED PRE-OWNED",when:"When",status:"Status",miles:"Miles",drive:"Drivetrain",numbers:"Your numbers · pre-set before you arrive",estm:"Est. monthly",down:"Down payment",method:"Method",apr:"Est. APR",credit:"Credit range",income:"Income range",disc:"Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.",track:"CID · tracking",code:"Check-in code",scan:"Scan at "+(t.center||"your dealership")+" to check in.",save:"Save / Print PDF",resched:"Reschedule",cancel:"Cancel",cancelled:"Cancelled",cancelConfirm:"Cancel this test drive? This frees your slot.",tag:"The AI car-buying superagent"};
   const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
+  const passSlug=(t.year+"-"+t.make+"-"+t.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");
   const safePhoto=(/^\/assets\/[\w/?=.-]*$/.test(photo)&&!photo.includes(".."))?photo:"";   // dealer-controlled → allowlist, no traversal, before CSS url()
   const carTitle=escHtml(t.year+" "+t.make+" "+t.model);
   let a={}; try{ a=JSON.parse(t.answers)||{}; }catch(_){}
@@ -1138,6 +1173,10 @@ ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span c
 <div class="k" style="margin-top:8px">${T.code}</div><div class="mono" style="color:#fff;letter-spacing:.06em">${cid}</div>
 <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">${T.scan}</div></div></div>
 <button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">${T.save}</button>
+${t.status==="confirmed"?`<div class="row noprint" style="gap:8px;margin-top:8px">
+<a class="btn ghost sm" href="https://app.carnimbus.com/talk/${passSlug}" style="flex:1;text-decoration:none;text-align:center;justify-content:center">${T.resched}</a>
+<button id="pm-cancel" class="btn ghost sm" type="button" data-token="${escHtml(t.pass_token)}" data-confirm="${escHtml(T.cancelConfirm)}" style="flex:1">${T.cancel}</button>
+</div><div id="pm-cancelled" class="noprint" style="display:none;font:700 12px Manrope;color:#f5a623;margin-top:10px;text-align:center">${T.cancelled} · slot freed</div>`:""}
 <div id="pm-hint" class="noprint" style="display:none;font:600 10px Manrope;color:#8ca0c4;margin-top:8px;text-align:center">iPhone: in the print sheet choose <b style="color:#e2e9f2">Save to Files</b> — or tap Share ⬆️ → <b style="color:#e2e9f2">Print</b>.</div>
 <div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.com · ${T.tag}</div>
 </div></div>
@@ -1280,10 +1319,6 @@ async function dealerRoi(request,env,uid,dealer){
     rates:{book:rate(booked,routed),show:rate(showed,booked),close:rate(sold,showed)},
     gross:(f&&f.gross)||0, ttcloseDays:tt&&tt.d!=null?Math.round(tt.d*10)/10:null,
     valueScore, perVehicle:(per.results||[])}); }
-async function chatClear(request,env,uid){ const {vdpId}=await request.json().catch(()=>({}));
-  if(!vdpId) return json({ok:false,error:"bad_request"},400);
-  await env.DB.prepare("DELETE FROM chats WHERE user_id=? AND vdp_id=?").bind(uid,vdpId).run();
-  return json({ok:true}); }
 async function recentChat(request,env,uid){
   const r=await env.DB.prepare("SELECT vdp_id FROM chats WHERE user_id=? ORDER BY id DESC LIMIT 1").bind(uid).first();
   let vdp=r?r.vdp_id:null;
@@ -1398,6 +1433,31 @@ async function dealerLead(request,env){
   if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,"New CarNimbus dealer lead: "+String(name).slice(0,40)+" @ "+String(dealership).slice(0,60)+(phone?(" · "+String(phone).slice(0,20)):"")).catch(()=>{});
   return json({ok:true});
 }
+// O6: Ask the Feed — 5 distinct community critic personas give honest (pros AND cons) takes on a car for THIS buyer.
+const CRITICS=[
+ {key:"parent", en:"The Practical Parent", es:"El Papá Práctico", lens:"family space, safety, and total cost of ownership; skeptical of impractical or flashy choices"},
+ {key:"enthusiast", en:"The Enthusiast", es:"El Entusiasta", lens:"driving feel, engine, and fun; honest when a car is boring, slow, or a poser"},
+ {key:"budget", en:"The Budget Hawk", es:"El Cuidacentavos", lens:"payment vs income, depreciation, and insurance; calls out overreach and bad money moves"},
+ {key:"reliability", en:"The Reliability Nerd", es:"El Fiable", lens:"known issues, maintenance costs, and longevity for this exact make/model/year"},
+ {key:"resale", en:"The Resale Skeptic", es:"El Escéptico de Reventa", lens:"resale value, mileage, and market demand; blunt about cars that lose value fast"}
+];
+async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catch(()=>({}));
+  const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first(); if(!v) return json({ok:false,error:"not_found"},404);
+  const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}}catch(_){}
+  const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
+  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,created_at) VALUES (?,?,?,?,?)")
+    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,String(a.zip||""),new Date().toISOString()).run();
+  const parentId=post&&post.meta?post.meta.last_row_id:0;
+  const carStr=vdpText(v,sp), me=profileText(a);
+  for(const c of CRITICS){
+    const sys=`You are "${c.en}", a CarNimbus community voice focused on ${c.lens}. Give the buyer an HONEST 1-2 sentence take on THIS specific car for THIS buyer — real pros AND real cons, never pure hype. If it's a poor fit for them, say so kindly but plainly. Conversational, no markdown, no lists.`;
+    const raw=await llm(env,[{role:"system",content:sys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
+    const body=String(raw||"").trim().slice(0,480); if(!body) continue;
+    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,parent_id,created_at) VALUES (0,?,?,?,?,?)")
+      .bind(vdpId, c.en+" — "+body, "agent", parentId, new Date().toISOString()).run().catch(()=>{});
+  }
+  await logEvent(env,{action:"social.asked",vehicle_id:vdpId});
+  return json({ok:true,postId:parentId}); }
 async function comments(request,env){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
   if(request.method==="POST"){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
     const {body,zip}=await request.json().catch(()=>({})); if(!body||String(body).length>500) return json({ok:false,error:"bad_request"},400);
@@ -1414,7 +1474,7 @@ async function comments(request,env){ const curl=new URL(request.url); const vdp
   const lang=curl.searchParams.get("lang")==="es"?"es":"en";
   const geoCols=geo?"u.lat,u.lng,":"";                                   // only touch lat/lng columns when actually ranking
   let rows=await env.DB.prepare(
-    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.upvotes,c.downvotes,c.images,c.sponsored,u.handle,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
+    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.parent_id,c.upvotes,c.downvotes,c.images,c.sponsored,u.handle,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
     "LEFT JOIN post_votes pv ON pv.comment_id=c.id AND pv.user_id=? "+
     "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.sponsored DESC, c.id DESC LIMIT 300").bind(meUid||0).all().catch(async()=>{

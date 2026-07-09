@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded",function(){
   // The Worker's page gate guarantees a session — just prefill the list from the profile.
   (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(d){ if(!d||!d.ok)return;
     if(!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];
-    var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles"};
+    var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles",current_color:"f-ccolor",current_details:"f-cdetails"};
     for(var m in map){var el=document.getElementById(map[m]);if(el&&a[m]!=null)el.value=a[m];}
     document.querySelectorAll("#quiz .opts").forEach(function(o){ var sec=o.closest("section"),key=o.dataset.q2||sec.dataset.q,val=a[key];
       var hit=false;
@@ -39,6 +39,8 @@ document.addEventListener("DOMContentLoaded",function(){
     A.current_make=(document.getElementById("f-cmake").value||"").trim();
     A.current_model=(document.getElementById("f-cmodel").value||"").trim();
     A.current_miles=(document.getElementById("f-cmiles").value||"").trim();
+    A.current_color=(document.getElementById("f-ccolor").value||"").trim();
+    A.current_details=(document.getElementById("f-cdetails").value||"").trim();
     if(A.reason==="other"){var ot=document.querySelector('[data-q="reason"] .other-in');if(ot&&ot.value.trim())A.reason=ot.value.trim();}
     var m=document.getElementById("qz-msg");
     if(!A.full_name)return msg(m,"Add your name so the cars know who they're talking to.");

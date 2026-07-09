@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded",function(){
       if(a.fico)bars.push(["FICO range",a.fico]);
       // L4: Garage — current car + a specific trade-in estimate (replaces the old range row).
       if(a.current_year&&a.current_make){ $("y-garage").style.display="block";
-        $("y-car").textContent=a.current_year+" "+a.current_make+" "+(a.current_model||"")+(a.current_miles?(" · "+Number(String(a.current_miles).replace(/\D/g,"")||0).toLocaleString()+" mi"):"");
+        $("y-car").textContent=a.current_year+" "+a.current_make+" "+(a.current_model||"")+(a.current_color?(" · "+a.current_color):"")+(a.current_miles?(" · "+Number(String(a.current_miles).replace(/\D/g,"")||0).toLocaleString()+" mi"):"");
         // M9: mock car image chosen by body/segment (self-hosted — CSP forbids external hosts).
         var img=$("y-img"); if(img){ var seg=segForCar(a.current_make,a.current_model); img.onload=function(){img.style.display="block";}; img.onerror=function(){img.style.display="none";}; img.src="/assets/img/garage/"+seg+".webp"; }
         if(me.trade){ $("y-trade").textContent="Est. trade-in $"+me.trade.point.toLocaleString()+"  ($"+me.trade.low.toLocaleString()+"–$"+me.trade.high.toLocaleString()+")";

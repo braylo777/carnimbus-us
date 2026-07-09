@@ -28,8 +28,15 @@ document.addEventListener("DOMContentLoaded",function(){
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function mono(name){var s=String(name||"R"),h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;
     return '<span style="width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(135deg,hsl('+h+',58%,46%),hsl('+((h+42)%360)+',58%,34%));font:700 9px Manrope;color:#fff">'+s.trim().charAt(0).toUpperCase().replace(/[<&>]/g,"")+'</span>';}
+  // O6: thread agent critic replies under their parent post (children ordered oldest-first below the post).
+  function threadOrder(cs){ var byId={},kids={},tops=[];
+    cs.forEach(function(c){ byId[c.id]=c; });
+    cs.forEach(function(c){ var pid=+c.parent_id||0; if(pid&&byId[pid]){ (kids[pid]=kids[pid]||[]).push(c); } else tops.push(c); });
+    var out=[]; tops.forEach(function(t){ out.push(t); (kids[t.id]||[]).slice().reverse().forEach(function(ch){ ch._child=true; out.push(ch); }); });
+    return out; }
   function paint(cs){
     if(!cs.length){list.innerHTML='<div style="text-align:center;font:600 12px Manrope;color:#aebfdf;padding:40px 20px">Be the first — say something about a car you talked to.</div>';return;}
+    cs=threadOrder(cs);
     list.innerHTML=cs.map(function(c){
       var agent=(c.zip==="agent");
       var av=agent?'<img src="/assets/logo-96.png" style="width:100%;height:100%;object-fit:cover">'
@@ -46,15 +53,17 @@ document.addEventListener("DOMContentLoaded",function(){
         '<span style="font:700 10px Manrope;flex:1;color:#fff">'+esc(c.year)+' '+esc(c.make)+' '+esc(c.model)+' · <span class="cy">$'+esc(c.price_mo)+'/mo</span></span>'+
         '<span class="cy" style="font:700 10px Manrope;flex:none">Talk →</span></div></a>'):'';
       var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span class="act-reply" data-h="'+esc(c.handle||"")+'" style="cursor:pointer">💬 Reply</span>')+'</div>';
-      return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+rail+
+      return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)'+(c._child?';margin-left:24px;border-left:2px solid rgba(24,200,255,.18);background:rgba(24,200,255,.03)':'')+'">'+rail+
         '<div style="flex:1;min-width:0">'+
         '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span>'+(c.sponsored?'<span style="font:700 8px Manrope;letter-spacing:.08em;color:#8ca0c4;border:1px solid rgba(24,200,255,.25);border-radius:6px;padding:1px 5px">Sponsored</span>':'')+'</div>'+
         '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+gallery+chip+actions+'</div></div>';
     }).join('');
     var metas=list.querySelectorAll(".post-meta"), bodies=list.querySelectorAll(".post-body");
-    cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus AI":(c.handle||"a rider");
-      if(metas[idx])metas[idx].textContent=name+(agent?" · agent":"")+" · "+rel(c.created_at);
-      if(bodies[idx]) bodies[idx].textContent=c.body; });
+    cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus AI":(c.handle||"a rider"),body=c.body||"";
+      // O6: agent critic replies are stored as "Persona Name — body"; show the persona as the byline.
+      if(agent){ var m=body.match(/^(.{2,40}?) — ([\s\S]+)$/); if(m){ name=m[1]; body=m[2]; } }
+      if(metas[idx])metas[idx].textContent=name+(agent?" · AI":"")+" · "+rel(c.created_at);
+      if(bodies[idx]) bodies[idx].textContent=body; });
   }
   function load(){fetch(feedUrl()).then(function(r){return r.json();}).then(function(d){
     var cs=d.comments||[];
