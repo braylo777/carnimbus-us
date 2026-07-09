@@ -9,7 +9,10 @@ document.addEventListener("DOMContentLoaded",function(){
   function skip(id){try{var s=skipped();if(s.indexOf(id)<0){s.push(id);localStorage.cn_skipped=JSON.stringify(s);}}catch(_){}}
 
   // New matches (ranked + affordable) as small talk/skip cards.
-  fetch("/api/feed?lang="+lang()).then(function(r){return r.json();}).then(function(d){
+  function loadMatches(){ return fetch("/api/matches?lang="+lang()).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.cars&&d.cars.length) return d;                       // persisted backend matches (Wave B)
+    return fetch("/api/feed?lang="+lang()).then(function(r){return r.json();}); }); }  // fallback: live rank pre-cron
+  loadMatches().then(function(d){
     if(d.authed===false)$("m-gate").style.display="flex";
     var sk=skipped(), cars=(d.cars||[]).filter(function(c){return sk.indexOf(c.id)<0;}).slice(0,24);
     var el=$("m-new");

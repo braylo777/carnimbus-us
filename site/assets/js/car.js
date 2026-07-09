@@ -20,6 +20,15 @@ document.addEventListener("DOMContentLoaded",function(){
     var sp=$("v-specs"); if(sp)sp.innerHTML=specs.map(function(s){return '<div style="min-width:120px"><span style="font:700 8px Manrope;color:#8ca0c4;letter-spacing:.06em;text-transform:uppercase">'+esc(s[0])+'</span><br><span style="font:700 12px Manrope;color:#e2e9f2">'+esc(s[1])+'</span></div>';}).join("");
     var feats=(CAR.features||[]).slice(0,6);
     if(feats.length){ var fh=$("v-feats-h"); if(fh)fh.style.display=""; var fe=$("v-feats"); if(fe)fe.innerHTML=feats.map(function(f){return '<div style="font:600 11px Manrope;color:#cbd5e1"><span class="cy">•</span> '+esc(f)+'</div>';}).join(""); }
+    // Wave E1: Inventory Intelligence Agent summary (pros/cons/ideal buyer), if enriched.
+    var en=CAR.enrich; if(en&&(en.summary||(en.pros&&en.pros.length))){ var host=$("v-specs");
+      if(host&&!document.getElementById("v-enrich")){ var box=document.createElement("div"); box.id="v-enrich"; box.style.cssText="margin-top:14px";
+        var pros=(en.pros||[]).slice(0,3).map(function(p){return '<div style="font:600 11px Manrope;color:#cbd5e1"><span style="color:#5ee6a8">+</span> '+esc(p)+'</div>';}).join("");
+        var cons=(en.cons||[]).slice(0,2).map(function(p){return '<div style="font:600 11px Manrope;color:#aebfdf"><span style="color:#f5a623">–</span> '+esc(p)+'</div>';}).join("");
+        box.innerHTML='<div style="font:700 8px Manrope;color:#8ca0c4;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">Nimbus take</div>'+
+          (en.summary?'<div style="font:600 12px/1.5 Manrope;color:#e2e9f2;margin-bottom:7px">'+esc(en.summary)+'</div>':"")+
+          pros+cons+(en.ideal_buyer?'<div style="font:600 10px Manrope;color:#8ca0c4;margin-top:6px">Ideal for: '+esc(en.ideal_buyer)+'</div>':"");
+        host.parentNode.insertBefore(box,host.nextSibling); } }
     // Plain money line (no button — the soft check now happens in the chat). price_mo is the buyer's real monthly.
     (window.__me||Promise.resolve(null)).then(function(me){ var a=(me&&me.answers)||{};
       var down=a.max_down!=null?Number(a.max_down):0;

@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded",function(){
       var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span class="act-reply" data-h="'+esc(c.handle||"")+'" style="cursor:pointer">💬 Reply</span>')+'</div>';
       return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)">'+rail+
         '<div style="flex:1;min-width:0">'+
-        '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span></div>'+
+        '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span>'+(c.sponsored?'<span style="font:700 8px Manrope;letter-spacing:.08em;color:#8ca0c4;border:1px solid rgba(24,200,255,.25);border-radius:6px;padding:1px 5px">Sponsored</span>':'')+'</div>'+
         '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+gallery+chip+actions+'</div></div>';
     }).join('');
     var metas=list.querySelectorAll(".post-meta"), bodies=list.querySelectorAll(".post-body");

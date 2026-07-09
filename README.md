@@ -1,30 +1,71 @@
-# carnimbus-com — framework-free (Linux JS conventions)
+# carnimbus-com — Beyond.js
 
-Source of the **live carnimbus.com** — a Cloudflare Worker serving a vanilla HTML/JS/CSS site.
-**No React, no Next.js, no npm, no build step** — it already delivers the Linux JS goals (tiny
-runtime, direct DOM, signal-based state, near-native performance). See **[LINUX-JS.md](LINUX-JS.md)**
-for the architecture, the `linux.config.js` route map, the signals model, and the migration path if
-a real JSX→WASM compiler ever ships.
+Source of the **live carnimbus.com**: a consumer AI car-buying superagent for LAcarGUY dealers, plus a
+dealer-side **Drive Now** dashboard. 94 real LAcarGUY certified-used cars are live.
 
-- `site/` — page-per-file routing (the Linux JS `appDir`; vanilla HTML/JS/CSS). Pages use
-  `<x-import>` design-system placeholders that `site/assets/runtime.js` renders client-side, with
-  `site/assets/signals.js` providing reactive state.
-- `worker.js` — serves assets (`run_worker_first`) with security headers; `POST /api/waitlist` → D1.
-- `migrations/` — D1 schema for the `carnimbus-waitlist` database (id `43d0dc1a-96c1-49dd-98da-e4f865b7a013`).
+## Philosophy — Beyond.js
+
+Frameworks exist to bridge the gap between how you write and where it runs. CarNimbus removes the gap:
+**low-level programming projected straight to the internet in one JS pass.** There is no framework, no
+build step, no bundler, no npm. The Worker *is* the app — one hand-edited `worker.js` (~1164 lines) that
+routes, renders, talks to the database, runs the models, and serves the site. What you write is what runs.
+
+Pages are vanilla HTML/CSS/JS that use `<x-import>` custom elements, hydrated client-side by
+`site/assets/runtime.js`, with `site/assets/signals.js` for reactive state. Every script is a real static
+file — the CSP is **enforcing** and forbids inline JS. There is nothing between the source and the edge.
+
+This isn't minimalism for its own sake. It's a bet that a single readable pass — server logic, data, AI,
+and markup projected directly onto Cloudflare's edge — is faster to reason about, cheaper to run, and
+harder to break than a tower of tooling.
+
+## Stack
+
+- **Cloudflare Workers** — single `worker.js`, `run_worker_first`, serves assets + API + pages.
+- **D1** — `carnimbus-waitlist` database (id `43d0dc1a-96c1-49dd-98da-e4f865b7a013`); waitlist, matches,
+  events, profiles, test-drives.
+- **Vectorize** — `carnimbus-match` index (768-dim bge-base) for inventory similarity.
+- **Workers AI** — llama-3.3-70b (chat/reasoning) + bge-base (embeddings). No external model APIs.
+- **Cron** — 5-minute schedule drives background work (embedding sync, matching, agent batches).
+- **5 subdomains** via path-prefix rewrite: `carnimbus.com`, `app.`, `dealer.`, `admin.`, `ai.`.
+
+## Layout
+
+- `worker.js` — the app: flat `if`-chain router, API routes wrapped `sec(await withUser|withDealer|adminOnly(...))`, render helpers, models, cron.
+- `site/` — page-per-file routing; vanilla HTML/JS/CSS. Pages use `<x-import>` placeholders rendered by `site/assets/runtime.js`; `site/assets/signals.js` provides reactive state.
+- `migrations/` — D1 schema (`0017_matches`, `0018_events`, `0019_vdp_enrichment`, …).
 - `wrangler.jsonc` — Worker config; custom domain `carnimbus.com`.
 
 ## Deploy
+
 ```sh
 npx wrangler d1 migrations apply carnimbus-waitlist --remote   # only when migrations/ changed
 npx wrangler deploy
 ```
+
 Post-deploy spot-check:
+
 ```sh
 curl -sI https://carnimbus.com | grep -iE 'content-security|strict-transport'   # expect headers
 curl -s -o /dev/null -w '%{http_code}\n' https://carnimbus.com/waitlist          # expect 200
 ```
 
+Deploy **only** when the founder says "ship." Remote D1 migrations apply in order. Admin key via
+`$(cat ~/.carnimbus-admin-key)` — never printed. `SESSION_SECRET` must stay set (the Worker fail-closes
+without it). No mass remote `DELETE` on D1.
+
+## CSP policy (worker.js `sec()`)
+
+Enforcing. Goal is full `'self'`; every allowed third party is justified and removed when its reason
+disappears:
+
+- `challenges.cloudflare.com` — Turnstile (script/frame/connect).
+- `static.cloudflareinsights.com` — Web Analytics beacon (script/connect).
+
+No inline `<script>`. New JS = a new static file under `site/assets/`. `connect-src 'self'` already covers
+`sendBeacon`/`fetch` to `/api/events` — no CSP change needed for the event spine.
+
 ## Toggles
+
 - **Turnstile (bot check)** — server verifies only when the secret exists:
   1. Cloudflare dash → Turnstile → create widget for carnimbus.com → copy sitekey + secret.
   2. `npx wrangler secret put TURNSTILE_SECRET`
@@ -33,18 +74,20 @@ curl -s -o /dev/null -w '%{http_code}\n' https://carnimbus.com/waitlist         
 - **Cloudflare Web Analytics** — dash → Web Analytics → add site → token; paste the beacon `<script>`
   (staged in comments near `</body>`) and keep `static.cloudflareinsights.com` in the CSP.
 
-## CSP policy (worker.js `SEC`)
-Goal is full `'self'`. Allowed third parties and why; remove when the reason disappears:
-- `challenges.cloudflare.com` — Turnstile (script/frame/connect).
-- `static.cloudflareinsights.com` — Web Analytics beacon (script/connect).
-
 ## Rules
-- No NPM/packages (2026-06 supply-chain incident). Vanilla only.
-- Never commit secrets; Turnstile secret lives in Worker secrets.
-- Waitlist PII (email/ip/consent) stays in D1; see `/privacy`.
+
+- **No npm/packages** (2026-06 supply-chain incident). Vanilla only.
+- Never commit secrets; Turnstile/session secrets live in Worker secrets.
+- Waitlist PII (email/ip/consent) stays in D1; see `/privacy`. Soft-pull FICO is stored **only as a band**,
+  never a raw score (see `TWIN-SCHEMA.md`).
 
 ## Branch rules (BRAY-502)
+
 - `main` — Brandon's vibe-code deploys ONLY; wrangler auto-deploy pins here. Never force-push.
-- `linux-js-migration` — Jono's secured Linux.js rebuild. Private until reviewed.
+- `linux-js-migration` — Jono's secured rebuild. Private until reviewed.
 - Cross-merges ONLY via reviewed PR (both operators approve). No direct commits to the other's branch.
-- Remote pending: `gh repo create carnimbus-com-site --private --source=. --push` (Brandon runs).
+
+## Canonical docs
+
+`MASTERPLAN.md` · `EVENT-TAXONOMY.md` · `AGENT-REGISTRY.md` · `TWIN-SCHEMA.md` · `MODEL-REGISTRY.md` ·
+`AUTONOMY-POLICY.md` · `docs/HTML-TO-JS-MIGRATION.md`

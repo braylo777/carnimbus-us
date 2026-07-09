@@ -57,7 +57,7 @@
               <div class="wl-fields" style="display:flex;gap:9px">
                 <label class="vh" for="wl-phone-hero">Mobile number</label>
                 <input id="wl-phone-hero" type="tel" name="phone" class="pill" required placeholder="(310) 555-0134" autocomplete="tel" inputmode="tel" style="flex:1;height:48px">
-                <button type="submit" class="btn primary lg">Sign Up</button>
+                <button type="submit" class="btn primary lg" data-nimbus-event="intent.saved" data-nimbus-source="waitlist">Sign Up</button>
               </div>
               <label class="consent"><input type="checkbox" class="wl-privacy wl-consent" required><span>I agree to the <a href="/privacy">Privacy&nbsp;Policy</a> and to get waitlist texts (up to 4/mo · msg&amp;data rates may apply · reply STOP to cancel).</span></label>
           <input type="text" name="website" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true">
@@ -230,6 +230,7 @@
 </main>
 <script src="/assets/signals.js" defer></script>
 <script src="/assets/runtime.js" defer></script>
+<script src="/assets/nimbus-sensor.js" defer></script>
 <!-- Cloudflare Web Analytics: paste token & uncomment -->
 <!-- <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"YOUR_CF_ANALYTICS_TOKEN"}'></script> -->
 </body>
