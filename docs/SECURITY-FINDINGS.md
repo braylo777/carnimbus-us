@@ -76,6 +76,54 @@ codes (no storage, built-in rate-limit/fraud). Wiring it now behind `TWILIO_VERI
 one-secret-live the moment Brandon buys a number + creates a Verify Service. Until then the
 existing OTP path is unchanged and works in DEV_MODE.
 
+## 🔒 Pre-signup hardening pass (2026-07-10)
+
+Re-audit of the CURRENT `worker.js` ahead of opening public signups. Headline: the backend is
+already strongly built — every prior critical is closed, and several first-draft hardening ideas
+were found already implemented.
+
+**Re-verified as already fixed / already resistant:**
+- **P0 cross-dealer leak — STILL CLOSED.** `withDealer` (worker.js:~207) derives dealer identity
+  from the *session* (uid → user phone → `dealer_leads` match), never from client input, and
+  requires `status='active'` + `client_no`. All dealer queries scope via
+  `DSCOPE="(v.dealer_id=? OR v.dealer_id IS NULL)"` bound to `dealer.id`; `dealerListing` forces
+  `dealer_id=dealer.id`. Confirmed the new Wave-Q radius/specs `LEFT JOIN vdp_specs` is on the
+  public buyer `search()` path only — no dealer-scoping impact.
+- **P1 SESSION_SECRET "dev" fallback — FIXED in code.** `hmac()` (worker.js:173) now
+  `throw`s if `SESSION_SECRET` is unset; sessions fail closed to a 500 (worker.js:43). No
+  forgeable-session path remains.
+- **OTP verify brute-force — already resistant** (`tries>=3` cap + expiry + increment-on-wrong,
+  worker.js:534-538). **OTP send abuse — already rate-limited** (3/10-min per number, silent-drop
+  anti-enumeration, worker.js:517-519). **OTP echo** gated behind `DEV_MODE==="1"` (worker.js:528).
+
+**Change made this pass (1 line, committed separately from Wave Q):**
+- **Constant-time admin-key compare.** `adminOnly` (worker.js:182) previously used `!==`
+  (timing-observable). Added `ctEq()` (length check + XOR-accumulate) and switched to it.
+  Behavior-preserving (same accept/reject decisions), removes the timing side-channel. Verified:
+  unit test (6 cases), runtime on `wrangler dev --local` (no-key/wrong-key/length-mismatch → 403,
+  correct key → passes gate), + independent `verifier` subagent.
+
+**Known residual risk (named, not silently fixed):**
+- `style-src 'unsafe-inline'` (worker.js:28) — needed by inline `style=` attrs across exported
+  HTML; removing is a large refactor for low gain (bounded already by `escHtml()` + no
+  `unsafe-eval`). Deferred, Brandon's call.
+- Admin-route rate-limiting — deferred to phase 2 (needs a small store; guessing already
+  impractical given a long random key + constant-time compare).
+- Any **real** inventory row with `dealer_id IS NULL` is visible to *every* dealer (shared demo
+  pool by design). Ensure real dealer uploads always carry a `dealer_id` (they do via
+  `dealerListing`; admin `vdpIngest` leaves it NULL → shared pool).
+
+**Production config checklist — ONLY Brandon can verify (secrets aren't visible to agents):**
+Run `npx wrangler secret list` and check Cloudflare → Workers → carnimbus-com → Settings → Variables:
+- [ ] `SESSION_SECRET` set, long, random (unset ⇒ every request 500s — also a liveness check)
+- [ ] `ADMIN_KEY` set, long, random — **rotate once** before launch (pasted into local tools in dev)
+- [ ] `TURNSTILE_SECRET` set — else the signup bot-check (worker.js:1608-1610) is a no-op
+- [ ] `DEV_MODE` **unset** / not "1" in prod (else OTP codes echo to clients)
+- [ ] `npx wrangler d1 migrations list carnimbus-waitlist --remote` — all applied (incl. 0029), so
+      rate-limiters aren't silently skipped
+- [ ] After deploy: `/api/auth/start` returns no `dev` field; signup form shows Turnstile; an
+      edited `cn_sess` cookie is rejected; dealer A cannot see dealer B's leads
+
 ## Linux.js compiler — explicitly OFF this repo
 Per decision: the C-compiler/CLI experiment lives in a **separate scaffold repo**, never in
 carnimbus-com. **Trademark blocker flagged:** "Linux" is a registered trademark (Linus Torvalds /

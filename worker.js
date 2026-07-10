@@ -179,7 +179,8 @@ async function readSession(env,request){ const m=(request.headers.get("Cookie")|
   if(!uid||!exp||!sig||Date.now()>+exp) return null;
   return (await hmac(env,uid+"."+exp))===sig ? +uid : null; }
 async function withUser(request,env,fn){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401); return fn(request,env,uid); }
-async function adminOnly(request,env,fn){ if(!env.ADMIN_KEY||request.headers.get("x-admin-key")!==env.ADMIN_KEY) return json({ok:false,error:"forbidden"},403); return fn(request,env); }
+function ctEq(a,b){ a=String(a); b=String(b); if(a.length!==b.length) return false; let r=0; for(let i=0;i<a.length;i++) r|=a.charCodeAt(i)^b.charCodeAt(i); return r===0; }
+async function adminOnly(request,env,fn){ if(!env.ADMIN_KEY||!ctEq(request.headers.get("x-admin-key")||"",env.ADMIN_KEY)) return json({ok:false,error:"forbidden"},403); return fn(request,env); }
 
 // ==================== SMS (Twilio REST; dark until secrets set) ====================
 async function sendSMS(env,to,body){ if(!env.TWILIO_ACCOUNT_SID) return {ok:false,dark:true};
