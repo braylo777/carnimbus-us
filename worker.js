@@ -47,6 +47,8 @@ export default {
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
+    // S2: AI.carnimbus.com is retired — its SQL views live under admin now. APIs (/api/ai/*) still resolve here.
+    if(sub==="ai" && !url.pathname.startsWith("/api/")) return Response.redirect("https://admin.carnimbus.com"+(url.pathname==="/"?"/pools":url.pathname.replace(/^\/ai/,"")),301);
     // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
     if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
       if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
@@ -804,12 +806,13 @@ async function search(request,env){ try{
     let dist=(home&&cd)?haversineMi(home.lat,home.lng,cd.lat,cd.lng):null;
     if(radius && dist!=null && dist>radius) continue;   // only filter when measurable; unknown coords never hide inventory
     const car=feedCar(v,null,{},lang,mo); if(dist!=null) car.dist=dist.toFixed(1);
+    if(cd){ car.dlat=cd.lat; car.dlng=cd.lng; }        // S3: real car location → the website map popup
     out.push(car);
   }
   out.sort((a,b)=>(a.price_mo||0)-(b.price_mo||0));   // cheapest-first (best headroom)
   const anon=readAnon(request);
   await logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null});
-  return json({ok:true,count:out.length,cars:out.slice(0,60)});
+  return json({ok:true,count:out.length,cars:out.slice(0,60),home:home||null});
   }catch(e){ return json({ok:true,cars:[],degraded:true}); } }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
   const lang=new URL(request.url).searchParams.get("lang");
@@ -1513,8 +1516,8 @@ async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catc
   const parentId=post&&post.meta?post.meta.last_row_id:0;
   const carStr=vdpText(v,sp), me=profileText(a);
   // R3/R4: ONE CarNimbus AI research agent, replying PRIVATELY to the asker (humans reply publicly in the thread).
-  const rSys=es?`Eres CarNimbus AI, el agente de investigación imparcial del comprador. Respondes SOLO a este comprador, en privado. Formato: "Veredicto: Sí/No/Solo si — " + por qué (valor de mercado estilo KBB, fiabilidad/problemas conocidos de este año/marca/modelo exacto) + un detalle específico de SU perfil (pasatiempos, estilo de vida, presupuesto). 3-4 frases, específico, denso en valor, sin relleno, sin markdown.`
-    :`You are CarNimbus AI, the buyer's unbiased research agent. You are replying PRIVATELY to this buyer only. Format: "Verdict: Yes/No/Only if — " + why (KBB-style market value, known reliability/common issues for this exact year/make/model) + one detail tied to THEIR profile (hobbies, lifestyle, budget). 3-4 sentences, specific, value-dense, zero fluff, no markdown.`;
+  const rSys=es?`Eres CarNimbus AI, el agente de investigación imparcial del comprador. Respondes SOLO a este comprador, en privado. Formato: "Veredicto: Sí/No/Solo si — " + por qué (valor de mercado estilo KBB, fiabilidad/problemas conocidos de este año/marca/modelo exacto) + un detalle específico de SU perfil (pasatiempos, estilo de vida, presupuesto). 3-4 frases, específico, denso en valor, sin relleno, sin markdown. Termina EXACTAMENTE con "Score: NN/100" — tu puntuación de ajuste para ESTE comprador (presupuesto 40%, fiabilidad 30%, estilo de vida 30%).`
+    :`You are CarNimbus AI, the buyer's unbiased research agent. You are replying PRIVATELY to this buyer only. Format: "Verdict: Yes/No/Only if — " + why (KBB-style market value, known reliability/common issues for this exact year/make/model) + one detail tied to THEIR profile (hobbies, lifestyle, budget). 3-4 sentences, specific, value-dense, zero fluff, no markdown. End with EXACTLY "Score: NN/100" — your fit score for THIS buyer (weighting: budget fit 40%, reliability 30%, lifestyle fit 30%).`;
   const rRaw=await llm(env,[{role:"system",content:rSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
   const rBody=String(rRaw||"").trim().slice(0,600);
   if(rBody) await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,parent_id,visible_to,created_at) VALUES (0,?,?,?,?,?,?,?)")

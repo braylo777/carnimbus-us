@@ -36,12 +36,17 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("do-now").style.display=next?"flex":"none";
     if(next){var e=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
       document.getElementById("dn-txt").innerHTML='Do now: <span class="cy">'+e(next.who)+'</span> arrives '+e(next.slot)+' — scan their QR to check them in.';}
-    document.getElementById("appts").innerHTML=(d.appointments||[]).map(card).join('')||
+    CUR=d;   // S1: keep the payload so tapping an appointment can preview its Drive-Now pass
+    var rolling=(d.appointments||[]).slice().sort(function(a,b){return String(a.slot).localeCompare(String(b.slot));});
+    document.getElementById("appts").innerHTML=rolling.map(card).join('')||
       '<div style="grid-column:1/-1;font:600 12px Manrope;color:#aebfdf;padding:20px;text-align:center">No routed buyers yet — they appear here the moment the AI books a drive.</div>';
-    document.getElementById("sched").innerHTML=(d.appointments||[]).slice().sort(function(a,b){return String(a.slot).localeCompare(String(b.slot));}).map(function(a){
+    // S1: rolling schedule — a 4-hour window from now glows so you can see what's coming at a glance.
+    var now=new Date(), lo=now.toISOString().slice(0,16).replace("T"," "), hiD=new Date(now.getTime()+4*3600e3), hi=hiD.toISOString().slice(0,16).replace("T"," ");
+    document.getElementById("sched").innerHTML=rolling.map(function(a){
       var pill={confirmed:"#18C8FF",arrived:"#b18cff",sold:"#54d699",requested:"#8ca0c4"}[a.status]||"#8ca0c4";
-      return '<div class="row" style="align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(24,200,255,.08);font:600 11px Manrope">'+
-      '<span class="mono" style="font-size:9px;color:#8ca0c4;min-width:74px">'+a.slot+'</span>'+
+      var inWindow=String(a.slot)>=lo&&String(a.slot)<=hi;
+      return '<div class="row" data-drive="'+a.id+'" style="align-items:center;gap:10px;padding:7px 8px;border-bottom:1px solid rgba(24,200,255,.08);font:600 11px Manrope;cursor:pointer;border-radius:8px'+(inWindow?';background:rgba(24,200,255,.08)':'')+'">'+
+      '<span class="mono" style="font-size:9px;color:'+(inWindow?'#18C8FF':'#8ca0c4')+';min-width:74px">'+a.slot+'</span>'+
       '<span class="avatar" style="width:20px;height:20px;font-size:8px">'+ini(a.who)+'</span>'+
       '<span style="min-width:110px">'+a.who+'</span><span style="flex:1;color:#8ca0c4">'+a.year+' '+a.make+' '+a.model+(a.trim?' '+a.trim:'')+'</span>'+
       '<span class="mono" style="font-size:7px;color:'+pill+';border:1px solid '+pill+'55;border-radius:99px;padding:3px 7px">'+a.status.toUpperCase()+'</span></div>';}).join('');
@@ -51,6 +56,22 @@ document.addEventListener("DOMContentLoaded",function(){
       (l.active?'<span class="badge green">Live</span>':'<span class="badge red">Off</span>')+'</div>';}).join('');
   }).catch(function(){});}
   load(); setInterval(load,30000);
+  // S1: tap any appointment (card or schedule row) → Drive-Now pass preview (who, params, what they'll drive).
+  document.addEventListener("click",function(e){
+    var el=e.target.closest("[data-drive]"); if(!el||e.target.closest("a,button"))return;
+    var a=((CUR&&CUR.appointments)||[]).filter(function(x){return String(x.id)===el.dataset.drive;})[0]; if(!a)return;
+    var esc2=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
+    document.getElementById("ap-body").innerHTML=
+      '<div class="row" style="align-items:center;gap:9px"><span class="avatar" style="width:30px;height:30px;font-size:11px">'+ini(a.who)+'</span>'+
+      '<span><span style="display:block;font:700 13px Manrope;color:#fff">'+esc2(a.who)+'</span><span class="mono" style="font-size:8px;color:#18C8FF">CID# '+esc2(a.cid)+'</span></span></div>'+
+      (a.photos&&a.photos[0]?'<div style="height:110px;border-radius:10px;overflow:hidden;margin:10px 0"><img src="'+esc2(a.photos[0])+'" style="width:100%;height:100%;object-fit:cover"></div>':'')+
+      '<div style="font:700 13px Manrope;color:#fff">'+esc2(a.year+" "+a.make+" "+a.model+(a.trim?" "+a.trim:""))+'</div>'+
+      '<div class="row" style="justify-content:space-between;font:600 10px Manrope;color:#8ca0c4;margin-top:4px"><span>$'+esc2(a.price_mo)+'/mo · soft-screened</span><span>'+esc2(a.slot)+'</span></div>'+
+      '<div class="mono" style="font-size:8px;color:#7f93b8;margin-top:8px">STATUS · '+esc2(String(a.status).toUpperCase())+' — scan their QR to advance</div>';
+    document.getElementById("ap-preview").style.display="flex";
+  });
+  var apx=document.getElementById("ap-x"); if(apx)apx.onclick=function(){ document.getElementById("ap-preview").style.display="none"; };
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape"){var p=document.getElementById("ap-preview"); if(p)p.style.display="none";} });
   // N7: dealer voice feedback — record → POST → transcribe (Whisper) → store + list.
   (function(){
     var recBtn=document.getElementById("fb-rec"); if(!recBtn) return;

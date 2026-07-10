@@ -43,21 +43,30 @@
           <div id="dn-txt" style="font:700 14px Manrope;color:#fff;flex:1"></div>
           <a class="btn primary sm" href="/scan" style="text-decoration:none">Scan QR · check in</a>
         </div>
+        <!-- S1: the v9 dealer app — one page, three thirds: Upload → rolling Appointments → Your Voice. -->
         <div id="dc-split" style="margin-top:16px">
-          <div class="row" style="align-items:center;justify-content:space-between"><span class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">TODAY'S APPOINTMENTS · SCAN QR TO ADVANCE</span><span class="mono" style="font-size:8px;color:#7f93b8">CONFIRMED → ARRIVED → SOLD</span></div>
-          <div id="appts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px"></div>
-          <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:16px 0 6px">TODAY'S SCHEDULE</div>
-          <div id="sched"></div>
-          <div class="row" style="align-items:center;justify-content:space-between;margin:18px 0 6px"><span class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">YOUR INVENTORY</span><a class="btn primary sm" href="/listing" style="text-decoration:none">+ Upload inventory</a></div>
+          <div class="row" style="align-items:center;justify-content:space-between;margin:0 0 6px"><span class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">① UPLOAD · YOUR INVENTORY</span><a class="btn primary sm" href="/listing" style="text-decoration:none">+ Upload a car or CSV</a></div>
           <div id="lst"></div>
-          <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:18px 0 6px">RECOMMENDATIONS · YOUR VOICE</div>
+          <div class="row" style="align-items:center;justify-content:space-between;margin:18px 0 0"><span class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em">② APPOINTMENTS · ROLLING · TAP FOR PASS PREVIEW</span><span class="mono" style="font-size:8px;color:#7f93b8">CONFIRMED → ARRIVED → SOLD</span></div>
+          <div id="sched" style="margin-top:6px"></div>
+          <div id="appts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px"></div>
+          <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:18px 0 6px">③ YOUR VOICE · AFTER EVERY DRIVE</div>
           <div class="glass pd" style="border-radius:14px">
-            <div style="font:600 12px Manrope;color:#e2e9f2">How did the last drive go? Tap record and tell us — it trains better matches.</div>
+            <div style="font:600 12px Manrope;color:#e2e9f2">Just finished a drive? Tap record and voice-dump for a few minutes — what happened, what you'd do better. It's your personal coach: it learns you and routes you better leads at better times.</div>
             <div class="row" style="gap:10px;align-items:center;margin-top:10px">
               <button id="fb-rec" type="button" class="btn primary md">🎙 Record</button>
               <span id="fb-status" class="mono" style="font-size:9px;color:#8ca0c4"></span>
             </div>
             <div id="fb-list" class="col" style="gap:8px;margin-top:12px"></div>
+          </div>
+        </div>
+        <!-- S1: tap an appointment → Drive-Now pass preview (who's coming, their params, what they'll drive) -->
+        <div id="ap-preview" role="dialog" aria-modal="true" style="display:none;position:fixed;inset:0;z-index:80;background:rgba(3,8,20,.86);align-items:center;justify-content:center;padding:20px">
+          <div class="glass pd" style="position:relative;max-width:340px;width:100%;border-radius:18px">
+            <button id="ap-x" type="button" aria-label="Close" style="position:absolute;top:8px;right:12px;background:none;border:none;color:#8ca0c4;font:700 16px Manrope;cursor:pointer;padding:4px">✕</button>
+            <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.2em">DRIVE NOW PASS · PREVIEW</div>
+            <div id="ap-body" style="margin-top:10px"></div>
+            <a class="btn primary md" href="/scan" style="width:100%;margin-top:14px;text-decoration:none;justify-content:center">Scan QR · check in</a>
           </div>
         </div>
       </div>

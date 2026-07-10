@@ -62,7 +62,9 @@ document.addEventListener("DOMContentLoaded",function(){
     cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus AI":(c.handle||c.full_name||"a rider"),body=c.body||"";
       // R2: agent bodies may be stored "Name — body"; show ONE identity (CarNimbus AI) and strip the stored prefix.
       if(agent){ var m=body.match(/^(.{2,40}?) — ([\s\S]+)$/); if(m){ body=m[2]; } }
-      if(metas[idx])metas[idx].textContent=name+" · "+rel(c.created_at)+(c.visible_to?" · 🔒 Only you":"");
+      // S4: Nimbus Score — the research agent ends with "Score: NN/100"; surface it as a chip in the byline.
+      var sc=agent?body.match(/Score:\s*(\d{1,3})\s*\/\s*100\.?\s*$/):null; if(sc){ body=body.replace(/Score:\s*\d{1,3}\s*\/\s*100\.?\s*$/,"").trim(); }
+      if(metas[idx])metas[idx].textContent=name+" · "+rel(c.created_at)+(sc?" · ⚡ "+Math.min(100,+sc[1])+"/100 fit":"")+(c.visible_to?" · 🔒 Only you":"");
       if(bodies[idx]) bodies[idx].textContent=body; });
   }
   function load(){fetch(feedUrl()).then(function(r){return r.json();}).then(function(d){
