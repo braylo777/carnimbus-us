@@ -35,8 +35,11 @@ document.addEventListener("DOMContentLoaded",function(){
       if(a.current_year&&a.current_make){ $("y-garage").style.display="block";
         $("y-car").textContent=a.current_year+" "+a.current_make+" "+(a.current_model||"")+(a.current_color?(" · "+a.current_color):"")+(a.current_miles?(" · "+Number(String(a.current_miles).replace(/\D/g,"")||0).toLocaleString()+" mi"):"");
         // M9: mock car image chosen by body/segment (self-hosted — CSP forbids external hosts).
-        var img=$("y-img"); if(img){ var seg=segForCar(a.current_make,a.current_model); img.onload=function(){img.style.display="block";}; img.onerror=function(){img.style.display="none";}; img.src="/assets/img/garage/"+seg+".webp"; }
-        if(me.trade){ $("y-trade").textContent="Est. trade-in $"+me.trade.point.toLocaleString()+"  ($"+me.trade.low.toLocaleString()+"–$"+me.trade.high.toLocaleString()+")";
+        var img=$("y-img"); if(img){ var seg=segForCar(a.current_make,a.current_model);
+          var mkmd=(a.current_make+" "+(a.current_model||"")).toLowerCase(), src="/assets/img/garage/"+seg+".webp";
+          if(/grand cherokee/.test(mkmd) && /white/i.test(a.current_color||"")) src="/assets/img/garage/grand-cherokee-white.webp";
+          img.onload=function(){img.style.display="block";}; img.onerror=function(){img.style.display="none";}; img.src=src; }
+        if(me.trade){ $("y-trade").innerHTML='<span>Est. trade-in</span> $'+me.trade.point.toLocaleString()+"  ($"+me.trade.low.toLocaleString()+"–$"+me.trade.high.toLocaleString()+")";
           $("y-trade-basis").textContent=me.trade.basis; } }
       document.getElementById("y-summary").style.display="block";
       document.getElementById("y-bars").innerHTML=bars.map(function(b){
@@ -66,6 +69,8 @@ document.addEventListener("DOMContentLoaded",function(){
       if(d.photos&&d.photos[0])$("y-photo").innerHTML='<img src="'+d.photos[0]+'" style="width:100%;height:100%;object-fit:cover" alt="">';
       $("y-pass").addEventListener("click",function(e){e.preventDefault();openPass(d);});
       $("y-chat").href="/car?id="+d.vdp_id;
+      var yc=$("y-cancel"); if(yc)yc.onclick=function(){ if(!confirm("Cancel this test drive? Your dealer slot will be freed."))return;
+        fetch("/api/drive/cancel",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:d.pass_token})}).then(function(r){return r.json();}).then(function(x){ if(x&&x.ok){ yc.textContent="Cancelled"; yc.disabled=true; $("y-status").textContent="cancelled"; } }); };
     } else { var np=$("y-nopass"); if(np)np.style.display="block"; }
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });
   var yo=$("y-out");

@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded",function(){
     var sk=skipped(), cars=(d.cars||[]).filter(function(c){return sk.indexOf(c.id)<0;}).slice(0,24);
     var el=$("m-new");
     el.innerHTML=cars.map(function(c){
-      return '<div class="glass" data-id="'+c.id+'" style="flex:none;width:150px;border-radius:14px;overflow:hidden;scroll-snap-align:start">'+
+      return '<div class="glass" data-id="'+c.id+'" data-slug="'+slug(c)+'" style="cursor:pointer;flex:none;width:150px;border-radius:14px;overflow:hidden;scroll-snap-align:start">'+
         '<div style="height:84px;background:#0a1f4d '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></div>'+
         '<div style="padding:9px 10px"><div style="font:700 11px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</div>'+
         '<div class="cy" style="font:700 11px Manrope;margin:2px 0 4px">$'+esc(c.price_mo)+'/mo</div>'+
@@ -28,7 +28,8 @@ document.addEventListener("DOMContentLoaded",function(){
     }).join('')||'<div style="font:500 11px Manrope;color:#8ca0c4;padding:8px">No new matches — adjust your budget in Garage.</div>';
     el.addEventListener("click",function(e){
       var t=e.target.closest(".mtalk"); if(t){ openChat(+t.dataset.id, t.dataset.slug); return; }
-      var s=e.target.closest(".mskip"); if(s){ skip(+s.dataset.id); var card=s.closest(".glass"); if(card)card.remove(); } });
+      var s=e.target.closest(".mskip"); if(s){ skip(+s.dataset.id); var card=s.closest(".glass"); if(card)card.remove(); return; }
+      var card=e.target.closest(".glass"); if(card&&card.dataset.id){ openChat(+card.dataset.id, card.dataset.slug); } });
   }).catch(function(){});
 
   // Conversations (existing threads) — reloadable so a brand-new chat bumps into the list (Bumble-style).

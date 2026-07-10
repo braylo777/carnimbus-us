@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded",function(){
     if(o.hasAttribute("data-multi")){
       var arr=A[key]||[];
       if(b.classList.contains("on")){b.classList.remove("on");arr=arr.filter(function(x){return x!==b.dataset.v;});}
-      else{ if(arr.length>=3)return; b.classList.add("on");arr.push(b.dataset.v); }
+      else{ var max=parseInt(o.dataset.max,10)||3; if(arr.length>=max)return; b.classList.add("on");arr.push(b.dataset.v); }
       A[key]=arr;
     } else {
       o.querySelectorAll(".opt").forEach(function(x){x.classList.remove("on");});b.classList.add("on");

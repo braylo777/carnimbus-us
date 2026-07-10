@@ -6,7 +6,8 @@ document.addEventListener("DOMContentLoaded",function(){
     $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Finding your cars…</div>';
     fetch("/api/search?monthly="+mo+"&down="+dn+"&zip="+z).then(function(r){return r.json();}).then(function(d){
       var cars=(d.cars||[]);
-      if(!cars.length){ $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">No cars under that budget yet — try a higher monthly.</div>'; return; }
+      if(d.reason==="need_inputs"){ $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Enter a monthly budget and a valid ZIP to see cars in your range.</div>'; return; }
+      if(!cars.length){ $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">No cars in that range yet — try a higher monthly or a larger down payment.</div>'; return; }
       $("calc-out").innerHTML='<div style="font:600 11px Manrope;color:#8ca0c4;margin:2px 0 8px">'+cars.length+' cars near you, ready to drive →</div>'+
         '<div style="display:flex;gap:12px;overflow-x:auto;padding:4px 0">'+cars.map(function(c){
         return '<a href="https://app.carnimbus.com/talk/'+slug(c)+'" style="text-decoration:none;flex:none;width:180px"><div style="background:#0a1f4d;border:1px solid rgba(24,200,255,.2);border-radius:14px;overflow:hidden">'+
