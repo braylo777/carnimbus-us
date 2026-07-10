@@ -773,7 +773,7 @@ async function search(request,env){ try{
   out.sort((a,b)=>(a.price_mo||0)-(b.price_mo||0));   // cheapest-first (best headroom)
   const anon=readAnon(request);
   await logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null});
-  return json({ok:true,count:out.length,cars:out.slice(0,24)});
+  return json({ok:true,count:out.length,cars:out.slice(0,60)});
   }catch(e){ return json({ok:true,cars:[],degraded:true}); } }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
   const lang=new URL(request.url).searchParams.get("lang");
@@ -1030,7 +1030,7 @@ HOW I CLOSE — talk like a real person texting a friend, ONE step per reply. Us
  STEP 3 (they say yes / nothing else): emit the booking and ONE genuine line that FINALLY names the rep — "Done — you're set with ${dealerRep} at ${center}. Pass is ready, I'll be up front. 🏁"
 OPEN SLOTS (real availability, already filtered to their preference): ${slotList}
 BOOK: today is ${today}. In STEP 3 only, emit exactly one <BOOK>{"center":"${center}","slot":"YYYY-MM-DD HH:MM"}</BOOK> using the EXACT slot they picked from OPEN SLOTS (24-hour). NEVER emit it before they've picked a specific offered slot AND said yes. NEVER offer or book a time not in OPEN SLOTS.
-${sameCar?`RESCHEDULING: they already have ME booked for ${fmtSlotLabel(existing.slot)}. I NEVER assume a time. If they want to change it, I re-offer OPEN SLOTS and confirm the NEW time back before emitting <BOOK> (it replaces the old one). If they just say "schedule a test drive," I remind them warmly they're already booked for ${fmtSlotLabel(existing.slot)} and ask whether they want a different time.`:""}${existingCar?`ONE-DRIVE RULE: they already have the ${existingCar.year} ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)}, and a buyer may hold ONLY ONE drive at a time. I do NOT emit <BOOK>. I warmly offer to switch: "You've got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — I can only hold one drive at a time. Want me to cancel that and set you up with me instead?" ONLY after they clearly say yes do I confirm a specific OPEN SLOT and emit exactly one <SWITCH>{"slot":"YYYY-MM-DD HH:MM"}</SWITCH> (same slot rules as <BOOK> — it MUST be one of OPEN SLOTS). If they say no, I keep answering their questions and do not schedule.`:""}
+${sameCar?`RESCHEDULING: they already have ME booked for ${fmtSlotLabel(existing.slot)}. I NEVER assume a time. If they want to change it, I re-offer OPEN SLOTS and confirm the NEW time back before emitting <BOOK> (it replaces the old one). If they just say "schedule a test drive," I remind them warmly they're already booked for ${fmtSlotLabel(existing.slot)} and ask whether they want a different time.`:""}${existingCar?`ONE-DRIVE RULE: they already have the ${existingCar.year} ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)}; a buyer may hold ONLY ONE drive at a time. First reply, I offer once: "You've got the ${existingCar.make} ${existingCar.model} booked for ${fmtSlotLabel(existing.slot)} — I can only hold one drive at a time. Want me to cancel that and set you up with me instead?" The MOMENT they say yes (or "cancel it", "go ahead"), I emit <CANCELHOLD/> on its own AND in the same reply confirm it and offer MY open times: "Done — I've cancelled your ${existingCar.make} ${existingCar.model}. For me I've got ${slotList} — which works? <SLOTS>${JSON.stringify(offerSlots)}</SLOTS>" I do NOT ask them to cancel it themselves and I do NOT repeat the offer. If they say no, I keep answering and don't schedule.`:""}
 SOFT CHECK: ${hasSoft?`they've already run their soft check — their real rate is set, don't offer it again.`:`when they show buying intent (before I push scheduling), I offer ONCE, casually: "Want me to run a quick soft check to lock your real rate? For me you're looking at about $${mo}/mo at ${apr}% — takes a sec, zero FICO impact." If they say yes, I emit <SOFTPULL/> on its own and say the check is running. I never repeat the offer.`}
 ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver that same feeling in their world. `:""}Softly learn: ${missing.join(", ")||"nothing — profile complete"} (emit <PROFILE>{"buy_method":"..."}</PROFILE> when you learn one). Keep replies to 1-3 short, warm sentences.`};
   if(memory) sys.content+=`\nWHAT I ALREADY KNOW ABOUT THIS BUYER (reference naturally to feel personal, never creepily; do NOT invent beyond this): ${memory}.`;
@@ -1042,8 +1042,8 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     {role:"assistant",content:`${shotPickLabel} it is. Anything else you want to know before I lock it in?`},
     {role:"user",content:"nope"},
     {role:"assistant",content:`Done — you're set with ${dealerRep} at ${center}. Pass is ready, I'll be up front. 🏁 <BOOK>{"center":"${center}","slot":"${shotPickVal}"}</BOOK>`},
-    {role:"user",content:"actually cancel my other one and let me drive this instead"},
-    {role:"assistant",content:`Done — I'll cancel that and get you in this one. ${shotPickLabel} work? <SWITCH>{"slot":"${shotPickVal}"}</SWITCH>`}];
+    {role:"user",content:"yes cancel it"},
+    {role:"assistant",content:`Done — I've cancelled your other one. For me I've got ${shotSlots.map(fmtSlotLabel).join(", ")||"a few openings"} — which works? <CANCELHOLD/> <SLOTS>${JSON.stringify(shotSlots)}</SLOTS>`}];
   const BROKE=/\b(language model|large language model|physical body|computer program|chatbot|cloud-based|i (?:do not|don't) have a (?:body|physical)|matter of milliseconds|response time)\b/i;
   let text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10)]);
   if(BROKE.test(text)){
@@ -1051,7 +1051,7 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     text=await chatLLM(env,[sys,...shot,...(messages||[]).slice(-10),fix]);
   }
   if(BROKE.test(text)) text=`I'd rather show you than tell you — but straight from my spec sheet: ${vdpText(v)}. Want to feel it on a test drive?`.slice(0,600);
-  const prof=text.match(/<PROFILE>(.*?)<\/PROFILE>/s); let book=text.match(/<BOOK>(.*?)<\/BOOK>/s); const sw=text.match(/<SWITCH>(.*?)<\/SWITCH>/s);
+  const prof=text.match(/<PROFILE>(.*?)<\/PROFILE>/s); let book=text.match(/<BOOK>(.*?)<\/BOOK>/s); const cancelHold=/<CANCELHOLD\s*\/?>/.test(text);
   if(prof){ try{ const upd={...a,...JSON.parse(prof[1])};
     await env.DB.prepare("UPDATE profiles SET answers=?, embedding_synced=0 WHERE user_id=?").bind(JSON.stringify(upd),uid).run(); }catch(_){} }
   // Soft pull requested in-chat: run it, persist to profile, and have the car speak the real numbers.
@@ -1060,14 +1060,12 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     a.softpull=sres; await env.DB.prepare("UPDATE profiles SET answers=? WHERE user_id=?").bind(JSON.stringify(a),uid).run().catch(()=>{});
     text=text.replace(/<SOFTPULL\s*\/?>/g,"").trim()+`\n\nSoft check's back — you're looking at ${apr}% APR · about $${mo}/mo over 72 months. 0 FICO impact. Want to come drive me?`;
   }
-  // P4: inline "cancel & switch" — buyer confirmed swapping their single held drive to THIS car.
-  if(sw && existingCar){ let sb=null; try{ sb=JSON.parse(sw[1]); }catch(_){}
-    if(sb && sb.slot){
-      await env.DB.prepare("UPDATE test_drives SET status='cancelled' WHERE id=?").bind(existing.id).run().catch(()=>{});
-      if(existingCar.dealer_id) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(existingCar.dealer_id,existing.slot).run().catch(()=>{});
-      existing=null; existingCar=null;                          // now a clean single-drive booking
-      book=[null,JSON.stringify({center:center,slot:sb.slot})]; // route through the normal claim+INSERT path below
-    } }
+  // Q2: inline cancel — buyer said yes to dropping their held drive so they can book THIS car.
+  if(cancelHold && existing && existingCar){
+    await env.DB.prepare("UPDATE test_drives SET status='cancelled' WHERE id=?").bind(existing.id).run().catch(()=>{});
+    if(existingCar.dealer_id) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(existingCar.dealer_id,existing.slot).run().catch(()=>{});
+    existing=null; existingCar=null;   // clean single-drive state; a <BOOK> this/next turn proceeds normally
+  }
   let pass=null;
   if(book){ try{ const b=JSON.parse(book[1]);
     const slotManaged=openSlotVals.length>0;                              // dealer has a real calendar
@@ -1103,7 +1101,7 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
     }catch(_){} }
   let slots=null; const slotsTag=text.match(/<SLOTS>(.*?)<\/SLOTS>/s);
   if(slotsTag){ try{ slots=JSON.parse(slotsTag[1]).map(s=>({value:s,label:fmtSlotLabel(s)})); }catch(_){} }
-  let cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").replace(/<SWITCH>.*?<\/SWITCH>/gs,"").replace(/<SOFTPULL\s*\/?>/g,"").replace(/<SLOTS>.*?<\/SLOTS>/gs,"").trim();
+  let cleanReply=text.replace(/<PROFILE>.*?<\/PROFILE>/gs,"").replace(/<BOOK>.*?<\/BOOK>/gs,"").replace(/<CANCELHOLD\s*\/?>/g,"").replace(/<SOFTPULL\s*\/?>/g,"").replace(/<SLOTS>.*?<\/SLOTS>/gs,"").trim();
   // O4: never let the AI imply a booking it didn't make. `pass` is set only when a real <BOOK> committed this turn.
   if(!pass){ cleanReply=cleanReply.replace(/\b(see you|you're all set|you are all set|you're set with|pass is ready|locked in|see ya|come by|come on by|swing by|stop by|ask for (?:sid|cid|the desk)|all set for|you're booked|you are booked)\b[^.!?]*[.!?]?/gis,"").replace(/🏁/g,"").replace(/\s{2,}/g," ").trim();
     if(!cleanReply) cleanReply="Want me to pull up open times when you're ready?"; }
@@ -1397,7 +1395,7 @@ async function residentAgent(env){
   if(!v) return;
   const en=`Okay, this ${v.year} ${v.make} ${v.model} caught my eye — right around $${v.price_mo}/mo. Worth a look before it's gone. (Soft check = 0 credit hit.)`;
   const es=`Ojo con este ${v.year} ${v.make} ${v.model} — anda por los $${v.price_mo}/mes. Vale la pena mirarlo antes de que vuele. (Chequeo suave, 0 impacto en tu crédito.)`;
-  await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,created_at) VALUES (0,?,?,?, 'agent', ?)")
+  await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,sponsored,created_at) VALUES (0,?,?,?, 'agent', 1, ?)")
     .bind(v.id,en,es,new Date().toISOString()).run().catch(()=>{});
   await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
 }
@@ -1427,7 +1425,7 @@ async function me(request,env,uid){
   const p=await env.DB.prepare("SELECT answers,avatar FROM profiles WHERE user_id=?").bind(uid).first();
   const td=await env.DB.prepare(
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
-    "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? ORDER BY td.id DESC LIMIT 1").bind(uid).first();
+    "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? AND td.status='confirmed' ORDER BY td.id DESC LIMIT 1").bind(uid).first();
   let ans=p?JSON.parse(p.answers):null;
   return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:ans,avatar:p?p.avatar:null,
     trade:tradeEstimate(ans),
@@ -1456,20 +1454,29 @@ const CRITICS=[
  {key:"reliability", en:"The Reliability Nerd", es:"El Fiable", lens:"known issues, maintenance costs, and longevity for this exact make/model/year"},
  {key:"resale", en:"The Resale Skeptic", es:"El Escéptico de Reventa", lens:"resale value, mileage, and market demand; blunt about cars that lose value fast"}
 ];
-async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catch(()=>({}));
+async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catch(()=>({})); const es=new URL(request.url).searchParams.get("lang")==="es";
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first(); if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}}catch(_){}
   const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
-  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,created_at) VALUES (?,?,?,?,?)")
-    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,String(a.zip||""),new Date().toISOString()).run();
+  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,created_at) VALUES (?,?,?,?,?,?)")
+    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,`Pensando en el ${v.year} ${v.make} ${v.model} — ¿opiniones honestas?`,String(a.zip||""),new Date().toISOString()).run();
   const parentId=post&&post.meta?post.meta.last_row_id:0;
   const carStr=vdpText(v,sp), me=profileText(a);
-  for(const c of CRITICS){
-    const sys=`You are "${c.en}", one of five DISTINCT CarNimbus community voices. Your lens ONLY: ${c.lens}. Reply in ONE short line (max ~25 words): start with "Verdict: Yes —", "Verdict: Not for you —", or "Verdict: Only if —", then ONE concrete, specific reason from your lens for THIS buyer. Be blunt. No hedging, no lists, no markdown; do not restate the car's specs; do not repeat what the other voices would say.`;
+  // Q6: one blunt, data-backed research agent + two short human-persona takes (human-first 3:1 feel).
+  const rSys=es?`Eres "CarNimbus Research", un analista imparcial del lado del comprador. Da un veredicto contundente y respaldado por datos para ESTE comprador: rango de valor estilo KBB, fiabilidad/problemas comunes conocidos de este año/marca/modelo exacto, y un Sí/No/Solo-si claro. 2 frases, cita el dato. Sin markdown.`
+    :`You are "CarNimbus Research", an unbiased buyer-side analyst. Give a blunt, data-backed verdict for THIS buyer: KBB-style value range, known reliability/common issues for this exact year/make/model, and a clear Yes/No/Only-if. 2 sentences, cite the data point. No markdown.`;
+  const rRaw=await llm(env,[{role:"system",content:rSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
+  const rBody=String(rRaw||"").trim().slice(0,320);
+  if(rBody) await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,parent_id,created_at) VALUES (0,?,?,?,?,?,?)")
+    .bind(vdpId, "CarNimbus Research — "+rBody, es?("CarNimbus Research — "+rBody):null, "agent", parentId, new Date().toISOString()).run().catch(()=>{});
+  const PANEL=[CRITICS[0], CRITICS[1+(parentId%4)]];   // The Practical Parent + one rotating persona
+  for(const c of PANEL){ const nm=es?c.es:c.en;
+    const sys=es?`Eres "${nm}", una voz de la comunidad CarNimbus enfocada en ${c.lens}. Responde en UNA línea corta: empieza con "Veredicto: Sí —", "No para ti —" o "Solo si —", luego UNA razón concreta desde tu enfoque para ESTE comprador. Directo, sin rodeos, sin listas.`
+      :`You are "${c.en}", a CarNimbus community voice focused on ${c.lens}. Reply in ONE short line: start with "Verdict: Yes —", "Not for you —", or "Only if —", then ONE concrete reason from your lens for THIS buyer. Blunt, no lists, no markdown.`;
     const raw=await llm(env,[{role:"system",content:sys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
     const body=String(raw||"").trim().slice(0,200); if(!body) continue;
-    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,parent_id,created_at) VALUES (0,?,?,?,?,?)")
-      .bind(vdpId, c.en+" — "+body, "agent", parentId, new Date().toISOString()).run().catch(()=>{});
+    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,parent_id,created_at) VALUES (0,?,?,?,?,?,?)")
+      .bind(vdpId, nm+" — "+body, es?(nm+" — "+body):null, "agent", parentId, new Date().toISOString()).run().catch(()=>{});
   }
   await logEvent(env,{action:"social.asked",vehicle_id:vdpId});
   return json({ok:true,postId:parentId}); }

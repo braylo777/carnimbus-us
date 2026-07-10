@@ -6,7 +6,6 @@ document.addEventListener("DOMContentLoaded",function(){
   function $(x){return document.getElementById(x);}
   function setText(x,t){var e=$(x);if(e)e.textContent=t;}
   function setSrc(x,s){var e=$(x);if(e&&s)e.src=s;}
-  function setFit(t){var e=$("fit-match");if(!e)return;var b=e.querySelector("b");if(b)b.textContent=t;}
   function fail(m){var v=$("vdp");if(v)v.innerHTML='<div style="padding:30px;font:600 13px Manrope;color:#aebfdf">'+m+' <a class="cy" href="/matches">Back to matches</a></div>';}
   function bubble(who,txt){if(!thread)return null;var m=document.createElement("div");m.className="msg "+who;
     m.innerHTML=(who==="car"?'<span class="msg-av"><img class="msg-logo" src="/assets/logo.png" alt=""></span>':'')+'<div class="bubble '+who+'"></div>';
@@ -58,15 +57,10 @@ document.addEventListener("DOMContentLoaded",function(){
     setText("v-price","$"+CAR.price_mo+"/mo");
     setText("v-meta",["Certified",CAR.dealer].filter(Boolean).join(" · "));   // O2: dealership only — title has trim, specs grid has the rest
     renderSpecs();
-    setText("fit-budget","$"+CAR.price_mo+"/mo fits your range.");
-    setFit(CAR.match!=null?CAR.match+"% match":"Fresh listing");
     setText("c-name",CAR.year+" "+CAR.make+" "+CAR.model);
     setText("c-tag","“"+((CAR.persona&&CAR.persona.tagline)||(CAR.description||"").split(".")[0]||"Ask me anything")+"”");
     setSrc("c-img",PV);
     var ci=$("chat-in"); if(ci&&CAR.persona&&CAR.persona.hint) ci.placeholder=CAR.persona.hint;
-    fetch("/api/feed").then(function(r){return r.json();}).then(function(f){
-      var m=((f&&f.cars)||[]).filter(function(c){return c.id===CAR.id;})[0];
-      if(m&&m.match!=null)setFit(m.match+"% match");}).catch(function(){});
     // History keys on the RESOLVED CAR.id, not the URL id (which is 0 on /talk/<slug> routes → would wipe the thread).
     fetch("/api/chats?vdpId="+CAR.id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
       var ms=(h&&h.messages)||[];
@@ -139,10 +133,11 @@ document.addEventListener("DOMContentLoaded",function(){
       w.querySelectorAll(".slot-chip").forEach(function(x){x.disabled=true;}); }); }); }
   var cs=$("chat-send");if(cs)cs.addEventListener("click",send);
   var ci=$("chat-in");if(ci)ci.addEventListener("keydown",function(e){if(e.key==="Enter")send();});
-  // O6: Ask the Feed — post this car to the community and get 5 honest AI critic takes, then jump to the feed.
+  // Q6: Ask the Feed — post this car and get 1 data-backed research verdict + 2 human takes, then jump to the feed.
   var af=$("ask-feed");if(af)af.addEventListener("click",async function(){ if(!CAR)return;
     af.disabled=true;af.textContent="Posting…";
-    try{await fetch("/api/feed/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id})});}catch(e){}
+    var lg=(function(){try{return localStorage.cn_lang==="es"?"?lang=es":"";}catch(_){return "";}})();
+    try{await fetch("/api/feed/ask"+lg,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id})});}catch(e){}
     location.href="https://app.carnimbus.com/feed";
   });
 });

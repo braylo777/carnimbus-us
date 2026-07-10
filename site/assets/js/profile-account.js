@@ -7,6 +7,11 @@ document.addEventListener("DOMContentLoaded",function(){
     if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md))return "ev";
     if(/jeep|grand cherokee|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|suv|rav4|cr-v|crv/.test(mk+" "+md))return "suv";
     return "sedan"; }
+  // Q4: income range needs a $ (raw values look like "50 to 100" or "50000-100000").
+  function fmtIncome(s){ s=String(s||"").trim(); if(!s)return s;
+    var n=s.match(/\d+/g); if(!n)return s;
+    var f=function(x){ x=+x; return x>=1000?("$"+Math.round(x/1000)+"K"):("$"+x+"K"); };
+    return n.length>=2?(f(n[0])+"–"+f(n[1])):f(n[0]); }
   var ME=null;
   (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(me){if(!me||!me.ok){$("gate").style.display="block";throw 0;}return me;}).then(function(me){
     ME=me;
@@ -29,7 +34,7 @@ document.addEventListener("DOMContentLoaded",function(){
       if(a.buy_method)bars.push(["Method",tc(a.buy_method)]);
       if(a.max_down!=null)bars.push(["Down payment","$"+Number(a.max_down||0).toLocaleString()]);
       if(a.max_monthly)bars.push(["Max monthly","$"+a.max_monthly+"/mo"]);
-      if(a.income)bars.push(["Income range",a.income]);
+      if(a.income)bars.push(["Income range",fmtIncome(a.income)]);
       if(a.fico)bars.push(["FICO range",a.fico]);
       // L4: Garage — current car + a specific trade-in estimate (replaces the old range row).
       if(a.current_year&&a.current_make){ $("y-garage").style.display="block";
@@ -51,12 +56,16 @@ document.addEventListener("DOMContentLoaded",function(){
       // Computed estimate box — its own card. Each label is its own text node so the ES observer can translate it.
       var est=document.getElementById("y-estimate");
       if(est&&aprNum!=null){ est.style.display="block";
-        // Est. loan principal: buyer's max monthly implies a financed amount at their APR/term (honest, budget-derived).
+        // Q9: tailored to the buyer's real numbers — max monthly at their APR/term implies a financed amount; + their
+        // down = the max car price they're estimated to qualify for. Framed as "find a car under this," not a promise.
         var r=aprNum/1200, term=72, mo=+a.max_monthly||0, principal=r?Math.round(mo*(1-Math.pow(1+r,-term))/r):mo*term;
-        var loanStr=principal?("$"+principal.toLocaleString()):"—";
+        var down=+a.max_down||0, carMax=principal?Math.round((principal+down)/500)*500:0;
+        var loanStr=principal?("$"+principal.toLocaleString()):"—", carStr2=carMax?("$"+carMax.toLocaleString()):"—";
         est.innerHTML='<div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-bottom:8px"><span>YOUR ESTIMATE</span>'+(a.softpull?'<span> · SOFT-CHECKED</span>':"")+'</div>'+
           '<div class="row" style="justify-content:space-between;font:600 13px Manrope"><span style="color:#8ca0c4">Est. APR</span><span class="cy" style="font-weight:800">'+aprNum+'% · 72 mo</span></div>'+
-          '<div class="row" style="justify-content:space-between;font:600 13px Manrope;margin-top:5px"><span style="color:#8ca0c4">Est. loan amount</span><span style="color:#e2e9f2;font-weight:700">'+loanStr+'</span></div>'+
+          '<div class="row" style="justify-content:space-between;font:600 13px Manrope;margin-top:5px"><span style="color:#8ca0c4">You qualify for ~</span><span class="cy" style="font-weight:800">$'+mo.toLocaleString()+'/mo</span></div>'+
+          '<div class="row" style="justify-content:space-between;font:600 13px Manrope;margin-top:5px"><span style="color:#8ca0c4">Shop cars up to ~</span><span style="color:#e2e9f2;font-weight:700">'+carStr2+'</span></div>'+
+          '<div style="font:500 9px Manrope;color:#7f93b8;margin-top:6px"><span>Find a car under this — final terms confirmed at signing.</span></div>'+
           '<div style="font:500 10px Manrope;color:#8ca0c4;margin-top:6px"><span>Loan partners:</span> <span style="color:#c9d6ef">Chase Auto · Ally · Capital One</span> <span style="opacity:.6">(sample)</span></div>'+
           '<div style="font:500 9px/1.5 Manrope;color:#7f93b8;margin-top:9px;border-top:1px solid rgba(24,200,255,.12);padding-top:8px"><span>These are estimates based only on the information you provided. CarNimbus isn\'t responsible for inaccurate details you enter — we estimate your rate from your inputs and our dealer &amp; lender partners. Your final terms are confirmed at signing.</span></div>'; }
     }
