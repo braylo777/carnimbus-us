@@ -77,9 +77,10 @@ document.addEventListener("DOMContentLoaded",function(){
       $("y-slot").textContent=fmtSlot(d.slot);
       if(d.photos&&d.photos[0])$("y-photo").innerHTML='<img src="'+d.photos[0]+'" style="width:100%;height:100%;object-fit:cover" alt="">';
       $("y-pass").addEventListener("click",function(e){e.preventDefault();openPass(d);});
-      $("y-chat").href="/car?id="+d.vdp_id;
+      $("y-chat").href="/car?id="+d.vdp_id+"&resched=1";
       var yc=$("y-cancel"); if(yc)yc.onclick=function(){ if(!confirm("Cancel this test drive? Your dealer slot will be freed."))return;
-        fetch("/api/drive/cancel",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:d.pass_token})}).then(function(r){return r.json();}).then(function(x){ if(x&&x.ok){ yc.textContent="Cancelled"; yc.disabled=true; $("y-status").textContent="cancelled"; } }); };
+        fetch("/api/drive/cancel",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:d.pass_token})}).then(function(r){return r.json();}).then(function(x){ if(x&&x.ok){ yc.textContent="Cancelled"; yc.disabled=true; $("y-status").textContent="cancelled";
+        setTimeout(function(){ $("y-up").style.display="none"; var np=$("y-nopass"); if(np)np.style.display="block"; },600); } }); };
     } else { var np=$("y-nopass"); if(np)np.style.display="block"; }
   }).catch(function(){ if(document.getElementById("acct").style.display!=="block") document.getElementById("gate").style.display="block"; });
   var yo=$("y-out");
@@ -121,6 +122,7 @@ document.addEventListener("DOMContentLoaded",function(){
     $("pm-pdf").onclick=function(){ var lg=(function(){try{return localStorage.cn_lang==="es"?"?lang=es":"";}catch(_){return "";}})(); window.open("/pass/"+d.pass_token+lg,"_blank"); };
     var ph=$("pm-home"); if(ph)ph.onclick=function(){ $("home-sheet").style.display="flex"; };
     $("pm-close").onclick=function(){ $("pass-modal").style.display="none"; };
+    var px=$("pm-x"); if(px)px.onclick=function(){ $("pass-modal").style.display="none"; };
     var hc=$("hs-close"); if(hc)hc.onclick=function(){ $("home-sheet").style.display="none"; };
     document.addEventListener("keydown",function(e){ if(e.key==="Escape"){ $("pass-modal").style.display="none"; var hs=$("home-sheet"); if(hs)hs.style.display="none"; } });
     var pc=$("pm-close"); if(pc)pc.focus();   // move focus into the dialog

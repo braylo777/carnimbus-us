@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function esc(s){return String(s==null?"":s).replace(/[<&>"]/g,function(c){return {"<":"&lt;","&":"&amp;",">":"&gt;","\"":"&quot;"}[c];});}
   function slug(c){return String(c.year+"-"+c.make+"-"+c.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");}
   function run(){ var mo=$("calc-mo").value.replace(/[^0-9]/g,""), dn=$("calc-down").value.replace(/[^0-9]/g,""), z=$("calc-zip").value.replace(/[^0-9]/g,""), rad=($("calc-radius")?$("calc-radius").value:"");
+    try{localStorage.cn_calc=JSON.stringify({mo:mo,dn:dn,z:z});}catch(_){}   // R21: remember calc inputs for signup prefill
     $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Finding your cars…</div>';
     fetch("/api/search?monthly="+mo+"&down="+dn+"&zip="+z+"&radius="+rad).then(function(r){return r.json();}).then(function(d){
       var cars=(d.cars||[]);

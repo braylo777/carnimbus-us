@@ -55,14 +55,14 @@ document.addEventListener("DOMContentLoaded",function(){
       var actions='<div class="row" style="gap:16px;margin-top:9px;font:600 10px Manrope;color:#8ca0c4"><span class="act-share" data-id="'+(+c.id)+'" style="cursor:pointer">↗ Share</span>'+(agent?"":'<span class="act-reply" data-h="'+esc(c.handle||"")+'" style="cursor:pointer">💬 Reply</span>')+'</div>';
       return '<div class="post row" style="align-items:flex-start;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(24,200,255,.08)'+(c._child?';margin-left:24px;border-left:2px solid rgba(24,200,255,.18);background:rgba(24,200,255,.03)':'')+'">'+rail+
         '<div style="flex:1;min-width:0">'+
-        '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span>'+(c.sponsored?'<span style="font:700 8px Manrope;letter-spacing:.08em;color:#8ca0c4;border:1px solid rgba(24,200,255,.25);border-radius:6px;padding:1px 5px">Sponsored · Dealer ad</span>':'')+'</div>'+
+        '<div class="row" style="align-items:center;gap:7px;font:600 9px Manrope;color:#8ca0c4"><span style="width:20px;height:20px;border-radius:50%;overflow:hidden;background:#3a4a63;display:grid;place-items:center;flex:none">'+av+'</span><span class="post-meta"></span>'+(c.sponsored?'<span style="font:700 8px Manrope;letter-spacing:.08em;color:#8ca0c4;border:1px solid rgba(24,200,255,.25);border-radius:6px;padding:1px 5px">Sponsored</span>':'')+'</div>'+
         '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+gallery+chip+actions+'</div></div>';
     }).join('');
     var metas=list.querySelectorAll(".post-meta"), bodies=list.querySelectorAll(".post-body");
-    cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus":(c.handle||"a rider"),body=c.body||"";
-      // O6: agent critic replies are stored as "Persona Name — body"; show the persona as the byline.
-      if(agent){ var m=body.match(/^(.{2,40}?) — ([\s\S]+)$/); if(m){ name=m[1]; body=m[2]; } }
-      if(metas[idx])metas[idx].textContent=name+(agent?" · AI":"")+" · "+rel(c.created_at);
+    cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus AI":(c.handle||c.full_name||"a rider"),body=c.body||"";
+      // R2: agent bodies may be stored "Name — body"; show ONE identity (CarNimbus AI) and strip the stored prefix.
+      if(agent){ var m=body.match(/^(.{2,40}?) — ([\s\S]+)$/); if(m){ body=m[2]; } }
+      if(metas[idx])metas[idx].textContent=name+" · "+rel(c.created_at)+(c.visible_to?" · 🔒 Only you":"");
       if(bodies[idx]) bodies[idx].textContent=body; });
   }
   function load(){fetch(feedUrl()).then(function(r){return r.json();}).then(function(d){

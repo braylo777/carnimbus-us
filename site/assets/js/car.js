@@ -67,13 +67,14 @@ document.addEventListener("DOMContentLoaded",function(){
     setText("c-name",CAR.year+" "+CAR.make+" "+CAR.model);
     setText("c-tag","“"+((CAR.persona&&CAR.persona.tagline)||(CAR.description||"").split(".")[0]||"Ask me anything")+"”");
     setSrc("c-img",PV);
-    var ci=$("chat-in"); if(ci&&CAR.persona&&CAR.persona.hint) ci.placeholder=CAR.persona.hint;
     // History keys on the RESOLVED CAR.id, not the URL id (which is 0 on /talk/<slug> routes → would wipe the thread).
     fetch("/api/chats?vdpId="+CAR.id).then(function(r){return r.ok?r.json():{messages:[]};}).then(function(h){
       var ms=(h&&h.messages)||[];
-      if(!ms.length){bubble("car",(CAR.persona&&CAR.persona.opener)||(CAR.model+" here. Ask me anything — or tell me when you want to drive."));return;}
-      ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body);
+      if(!ms.length){bubble("car",(CAR.persona&&CAR.persona.opener)||(CAR.model+" here. Ask me anything — or tell me when you want to drive."));}
+      else ms.forEach(function(m){bubble(m.role==="car"?"car":"you",m.body);
         if(m.role==="user")hist.push({role:"user",content:m.body});else hist.push({role:"assistant",content:m.body});});
+      // R16: arriving from the garage Reschedule button → open the conversation already asking.
+      if(new URLSearchParams(location.search).get("resched")==="1"){ var inEl=$("chat-in"); if(inEl){ inEl.value="I want to reschedule my test drive."; send(); } }
     }).catch(function(){bubble("car",CAR.model+" here. Ask me anything — or tell me when you want to drive.");});
   }
   function showCongrats(passUrl){
@@ -140,11 +141,13 @@ document.addEventListener("DOMContentLoaded",function(){
       w.querySelectorAll(".slot-chip").forEach(function(x){x.disabled=true;}); }); }); }
   var cs=$("chat-send");if(cs)cs.addEventListener("click",send);
   var ci=$("chat-in");if(ci)ci.addEventListener("keydown",function(e){if(e.key==="Enter")send();});
-  // Q6: Ask the Feed — post this car and get 1 data-backed research verdict + 2 human takes, then jump to the feed.
+  // R5: Ask the Feed — post this car (private CarNimbus AI research reply), flip to Posted ✓ + a View button.
   var af=$("ask-feed");if(af)af.addEventListener("click",async function(){ if(!CAR)return;
     af.disabled=true;af.textContent="Posting…";
     var lg=(function(){try{return localStorage.cn_lang==="es"?"?lang=es":"";}catch(_){return "";}})();
-    try{await fetch("/api/feed/ask"+lg,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id})});}catch(e){}
-    location.href="https://app.carnimbus.com/feed";
+    try{var r=await fetch("/api/feed/ask"+lg,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id})}); var d=await r.json().catch(function(){return{};});
+      if(d&&d.ok){ af.textContent="Posted ✓"; var vw=document.createElement("a"); vw.href="https://app.carnimbus.com/feed"; vw.className="btn primary sm"; vw.style.cssText="flex:none;text-decoration:none;margin-left:6px"; vw.textContent="View"; af.parentNode.insertBefore(vw,af.nextSibling); return; }
+    }catch(e){}
+    af.disabled=false; af.textContent="💬 Ask the Feed";
   });
 });

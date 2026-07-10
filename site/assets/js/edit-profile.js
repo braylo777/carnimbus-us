@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded",function(){
   var msg=function(el,t){el.textContent=t;el.style.display=t?"block":"none";};
   // The Worker's page gate guarantees a session — just prefill the list from the profile.
   (window.__me||fetch("/api/me").then(function(r){return r.json();})).then(function(d){ if(!d||!d.ok)return;
-    if(!d.answers)return; var a=d.answers; for(var k in a)A[k]=a[k];
+    var a=d.answers||{}; for(var k in a)A[k]=a[k];   // R21: brand-new users (no answers yet) still get the calc prefill below
     var map={full_name:"f-name",zip:"f-zip",dream_car:"f-dream",current_year:"f-cyear",current_make:"f-cmake",current_model:"f-cmodel",current_miles:"f-cmiles",current_color:"f-ccolor",current_details:"f-cdetails"};
     for(var m in map){var el=document.getElementById(map[m]);if(el&&a[m]!=null)el.value=a[m];}
     document.querySelectorAll("#quiz .opts").forEach(function(o){ var sec=o.closest("section"),key=o.dataset.q2||sec.dataset.q,val=a[key];
@@ -13,6 +13,13 @@ document.addEventListener("DOMContentLoaded",function(){
       if(!hit&&val&&!Array.isArray(val)){ var ob=o.querySelector('.opt[data-v="other"]');
         if(ob){ ob.classList.add("on"); var oi=sec.querySelector(".other-in"); if(oi){ oi.value=val; oi.style.display="block"; } } }
     });
+    // R21: first-run prefill from the website calculator (only when the profile is still empty on these).
+    try{ var cc=JSON.parse(localStorage.cn_calc||"null");
+      if(cc){ var snap=function(n,vals){ n=+n||0; var best=vals[0]; vals.forEach(function(v){ if(Math.abs(v-n)<Math.abs(best-n)) best=v; }); return String(best); };
+        if(!a.max_monthly&&cc.mo){ var mv=snap(cc.mo,[150,300,500,700,900]); var mb=document.querySelector('[data-q="max_monthly"] .opt[data-v="'+mv+'"]'); if(mb){ mb.classList.add("on"); A.max_monthly=mv; } }
+        if(a.max_down==null&&cc.dn){ var dv=snap(cc.dn,[0,500,1000,2000,3000,5000]); var db=document.querySelector('[data-q="max_down"] .opt[data-v="'+dv+'"]'); if(db){ db.classList.add("on"); A.max_down=dv; } }
+        if(!a.zip&&cc.z){ var zf=document.getElementById("f-zip"); if(zf&&!zf.value) zf.value=cc.z; }
+        localStorage.removeItem("cn_calc"); } }catch(_){}
   }).catch(function(){});
   // Chip selection (single + multi) — same data model, no wizard.
   document.querySelectorAll("#quiz .opts").forEach(function(o){o.addEventListener("click",function(e){

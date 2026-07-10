@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function lang(){try{return localStorage.cn_lang==="es"?"es":"en";}catch(_){return "en";}}
   var mobile=function(){return matchMedia("(max-width:700px)").matches;};
   function skipped(){try{return JSON.parse(localStorage.cn_skipped||"[]");}catch(_){return [];}}
-  function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(!isFinite(s))return "";if(s<3600)return Math.max(1,Math.round(s/60))+"m ago";if(s<86400)return Math.round(s/3600)+"h ago";if(s<172800)return "yesterday";return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric"});}
+  function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(!isFinite(s))return "";if(s<3600)return Math.max(1,Math.round(s/60))+"m ago";if(s<86400)return Math.round(s/3600)+"h ago";if(s<172800)return "yesterday";if(s<1209600)return Math.round(s/86400)+"d ago";return Math.max(2,Math.round(s/604800))+"w ago";}
   function skip(id){try{var s=skipped();if(s.indexOf(id)<0){s.push(id);localStorage.cn_skipped=JSON.stringify(s);}}catch(_){}}
 
   // New matches (ranked + affordable) as small talk/skip cards.
