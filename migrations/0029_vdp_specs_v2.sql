@@ -1,0 +1,33 @@
+-- Wave Q / T3: 10x the per-car data model. Idempotent ALTERs on vdp_specs (keyed by vin, joined by vdpOne).
+-- Re-scraped from the 100 LA Car Guy listing PDFs via vision. dealer_zip/lat/lng also power the T4 radius filter.
+ALTER TABLE vdp_specs ADD COLUMN doors INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN cylinders INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN horsepower INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN torque INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN drivetrain_detail TEXT;
+ALTER TABLE vdp_specs ADD COLUMN body_style TEXT;
+ALTER TABLE vdp_specs ADD COLUMN warranty_basic TEXT;
+ALTER TABLE vdp_specs ADD COLUMN warranty_powertrain TEXT;
+ALTER TABLE vdp_specs ADD COLUMN warranty_remaining TEXT;
+ALTER TABLE vdp_specs ADD COLUMN owners_count INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN accident_count INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN title_status TEXT;
+ALTER TABLE vdp_specs ADD COLUMN service_records TEXT;
+ALTER TABLE vdp_specs ADD COLUMN condition_grade TEXT;
+ALTER TABLE vdp_specs ADD COLUMN certified INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN cpo_program TEXT;
+ALTER TABLE vdp_specs ADD COLUMN safety_features_json TEXT;
+ALTER TABLE vdp_specs ADD COLUMN tech_features_json TEXT;
+ALTER TABLE vdp_specs ADD COLUMN comfort_features_json TEXT;
+ALTER TABLE vdp_specs ADD COLUMN exterior_features_json TEXT;
+ALTER TABLE vdp_specs ADD COLUMN market_price_low INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN market_price_avg INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN market_price_high INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN price_vs_market TEXT;
+ALTER TABLE vdp_specs ADD COLUMN days_on_lot INTEGER;
+ALTER TABLE vdp_specs ADD COLUMN dealer_name TEXT;
+ALTER TABLE vdp_specs ADD COLUMN dealer_address TEXT;
+ALTER TABLE vdp_specs ADD COLUMN dealer_zip TEXT;
+ALTER TABLE vdp_specs ADD COLUMN dealer_lat REAL;
+ALTER TABLE vdp_specs ADD COLUMN dealer_lng REAL;
+ALTER TABLE vdp_specs ADD COLUMN vin_decoded_json TEXT;

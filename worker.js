@@ -602,7 +602,21 @@ function vdpText(v,sp){ let t=`${v.year} ${v.make} ${v.model} ${v.trim}. ${v.bod
     if(sp.fuel_type) b.push(sp.fuel_type); if(sp.seating) b.push(`seats ${sp.seating}`);
     if(sp.exterior_color) b.push(`${sp.exterior_color} exterior`); if(sp.interior_color) b.push(`${sp.interior_color} interior`);
     if(sp.mileage_exact) b.push(`${Number(sp.mileage_exact).toLocaleString()} miles`);
+    // T3: richer truth core — engine detail, condition/history, warranty, market, grouped features.
+    if(sp.horsepower) b.push(`${sp.horsepower} hp${sp.torque?`, ${sp.torque} lb-ft`:""}${sp.cylinders?`, ${sp.cylinders}-cyl`:""}`);
+    if(sp.drivetrain_detail) b.push(sp.drivetrain_detail); if(sp.doors) b.push(`${sp.doors} doors`);
+    if(sp.certified) b.push("certified pre-owned"+(sp.cpo_program?` (${sp.cpo_program})`:""));
+    if(sp.title_status) b.push(`title: ${sp.title_status}`);
+    if(sp.owners_count!=null) b.push(`${sp.owners_count} owner${sp.owners_count==1?"":"s"}`);
+    if(sp.accident_count!=null) b.push(sp.accident_count?`${sp.accident_count} accident(s) reported`:"no accidents reported");
+    if(sp.warranty_remaining) b.push(`warranty: ${sp.warranty_remaining}`);
+    else if(sp.warranty_basic||sp.warranty_powertrain) b.push(`warranty ${[sp.warranty_basic,sp.warranty_powertrain].filter(Boolean).join(" / ")}`);
+    if(sp.market_price_avg) b.push(`market avg ~$${Number(sp.market_price_avg).toLocaleString()}`);
+    if(sp.price_vs_market) b.push(sp.price_vs_market);
+    for(const [k,lbl] of [["safety_features_json","Safety"],["tech_features_json","Tech"],["comfort_features_json","Comfort"]]){
+      if(sp[k]){ try{ const o=JSON.parse(sp[k]); if(o&&o.length) b.push(`${lbl}: `+o.slice(0,6).join(", ")); }catch(_){}} }
     if(sp.options_json){ try{ const o=JSON.parse(sp.options_json); if(o&&o.length) b.push("Options: "+o.join(", ")); }catch(_){}}
+    if(sp.dealer_name) b.push(`at ${sp.dealer_name}${sp.located_at?` (${sp.located_at})`:""}`);
     if(b.length) t+=" "+b.join(". ")+"."; }
   return t; }
 // Deterministic per-car personality (pure function of the row — same car always same voice).
@@ -726,6 +740,15 @@ async function reindexAll(request,env){ let n=0;
       await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run().catch(()=>{}); } }  // best-effort; feed re-embeds profiles live anyway
   return json({ok:true,indexed:n}); }
 function carDist(id){ return (((id*37)%128)/10 + 1.6).toFixed(1); }
+// T4: real geodistance. ZIP centroids loaded once per isolate from the static asset; haversine in miles.
+let ZIP_CENTROIDS=null;
+async function zipCentroids(env){ if(ZIP_CENTROIDS) return ZIP_CENTROIDS;
+  try{ const r=await env.ASSETS.fetch("https://assets.local/assets/data/zip-centroids-socal.json"); ZIP_CENTROIDS=r.ok?await r.json():{}; }catch(_){ ZIP_CENTROIDS={}; }
+  return ZIP_CENTROIDS; }
+function haversineMi(lat1,lng1,lat2,lng2){ const R=3959, rad=x=>x*Math.PI/180;
+  const dLat=rad(lat2-lat1), dLng=rad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2+Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
 function carWhy(v,a,lang){ a=a||{}; const es=lang==="es";
   const dream=(a.dream_car||"").trim(), dl=dream.toLowerCase();
   const inDream=dream&&(dl.includes(String(v.model||"").toLowerCase())||dl.includes(String(v.make||"").toLowerCase()));
@@ -762,13 +785,21 @@ async function search(request,env){ try{
   const zip=String(u.searchParams.get("zip")||"").slice(0,10);
   if(monthly<=0 || !/^\d{5}$/.test(zip)) return json({ok:true,count:0,cars:[],reason:"need_inputs"});   // P1: no valid budget/ZIP → no cars
   const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
-  const all=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
+  const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
+  // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
+  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
   const out=[];
   for(const v of (all.results||[])){
     if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
     const mo=monthlyFor(v.price,down,apr,72);
     if(monthly && mo>monthly) continue;              // strict: over their number is out
-    out.push({...feedCar(v,null,{},lang,mo)});
+    // real distance when we can measure it: dealer coords (or its ZIP centroid) vs the buyer's ZIP centroid
+    let cd=(v.dealer_lat!=null&&v.dealer_lng!=null)?{lat:v.dealer_lat,lng:v.dealer_lng}:(cen[v.dealer_zip||v.location_zip||""]||null);
+    let dist=(home&&cd)?haversineMi(home.lat,home.lng,cd.lat,cd.lng):null;
+    if(radius && dist!=null && dist>radius) continue;   // only filter when measurable; unknown coords never hide inventory
+    const car=feedCar(v,null,{},lang,mo); if(dist!=null) car.dist=dist.toFixed(1);
+    out.push(car);
   }
   out.sort((a,b)=>(a.price_mo||0)-(b.price_mo||0));   // cheapest-first (best headroom)
   const anon=readAnon(request);
@@ -932,7 +963,8 @@ async function vdpOne(request,env){ const u=new URL(request.url); const id=+(u.s
   const er=await env.DB.prepare("SELECT summary,pros,cons,ideal_buyer,financing_context FROM vdp_enrichment WHERE vdp_id=?").bind(v.id).first().catch(()=>null);
   const enrich=er?{summary:er.summary,pros:JSON.parse(er.pros||"[]"),cons:JSON.parse(er.cons||"[]"),ideal_buyer:er.ideal_buyer,financing_context:er.financing_context}:null;
   const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);   // O3: master spec row
-  const specs=sp?{exterior_color:sp.exterior_color,interior_color:sp.interior_color,engine:sp.engine,transmission:sp.transmission,mpg_city:sp.mpg_city,mpg_hwy:sp.mpg_hwy,mpg_combined:sp.mpg_combined,range_mi:sp.range_mi,fuel_type:sp.fuel_type,seating:sp.seating,options:JSON.parse(sp.options_json||"[]")}:null;
+  const specs=sp?{exterior_color:sp.exterior_color,interior_color:sp.interior_color,engine:sp.engine,transmission:sp.transmission,mpg_city:sp.mpg_city,mpg_hwy:sp.mpg_hwy,mpg_combined:sp.mpg_combined,range_mi:sp.range_mi,fuel_type:sp.fuel_type,seating:sp.seating,options:JSON.parse(sp.options_json||"[]"),
+    horsepower:sp.horsepower,cylinders:sp.cylinders,doors:sp.doors,drivetrain_detail:sp.drivetrain_detail,owners_count:sp.owners_count,accident_count:sp.accident_count,title_status:sp.title_status,warranty_remaining:sp.warranty_remaining,certified:sp.certified,cpo_program:sp.cpo_program,market_price_avg:sp.market_price_avg,price_vs_market:sp.price_vs_market,dealer_name:sp.dealer_name,located_at:sp.located_at}:null;
   return json({ok:true,car:{id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,price_mo:mo,price:v.price||null,miles:v.miles,
     drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),description:v.description,
     match:null,dist:carDist(v.id),dealer:await dealerName(env,v.dealer_id),persona:carPersona(v,lang),enrich,specs}}); }

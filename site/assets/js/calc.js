@@ -2,9 +2,9 @@ document.addEventListener("DOMContentLoaded",function(){
   function $(id){return document.getElementById(id);}
   function esc(s){return String(s==null?"":s).replace(/[<&>"]/g,function(c){return {"<":"&lt;","&":"&amp;",">":"&gt;","\"":"&quot;"}[c];});}
   function slug(c){return String(c.year+"-"+c.make+"-"+c.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");}
-  function run(){ var mo=$("calc-mo").value.replace(/[^0-9]/g,""), dn=$("calc-down").value.replace(/[^0-9]/g,""), z=$("calc-zip").value.replace(/[^0-9]/g,"");
+  function run(){ var mo=$("calc-mo").value.replace(/[^0-9]/g,""), dn=$("calc-down").value.replace(/[^0-9]/g,""), z=$("calc-zip").value.replace(/[^0-9]/g,""), rad=($("calc-radius")?$("calc-radius").value:"");
     $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Finding your cars…</div>';
-    fetch("/api/search?monthly="+mo+"&down="+dn+"&zip="+z).then(function(r){return r.json();}).then(function(d){
+    fetch("/api/search?monthly="+mo+"&down="+dn+"&zip="+z+"&radius="+rad).then(function(r){return r.json();}).then(function(d){
       var cars=(d.cars||[]);
       if(d.reason==="need_inputs"){ $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Enter a monthly budget and a valid ZIP to see cars in your range.</div>'; return; }
       if(!cars.length){ $("calc-out").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">No cars in that range yet — try a higher monthly or a larger down payment.</div>'; return; }

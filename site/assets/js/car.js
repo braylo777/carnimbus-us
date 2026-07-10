@@ -24,6 +24,13 @@ document.addEventListener("DOMContentLoaded",function(){
     if(s.transmission)specs.push(["Transmission",s.transmission]);
     if(s.exterior_color)specs.push(["Color",s.exterior_color]);
     if(s.seating)specs.push(["Seats",String(s.seating)]);
+    if(s.horsepower)specs.push(["Power",s.horsepower+" hp"+(s.cylinders?" · "+s.cylinders+"-cyl":"")]);
+    if(s.doors)specs.push(["Doors",String(s.doors)]);
+    if(s.owners_count!=null)specs.push(["Owners",String(s.owners_count)]);
+    if(s.accident_count!=null)specs.push(["History",s.accident_count?(s.accident_count+" accident(s)"):"No accidents"]);
+    if(s.warranty_remaining)specs.push(["Warranty",s.warranty_remaining]);
+    if(s.certified)specs.push(["Certified",s.cpo_program||"CPO"]);
+    if(s.market_price_avg)specs.push(["Market avg","$"+Number(s.market_price_avg).toLocaleString()]);
     var sp=$("v-specs"); if(sp)sp.innerHTML=specs.map(function(s){return '<div style="min-width:120px"><span style="font:700 8px Manrope;color:#8ca0c4;letter-spacing:.06em;text-transform:uppercase">'+esc(s[0])+'</span><br><span style="font:700 12px Manrope;color:#e2e9f2">'+esc(s[1])+'</span></div>';}).join("");
     var feats=(CAR.features||[]).slice(0,6);
     if(feats.length){ var fh=$("v-feats-h"); if(fh)fh.style.display=""; var fe=$("v-feats"); if(fe)fe.innerHTML=feats.map(function(f){return '<div style="font:600 11px Manrope;color:#cbd5e1"><span class="cy">•</span> '+esc(f)+'</div>';}).join(""); }
