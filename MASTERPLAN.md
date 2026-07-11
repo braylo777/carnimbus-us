@@ -19,11 +19,10 @@ comes from Workers AI (llama-3.3-70b + bge embeddings); a 5-minute cron drives b
 | A | Demo P0 — viewport, login copy, i18n, calendar | ✅ DONE |
 | B | Backend matching table + feed de-filler + SMS hook | ✅ DONE |
 | C | Nimbus Phase 0 — event spine + CID stitching + sensor | ✅ DONE |
-| D | Canonical repo docs + Beyond.js README | 🟡 in-flight (this set) |
-| E | Phase 1 six-agent MVP (Workers-AI-backed) | ⚪ planned |
+| D | Canonical repo docs + Beyond.js README | ✅ DONE |
+| E | Phase 1 six-agent MVP (Workers-AI-backed) | 🟡 in-flight |
 
-Everything through **Wave C (the event spine)** is shipped and live. Wave D is these docs.
-Wave E and Nimbus Phases 2–10 are the forward roadmap.
+Everything through **Wave D (the documentation sweep)** is shipped and live. Wave E is in-flight.
 
 ---
 
@@ -92,6 +91,23 @@ Each agent emits `ai.*` events into the Wave C stream. See `AGENT-REGISTRY.md` f
 
 ---
 
+## Swarm Infrastructure & Rooftop Orchestration
+
+### 1. Phased Infrastructure Orchestration
+*   **Phase 1 (Current):** Migrate Docker setups to a private Kubernetes cluster managed by Windmill to maintain $0 capital hardware CapEx.
+*   **Phase 2 (Oct Pilot):** Allocate isolated GPU pods on public cloud providers to run model twin services for the initial 2 rooftops.
+*   **Phase 3 (Post-Raise):** Transition to dedicated, on-premise air-gapped server nodes executing GLM-5.2 locally and securely.
+
+### 2. Physical Key and Security Policies
+*   **Boot Override Key:** Deploy physical 256GB SanDisk token verification logic on GM orchestrator PC. The runtime must automatically failover to a static HTML layout if the USB key is absent.
+*   **Local C Compiler:** Compile and optimize repository logic offline without external package calls. The compiled package must remain under 2GB core size and 30GB-50GB database limit.
+
+### 3. Rooftop Scale & Economics
+*   **Rooftop Nodes:** 1 central GM orchestrator coordinates 15 rooftop client PCs.
+*   **MRR Projections:** Reaching stable rooftop targets generates $21,000 MRR (14 dealerships at $1,500/month flat fee).
+
+---
+
 ## Discipline & gates
 
 - Waves ship **A → B → C → D → E**, deployed + committed + pushed the moment each is green.
@@ -102,4 +118,4 @@ Each agent emits `ai.*` events into the Wave C stream. See `AGENT-REGISTRY.md` f
 
 ## Related docs
 `EVENT-TAXONOMY.md` · `AGENT-REGISTRY.md` · `TWIN-SCHEMA.md` · `MODEL-REGISTRY.md` ·
-`AUTONOMY-POLICY.md` · `docs/HTML-TO-JS-MIGRATION.md` · `README.md`
+`AUTONOMY-POLICY.md` · `docs/HTML-TO-JS-MIGRATION.md` · `README.md` · `SOVEREIGN-INFERENCE.md` · `SWARM-MANIFEST.md`

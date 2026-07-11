@@ -5,6 +5,14 @@
 --grad-btn:linear-gradient(180deg,#3a86ff,#0B63E5);
 --rc:32px;--rl:20px;--rm:16px;--rp:9999px;
 --ease:cubic-bezier(.22,1,.36,1);
+/* Wave T — soften: warm safety accent, air, calmer motion, bigger tap targets. Additive; no existing token removed. */
+--cn-warm:#FFB27A;            /* soft amber — reassurance/safety cues only, used sparingly */
+--cn-warm-soft:rgba(255,178,122,.12);
+--cn-mist:#0c2350;            /* a touch lighter than --cn-bg for calmer layered surfaces */
+--s1:6px;--s2:10px;--s3:16px;--s4:24px;--s5:36px;--s6:56px;   /* spacing scale → replaces inline margins */
+--rc2:28px;--rm2:18px;        /* slightly rounder cards/inputs than --rc/--rm */
+--tap:48px;                   /* min touch target */
+--ease-calm:cubic-bezier(.33,.9,.3,1);--dur:.5s;   /* longer, gentler than --ease */
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -38,8 +46,8 @@ input,button,select,textarea{font-family:inherit}
 .navlink:hover{color:#fff}.navlink:hover::after{width:100%}
 
 /* glass */
-.glass{border-radius:var(--rc);background:linear-gradient(165deg,rgba(255,255,255,.055),rgba(255,255,255,.02));border:1px solid rgba(24,200,255,.16);backdrop-filter:blur(24px);box-shadow:0 30px 60px -40px rgba(2,8,24,.9),inset 0 1px 0 rgba(255,255,255,.07);transition:transform .5s var(--ease),border-color .5s,box-shadow .5s}
-.glass.hoverable:hover,.glass.pd:hover{transform:translateY(-4px);border-color:rgba(24,200,255,.4);box-shadow:0 40px 80px -40px rgba(11,99,229,.55),inset 0 1px 0 rgba(255,255,255,.1)}
+.glass{border-radius:var(--rc);background:linear-gradient(165deg,rgba(255,255,255,.055),rgba(255,255,255,.02));border:1px solid rgba(24,200,255,.16);backdrop-filter:blur(24px);box-shadow:0 30px 60px -40px rgba(2,8,24,.9),inset 0 1px 0 rgba(255,255,255,.07);transition:transform var(--dur) var(--ease-calm),border-color .5s,box-shadow .5s}
+.glass.hoverable:hover,.glass.pd:hover{transform:translateY(-2px);border-color:rgba(24,200,255,.4);box-shadow:0 40px 80px -40px rgba(11,99,229,.55),inset 0 1px 0 rgba(255,255,255,.1)}
 .glass.pd{padding:22px}
 
 /* buttons */
@@ -263,3 +271,11 @@ html,body{overflow-x:hidden;max-width:100%}
 @media(max-width:480px){
   .wl-form .pill{min-width:100%}
 }
+
+/* Wave T: layout utilities & touch target styles */
+.btn, .opt, .pill, select.pill { min-height: var(--tap); }
+.flow { display: flex; flex-direction: column; gap: var(--s4); }
+.snap { scroll-snap-type: y proximity; }
+.snap > * { scroll-snap-align: start; }
+.stack { display: flex; flex-direction: column; gap: var(--s3); }
+

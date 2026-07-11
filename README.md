@@ -108,8 +108,13 @@ target of **42 rooftops** — not a hand-wavy TAM slide.
   `sec(await withUser|withDealer|adminOnly(...))`, render helpers, models, cron.
 - `site/` — page-per-file routing; vanilla HTML/JS/CSS; `<x-import>` placeholders via
   `site/assets/runtime.js`; reactive state via `site/assets/signals.js`.
-- `migrations/` — D1 schema (through `0030_private_replies`).
+- `migrations/` — D1 schema (through `0035_auth_ip_log`).
 - `wrangler.jsonc` — Worker config; custom domain `carnimbus.com`.
+- `AGENT-REGISTRY.md` — Core parameters and database interfaces for the 5-node agent swarm.
+- `AUTONOMY-POLICY.md` — Governance protocols and human-in-the-loop fallback conditions.
+- `MASTERPLAN.md` — Multi-wave launch roadmap and infrastructure orchestration timelines.
+- `SOVEREIGN-INFERENCE.md` — Local compute instructions, offline compiler targets, and security guidelines.
+- `SWARM-MANIFEST.md` — Active development priorities and execution targets for dovOS and CarNimbus.
 
 ## Deploy
 

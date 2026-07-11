@@ -153,7 +153,11 @@ export default {
       if (["app","dealer","admin","ai"].includes(url.hostname.split(".")[0])) h.set("X-Robots-Tag", "noindex, nofollow");
       const ct=h.get("content-type")||"";
       // HTML + JS always revalidate — stale app shells were serving old code for days. Images/fonts stay cached.
-      if (ct.includes("text/html")||ct.includes("javascript")) h.set("Cache-Control","no-cache, must-revalidate");
+      if (ct.includes("text/html")||ct.includes("javascript")) {
+        h.set("Cache-Control","no-cache, must-revalidate");
+      } else if (ct.includes("image/") || ct.includes("font/") || url.pathname.endsWith(".woff2")) {
+        h.set("Cache-Control","public, max-age=31536000, immutable");
+      }
       assetRes = new Response(assetRes.body, { status: assetRes.status, headers: h });
     }
     return sec(assetRes);
@@ -162,6 +166,7 @@ export default {
     await runQueue(env);
     await syncEmbeddings(env);
     await residentAgent(env).catch(()=>{});   // L9: one labeled community post per ≤2h
+    await syntheticNudger(env).catch(()=>{});  // C1: synthetic agent nudges per ≤4h
     // Refresh persisted backend matches for all buyers with a profile (demo-scale; bounded to 50/run).
     try{ const us=await env.DB.prepare("SELECT user_id FROM profiles ORDER BY updated_at DESC LIMIT 50").all();
       for(const r of (us.results||[])){ await computeSignals(env, r.user_id).catch(()=>{}); await computeMatches(env, r.user_id).catch(()=>{}); } }catch(_){}
@@ -179,7 +184,47 @@ async function makeSession(env,userId){ const exp=Date.now()+30*864e5; const p=u
 async function readSession(env,request){ const m=(request.headers.get("Cookie")||"").match(/cn_sess=([^;]+)/); if(!m) return null;
   const parts=m[1].split("."); if(parts.length!==3) return null; const [uid,exp,sig]=parts;
   if(!uid||!exp||!sig||Date.now()>+exp) return null;
-  return (await hmac(env,uid+"."+exp))===sig ? +uid : null; }
+  return ctEq(await hmac(env,uid+"."+exp),sig) ? +uid : null; }
+async function getCryptoKey(secret) {
+  const msgUint8 = new TextEncoder().encode(secret || "nimbus-pii-fallback-key");
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  return await crypto.subtle.importKey('raw', hashBuffer, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+async function encryptPII(text, secret) {
+  if (!text) return text;
+  try {
+    const key = await getCryptoKey(secret);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(text);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+    const ctHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `enc:${ivHex}:${ctHex}`;
+  } catch (e) { return text; }
+}
+async function decryptPII(encText, secret) {
+  if (!encText || !encText.startsWith("enc:")) return encText;
+  try {
+    const parts = encText.split(":");
+    if (parts.length !== 3) return encText;
+    const ivHex = parts[1], ctHex = parts[2];
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const ct = new Uint8Array(ctHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const key = await getCryptoKey(secret);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) { return encText; }
+}
+async function decryptAnswers(a, secret) {
+  if (!a || typeof a !== "object") return a;
+  const decrypted = { ...a };
+  for (const k in decrypted) {
+    if (typeof decrypted[k] === "string" && decrypted[k].startsWith("enc:")) {
+      decrypted[k] = await decryptPII(decrypted[k], secret);
+    }
+  }
+  return decrypted;
+}
 async function withUser(request,env,fn){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401); return fn(request,env,uid); }
 function ctEq(a,b){ a=String(a); b=String(b); if(a.length!==b.length) return false; let r=0; for(let i=0;i<a.length;i++) r|=a.charCodeAt(i)^b.charCodeAt(i); return r===0; }
 async function adminOnly(request,env,fn){ if(!env.ADMIN_KEY||!ctEq(request.headers.get("x-admin-key")||"",env.ADMIN_KEY)) return json({ok:false,error:"forbidden"},403); return fn(request,env); }
@@ -513,9 +558,22 @@ async function issueUserSession(env,phone,request){
   const sess=await makeSession(env,u.id);
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","cache-control":"no-store",
     "Set-Cookie":`cn_sess=${sess}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`}}); }
-async function authStart(request,env){ let {phone}=await request.json().catch(()=>({}));
+async function authStart(request,env){ let {phone, token}=await request.json().catch(()=>({}));
   phone=String(phone||"").replace(/\D/g,""); if(phone.length===11&&phone[0]==="1")phone=phone.slice(1);
   if(!/^[2-9]\d{9}$/.test(phone)) return json({ok:false,error:"invalid_phone"},422); phone="+1"+phone;
+  const ip = request.headers.get("CF-Connecting-IP") || "0.0.0.0";
+  try {
+    const sinceIp = new Date(Date.now() - 3600e3).toISOString();
+    const rlIp = await env.DB.prepare("SELECT COUNT(*) AS n FROM auth_ip_log WHERE ip = ? AND created_at > ?").bind(ip, sinceIp).first();
+    if (rlIp && rlIp.n >= 5) return json({ ok: true });
+  } catch (_) {}
+  if(env.TURNSTILE_SECRET){
+    const ok=await verifyTurnstile(token, ip, env.TURNSTILE_SECRET);
+    if(!ok) return json({ok:true});
+  }
+  try {
+    await env.DB.prepare("INSERT INTO auth_ip_log (ip, created_at) VALUES (?, ?)").bind(ip, new Date().toISOString()).run();
+  } catch (_) {}
   // Rate limit per destination number (10-min window) — sms_log is never deleted, unlike otp. Blocks SMS-bombing + OTP-wipe DoS.
   const since=new Date(Date.now()-600e3).toISOString();
   const rc=await env.DB.prepare("SELECT COUNT(*) c FROM sms_log WHERE phone=? AND direction='out' AND created_at>?").bind(phone,since).first().catch(()=>({c:0}));
@@ -542,12 +600,21 @@ async function authVerify(request,env){ let {phone,code}=await request.json().ca
   return issueUserSession(env,phone,request); }
 async function saveProfile(request,env,uid){ const {answers}=await request.json().catch(()=>({}));
   if(!answers||typeof answers!=="object") return json({ok:false,error:"bad_request"},400);
+  const encryptedAnswers = { ...answers };
+  if (answers.fico && !answers.fico.startsWith("enc:")) {
+    encryptedAnswers.fico = await encryptPII(answers.fico, env.PII_KEY);
+  }
+  if (answers.income && !answers.income.startsWith("enc:")) {
+    encryptedAnswers.income = await encryptPII(answers.income, env.PII_KEY);
+  }
   await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) "+
     "ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
-    .bind(uid,JSON.stringify(answers),new Date().toISOString()).run();
+    .bind(uid,JSON.stringify(encryptedAnswers),new Date().toISOString()).run();
   if(answers.full_name) await env.DB.prepare("UPDATE users SET handle=? WHERE id=?").bind(String(answers.full_name).slice(0,60),uid).run();
+  const dbFico = encryptedAnswers.fico || "";
+  const dbFicoBind = dbFico.startsWith("enc:") ? dbFico : dbFico.slice(0, 12);
   await env.DB.prepare("UPDATE profiles SET zip=?, max_monthly=?, fico=?, body_pref=?, timeline=? WHERE user_id=?")
-    .bind(String(answers.zip||"").slice(0,10), parseInt(answers.max_monthly,10)||null, String(answers.fico||"").slice(0,12),
+    .bind(String(answers.zip||"").slice(0,10), parseInt(answers.max_monthly,10)||null, dbFicoBind,
           String(answers.body_pref||"").slice(0,12), String(answers.timeline||"").slice(0,16), uid).run().catch(()=>{});
   await computeSignals(env,uid).catch(()=>{});   // Wave G: refresh behavioral twin before ranking
   await computeMatches(env,uid).catch(()=>{});   // refresh persisted backend matches on every profile save
@@ -571,6 +638,8 @@ async function profilesIngest(request,env){ const rows=await request.json().catc
       .bind(phone,genCode("CID"),new Date().toISOString()).run();
     const u=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first(); if(!u) continue;
     const a={}; for(const k of BUYER_COLS.slice(1)) if(r[k]!=null&&r[k]!=="") a[k]=(k==="hobbies"||k==="must_haves")?String(r[k]).split("|").map(s=>s.trim()).filter(Boolean):String(r[k]);
+    if (a.fico && !a.fico.startsWith("enc:")) a.fico = await encryptPII(a.fico, env.PII_KEY);
+    if (a.income && !a.income.startsWith("enc:")) a.income = await encryptPII(a.income, env.PII_KEY);
     await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
       .bind(u.id,JSON.stringify(a),new Date().toISOString()).run();
     await env.DB.prepare("UPDATE profiles SET zip=?, max_monthly=?, fico=?, body_pref=?, timeline=? WHERE user_id=?")
@@ -584,7 +653,7 @@ async function poolExport(request,env){ const pool=new URL(request.url).searchPa
   if(pool==="buyers"){ const rows=await env.DB.prepare("SELECT u.phone,u.sid,u.created_at,p.answers FROM profiles p JOIN users u ON u.id=p.user_id ORDER BY p.updated_at DESC LIMIT 5000").all();
     const head=[...BUYER_COLS,"sid","created_at"];
     const lines=[head.join(",")];
-    for(const r of (rows.results||[])){ let a={}; try{a=JSON.parse(r.answers)||{}}catch(_){}
+    for(const r of (rows.results||[])){ let a={}; try{a=JSON.parse(r.answers)||{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
       lines.push(head.map(k=>k==="phone"?csvCell(r.phone):k==="sid"?csvCell(r.sid):k==="created_at"?csvCell(r.created_at):
         csvCell(Array.isArray(a[k])?a[k].join("|"):a[k])).join(",")); }
     return new Response(lines.join("\n"),{headers:{"content-type":"text/csv","content-disposition":'attachment; filename="buyers.csv"'}}); }
@@ -692,7 +761,7 @@ async function syncEmbeddings(env){
   for(const v of (vs.results||[])){ await env.MATCH_INDEX.upsert([{id:"vdp:"+v.id,values:await embed(env,vdpText(v)),metadata:{kind:"vdp",vdpId:v.id,price_mo:v.price_mo||0,body:v.body||"",year:v.year||0,dealer_id:v.dealer_id||0}}]);
     await env.DB.prepare("UPDATE vdps SET embedding_synced=1 WHERE id=?").bind(v.id).run(); }
   const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
-  for(const p of (ps.results||[])){ try{ let a={}; try{a=JSON.parse(p.answers)||{}}catch(_){}
+  for(const p of (ps.results||[])){ try{ let a={}; try{a=JSON.parse(p.answers)||{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
       await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(a)),metadata:{kind:"profile"}}]); }catch(_){}
     await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run().catch(()=>{}); } }
 // ===== Wave E1: Inventory Intelligence Agent. Enriches active vdps lacking an enrichment row. Cron-batched. =====
@@ -738,7 +807,7 @@ async function reindexAll(request,env){ let n=0;
       await env.DB.prepare("UPDATE vdps SET embedding_synced=1 WHERE id=?").bind(v.id).run(); n++; } }
   for(let i=0;i<200;i++){ const ps=await env.DB.prepare("SELECT * FROM profiles WHERE embedding_synced=0 LIMIT 10").all().catch(()=>({results:[]}));
     if(!(ps.results||[]).length) break;
-    for(const p of ps.results){ try{ let a={}; try{a=JSON.parse(p.answers)||{}}catch(_){}
+    for(const p of ps.results){ try{ let a={}; try{a=JSON.parse(p.answers)||{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
         await env.MATCH_INDEX.upsert([{id:"profile:"+p.user_id,values:await embed(env,profileText(a)),metadata:{kind:"profile"}}]); }catch(_){}
       await env.DB.prepare("UPDATE profiles SET embedding_synced=1 WHERE user_id=?").bind(p.user_id).run().catch(()=>{}); } }  // best-effort; feed re-embeds profiles live anyway
   return json({ok:true,indexed:n}); }
@@ -796,29 +865,34 @@ async function search(request,env){ try{
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
   const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
-  const out=[];
-  for(const v of (all.results||[])){
-    if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
-    const mo=monthlyFor(v.price,down,apr,72);
-    if(monthly && mo>monthly) continue;              // strict: over their number is out
-    // real distance when we can measure it: dealer coords (or its ZIP centroid) vs the buyer's ZIP centroid
-    let cd=(v.dealer_lat!=null&&v.dealer_lng!=null)?{lat:v.dealer_lat,lng:v.dealer_lng}:(cen[v.dealer_zip||v.location_zip||""]||null);
-    let dist=(home&&cd)?haversineMi(home.lat,home.lng,cd.lat,cd.lng):null;
-    if(radius && dist!=null && dist>radius) continue;   // only filter when measurable; unknown coords never hide inventory
-    const car=feedCar(v,null,{},lang,mo); if(dist!=null) car.dist=dist.toFixed(1);
-    if(cd){ car.dlat=cd.lat; car.dlng=cd.lng; }        // S3: real car location → the website map popup
-    out.push(car);
-  }
-  out.sort((a,b)=>(a.price_mo||0)-(b.price_mo||0));   // cheapest-first (best headroom)
+  const scan=function(budgetCap,radCap){ const r=[];
+    for(const v of (all.results||[])){
+      if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
+      const mo=monthlyFor(v.price,down,apr,72);
+      if(budgetCap && mo>budgetCap) continue;          // budgetCap=0 → ignore budget (fallback pass)
+      let cd=(v.dealer_lat!=null&&v.dealer_lng!=null)?{lat:v.dealer_lat,lng:v.dealer_lng}:(cen[v.dealer_zip||v.location_zip||""]||null);
+      let dist=(home&&cd)?haversineMi(home.lat,home.lng,cd.lat,cd.lng):null;
+      if(radCap && dist!=null && dist>radCap) continue;   // radCap=0 → ignore radius (fallback pass)
+      const car=feedCar(v,null,{},lang,mo); if(dist!=null){ car.dist=dist.toFixed(1); car._d=dist; }
+      if(cd){ car.dlat=cd.lat; car.dlng=cd.lng; }        // S3: real car location → the website map popup
+      r.push(car);
+    } return r; };
+  let out=scan(monthly,radius), reason=null;             // strict: their exact budget + radius
+  if(!out.length){ out=scan(monthly,0);                  // B1 pass 2: keep budget, drop radius (nearest-first)
+    if(out.length){ reason="widen_radius"; out.sort((a,b)=>(a._d||1e9)-(b._d||1e9)); } }
+  if(!out.length){ out=scan(0,radius);                   // B1 pass 3: keep radius, drop budget (cheapest-first)
+    if(out.length) reason="over_budget"; }
+  out.sort((a,b)=> reason==="widen_radius" ? (a._d||1e9)-(b._d||1e9) : (a.price_mo||0)-(b.price_mo||0));
   const anon=readAnon(request);
   await logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null});
-  return json({ok:true,count:out.length,cars:out.slice(0,60),home:home||null});
+  await logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length});  // B2 telemetry
+  return json({ok:true,count:out.length,cars:out.slice(0,60),home:home||null,reason});
   }catch(e){ return json({ok:true,cars:[],degraded:true}); } }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
   const lang=new URL(request.url).searchParams.get("lang");
   let ranked=[], ans={}; const seen=new Set();
   if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-    if(p){ try{ ans=JSON.parse(p.answers)||{}; }catch(_){}
+    if(p){ try{ ans=JSON.parse(p.answers)||{}; ans=await decryptAnswers(ans, env.PII_KEY); }catch(_){}
       const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans)),{topK:50,filter:{kind:"vdp"}}).catch(()=>null);
       if(q){ for(const m of q.matches){ const id=m.metadata.vdpId; if(id!=null&&!seen.has(id)){ seen.add(id); ranked.push({id,vec:m.score}); } } } } }
   // Always union in the live active inventory so real cars show even when the vector index is stale
@@ -891,7 +965,7 @@ async function computeSignals(env,uid){ try{
 async function computeMatches(env,uid){ try{
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
   if(!p) return {ok:false,reason:"no_profile"};
-  let ans={}; try{ ans=JSON.parse(p.answers)||{}; }catch(_){}
+  let ans={}; try{ ans=JSON.parse(p.answers)||{}; ans=await decryptAnswers(ans, env.PII_KEY); }catch(_){}
   const budget=parseInt(ans.max_monthly,10)||0, apr=aprFor(ans.fico);
   const sigRow=await env.DB.prepare("SELECT signals FROM buyer_signals WHERE user_id=?").bind(uid).first().catch(()=>null);
   let sig={}; if(sigRow){ try{ sig=JSON.parse(sigRow.signals)||{}; }catch(_){} }
@@ -914,8 +988,29 @@ async function computeMatches(env,uid){ try{
     const sponsorBoost = prio.has(v.dealer_id) ? 0.08 : 0;   // K3: additive, bounded — priority, not takeover
     const match=Math.max(0,Math.min(99,Math.round((0.6*base+0.4*(0.5*bodyFit+0.3*priceFit+0.2*savedBoost)+sponsorBoost)*100)));
     scored.push({v,score:match}); }
+  const sponsoredDealers = {};
+  try {
+    const sp = await env.DB.prepare("SELECT id, ad_slot FROM dealer_leads WHERE status='active' AND ad_slot BETWEEN 1 AND 3").all();
+    for (const r of (sp.results||[])) { sponsoredDealers[r.id] = r.ad_slot; }
+  } catch(_) {}
   scored.sort((a,b)=>b.score-a.score);
-  const top=scored.slice(0,40);
+  const slots = [null, null, null];
+  for (let slot = 1; slot <= 3; slot++) {
+    const idx = scored.findIndex(item => item.score > 0 && sponsoredDealers[item.v.dealer_id] === slot);
+    if (idx !== -1) {
+      slots[slot - 1] = scored.splice(idx, 1)[0];
+    }
+  }
+  const top = [];
+  for (let i = 0; i < 40; i++) {
+    if (i < 3 && slots[i]) {
+      top.push(slots[i]);
+    } else {
+      if (scored.length) {
+        top.push(scored.shift());
+      }
+    }
+  }
   // Which vdps are brand-new matches (for notification)?
   const prior=new Set(); { const ex=await env.DB.prepare("SELECT vdp_id FROM matches WHERE user_id=?").bind(uid).all();
     for(const r of (ex.results||[])) prior.add(r.vdp_id); }
@@ -936,12 +1031,12 @@ async function computeMatches(env,uid){ try{
   }catch(e){ return {ok:false,error:String(e&&e.message||e)}; } }
 async function matchesList(request,env,uid){
   const rows=await env.DB.prepare(
-    "SELECT m.vdp_id,m.score,m.created_at,m.ranked_at,m.status,v.id,v.year,v.make,v.model,v.trim,v.price,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos "+
+    "SELECT m.vdp_id,m.score,m.created_at,m.ranked_at,m.status,v.id,v.year,v.make,v.model,v.trim,v.price,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,v.dealer_id "+
     "FROM matches m JOIN vdps v ON v.id=m.vdp_id WHERE m.user_id=? AND v.active=1 AND m.status!='dismissed' "+
     "ORDER BY COALESCE(m.ranked_at,m.created_at) DESC, m.score DESC LIMIT 40").bind(uid).all();
   const lang=new URL(request.url).searchParams.get("lang");
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-  let ans={}; if(p){ try{ans=JSON.parse(p.answers)||{};}catch(_){} }
+  let ans={}; if(p){ try{ans=JSON.parse(p.answers)||{}; ans=await decryptAnswers(ans, env.PII_KEY);}catch(_){} }
   const apr=aprFor(ans.fico);
   const sigRow=await env.DB.prepare("SELECT signals FROM buyer_signals WHERE user_id=?").bind(uid).first().catch(()=>null);
   let sig={}; if(sigRow){ try{ sig=JSON.parse(sigRow.signals)||{}; }catch(_){} }
@@ -953,8 +1048,28 @@ async function matchesList(request,env,uid){
     if(sig.top_body && String(v.body||"").toLowerCase()===sig.top_body) sigwhy.push(es?"Tu carrocería favorita":"Your go-to body style");
     if(sig.click_price_lo!=null && mo!=null && mo>=sig.click_price_lo && mo<=sig.click_price_hi) sigwhy.push(es?"En tu rango de precio":"In your click range");
     if((sig.saved||[]).includes(v.id)) sigwhy.push(es?"Sigues volviendo a este":"You keep coming back to this");
-    return {...feedCar(v,v.score,ans,lang,mo),created_at:v.created_at,status:v.status,sigwhy}; }).filter(Boolean);
-  return json({ok:true,authed:true,cars}); }
+    return {...feedCar(v,v.score,ans,lang,mo),created_at:v.created_at,status:v.status,dealer_id:v.dealer_id,sigwhy}; }).filter(Boolean);
+  const sponsoredDealers = {};
+  try {
+    const sp = await env.DB.prepare("SELECT id, ad_slot FROM dealer_leads WHERE status='active' AND ad_slot BETWEEN 1 AND 3").all();
+    for (const r of (sp.results||[])) { sponsoredDealers[r.id] = r.ad_slot; }
+  } catch(_) {}
+  const slots = [null, null, null];
+  for (let slot = 1; slot <= 3; slot++) {
+    const idx = cars.findIndex(item => item.match > 0 && sponsoredDealers[item.dealer_id] === slot);
+    if (idx !== -1) {
+      slots[slot - 1] = cars.splice(idx, 1)[0];
+    }
+  }
+  const finalCars = [];
+  for (let i = 0; i < cars.length + 3; i++) {
+    if (i < 3 && slots[i]) {
+      finalCars.push(slots[i]);
+    } else {
+      if (cars.length) finalCars.push(cars.shift());
+    }
+  }
+  return json({ok:true,authed:true,cars:finalCars.filter(Boolean)}); }
 async function dealerName(env,dealerId){ if(!dealerId) return "CarNimbus Test Drive Center";
   const d=await env.DB.prepare("SELECT dealership FROM dealer_leads WHERE id=?").bind(dealerId).first();
   return (d&&d.dealership)||"CarNimbus Test Drive Center"; }
@@ -966,7 +1081,7 @@ async function vdpOne(request,env){ const u=new URL(request.url); const id=+(u.s
   if(!v) return json({ok:false,error:"not_found"},404);
   // Compute the buyer's real monthly from real price when signed in with a profile.
   let a={}; const uid=await readSession(env,request);
-  if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); if(p){ try{a=JSON.parse(p.answers)||{};}catch(_){} } }
+  if(uid){ const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); if(p){ try{a=JSON.parse(p.answers)||{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){} } }
   const mo=v.price? monthlyFor(v.price,a.max_down,aprFor(a.fico),72) : v.price_mo;
   const er=await env.DB.prepare("SELECT summary,pros,cons,ideal_buyer,financing_context FROM vdp_enrichment WHERE vdp_id=?").bind(v.id).first().catch(()=>null);
   const enrich=er?{summary:er.summary,pros:JSON.parse(er.pros||"[]"),cons:JSON.parse(er.cons||"[]"),ideal_buyer:er.ideal_buyer,financing_context:er.financing_context}:null;
@@ -1023,7 +1138,7 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
   if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-  let a={}; try{ a=p?JSON.parse(p.answers||"{}"):{}; }catch(_){} const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
+  let a={}; try{ a=p?JSON.parse(p.answers||"{}"):{}; a=await decryptAnswers(a, env.PII_KEY); }catch(_){} const missing=["max_monthly","buy_method","fico","dream_car"].filter(k=>!a[k]);
   const center=await dealerName(env,v.dealer_id);
   const dream=(a.dream_car||"").trim();
   const P=carPersona(v,lang);
@@ -1192,6 +1307,7 @@ function icsFor(t){ const dt=String(t.slot).replace(/[^0-9]/g,"").slice(0,12);  
 async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2].replace(/\.ics$/,"")||"";
   const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid,p.answers FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id LEFT JOIN profiles p ON p.user_id=td.user_id WHERE td.pass_token=?").bind(tok).first();
   if(!t) return new Response("Pass not found",{status:404});
+  const viewerUid=await readSession(env,request); const owner=viewerUid&&+viewerUid===+t.user_id;
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
   const isPrint=new URL(request.url).searchParams.get("print")==="1";
   const ES=new URL(request.url).searchParams.get("lang")==="es";
@@ -1201,15 +1317,15 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   const passSlug=(t.year+"-"+t.make+"-"+t.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");
   const safePhoto=(/^\/assets\/[\w/?=.-]*$/.test(photo)&&!photo.includes(".."))?photo:"";   // dealer-controlled → allowlist, no traversal, before CSS url()
   const carTitle=escHtml(t.year+" "+t.make+" "+t.model);
-  let a={}; try{ a=JSON.parse(t.answers)||{}; }catch(_){}
+  let a={}; try{ a=JSON.parse(t.answers)||{}; a=await decryptAnswers(a, env.PII_KEY); }catch(_){}
   const APR={"800+":"6.4%","740-799":"7.1%","670-739":"9.3%","580-669":"13.5%","under 580":"17.9%"}[a.fico]||null;
   const fin=[
     t.price_mo?[T.estm,"$"+t.price_mo+"/mo"]:null,
     [T.down,a.max_down?("$"+Number(a.max_down).toLocaleString()):"$0"],
-    a.buy_method?[T.method,String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]:null,
-    APR?[T.apr,APR+" · 72 mo"]:null,
-    a.fico?[T.credit,"FICO "+a.fico]:null,
-    a.income?[T.income,"$"+String(a.income).replace(/k/g,"k").replace("under ","<")]:null
+    owner&&a.buy_method?[T.method,String(a.buy_method).charAt(0).toUpperCase()+String(a.buy_method).slice(1)]:null,
+    owner&&APR?[T.apr,APR+" · 72 mo"]:null,
+    owner&&a.fico?[T.credit,"FICO "+a.fico]:null,
+    owner&&a.income?[T.income,"$"+String(a.income).replace(/k/g,"k").replace("under ","<")]:null
   ].filter(Boolean);
   return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Drive Now Pass — ${carTitle}</title>
 <link rel="stylesheet" href="/assets/fonts/fonts.css"><link rel="stylesheet" href="/assets/styles.css"><script src="/assets/vendor/qrcodegen.js" defer></script><script src="/assets/js/pass-render.js" defer></script>
@@ -1344,8 +1460,7 @@ async function dealerCheckin(request,env,uid,dealer){
   if(["confirmed","arrived","sold"].indexOf(status)<0) return json({ok:false,error:"bad_request"},400);
   let id=+driveId||0;
   if(!id&&token){ const t=String(token).replace(/[^A-Za-z0-9]/g,"");
-    const row=t.length>=20?await env.DB.prepare("SELECT id FROM test_drives WHERE pass_token=?").bind(t).first()
-      :await env.DB.prepare("SELECT id FROM test_drives WHERE pass_token LIKE ? ORDER BY id DESC LIMIT 1").bind(t.slice(0,6)+"%").first();
+    const row=t.length>=20?await env.DB.prepare("SELECT id FROM test_drives WHERE pass_token=?").bind(t).first():null;
     if(row) id=row.id; }
   if(!id) return json({ok:false,error:"not_found"},404);
   // Ownership check: the drive's car must belong to this dealer (or be unowned/demo).
@@ -1441,9 +1556,15 @@ async function adminStats(request,env){
   const p=await env.DB.prepare("SELECT COUNT(*) c FROM profiles").first();
   const t=await env.DB.prepare("SELECT COUNT(*) c FROM test_drives").first();
   const v=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE active=1").first();
-  const dl=await env.DB.prepare("SELECT id,name,dealership,role,phone,email,created_at,client_no,status FROM dealer_leads ORDER BY id DESC LIMIT 50").all();
+  const dl=await env.DB.prepare("SELECT id,name,dealership,role,phone,email,created_at,client_no,status,base_fee,ad_slot,slot_premium FROM dealer_leads ORDER BY id DESC LIMIT 50").all();
   const cm=await env.DB.prepare("SELECT COUNT(*) c FROM comments").first();
-  return json({ok:true,waitlist:w.c,users:u.c,profiles:p.c,drives:t.c,activeCars:v.c,comments:cm.c,dealerLeads:dl.results||[]});
+  const since7d = new Date(Date.now() - 7*86400e3).toISOString();
+  const activeSessionsRow = await env.DB.prepare("SELECT COUNT(DISTINCT ip) c FROM auth_ip_log WHERE created_at > ?").bind(since7d).first().catch(()=>({c:0}));
+  const recentDrivesRow = await env.DB.prepare("SELECT COUNT(*) c FROM test_drives WHERE created_at > ?").bind(since7d).first().catch(()=>({c:0}));
+  const activeSessions = activeSessionsRow ? activeSessionsRow.c : 0;
+  const recentDrives = recentDrivesRow ? recentDrivesRow.c : 0;
+  const convRate = activeSessions > 0 ? ((recentDrives / activeSessions) * 100).toFixed(1) + "%" : "0%";
+  return json({ok:true,waitlist:w.c,users:u.c,profiles:p.c,drives:t.c,activeCars:v.c,comments:cm.c,dealerLeads:dl.results||[],activeSessions,recentDrives,convRate});
 }
 function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
@@ -1458,6 +1579,54 @@ async function residentAgent(env){
   await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,sponsored,created_at) VALUES (0,?,?,?, 'agent', 1, ?)")
     .bind(v.id,en,es,new Date().toISOString()).run().catch(()=>{});
   await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
+}
+async function syntheticNudger(env){
+  try {
+    const last=await env.DB.prepare("SELECT created_at FROM comments WHERE synthetic=1 ORDER BY id DESC LIMIT 1").first().catch(()=>null);
+    if(last && (Date.now()-Date.parse(last.created_at))<4*3600e3) return;
+    const v=await env.DB.prepare("SELECT id,year,make,model,body,price FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
+    if(!v) return;
+    const personas = ["Jane D.", "Local Driver", "SoCal Commuter", "OC Buyer", "Road Tripper", "Eco Fan"];
+    const persona = personas[Math.floor(Math.random() * personas.length)];
+    const bodyStr = String(v.body||"").toLowerCase();
+    let questions = [
+      "Does it come with a second set of keys?",
+      "Can I see the service history records?",
+      "Is the price negotiable at all?",
+      "Has this vehicle had any accidents reported?",
+      "Is this available for a test drive this weekend?"
+    ];
+    if (bodyStr.includes("sedan")) {
+      questions.push("Is this model good for daily commuting on the highway?");
+      questions.push("What kind of real-world gas mileage are you getting with this?");
+    } else if (bodyStr.includes("suv") || bodyStr.includes("truck")) {
+      questions.push("How is the trunk/cargo space with the rear seats folded?");
+      questions.push("Does this have all-wheel drive or four-wheel drive?");
+    } else if (bodyStr.includes("ev") || bodyStr.includes("hybrid")) {
+      questions.push("What is the real-world battery range on a full charge?");
+      questions.push("Does it support Level 3 DC fast charging?");
+    }
+    const question = questions[Math.floor(Math.random() * questions.length)];
+    let questionEs = question;
+    if (question.includes("keys")) questionEs = "¿Viene con un segundo juego de llaves?";
+    else if (question.includes("service history")) questionEs = "¿Puedo ver los registros del historial de servicio?";
+    else if (question.includes("negotiable")) questionEs = "¿El precio es negociable?";
+    else if (question.includes("accidents")) questionEs = "¿Ha tenido algún accidente reportado?";
+    else if (question.includes("test drive")) questionEs = "¿Está disponible para una prueba de manejo este fin de semana?";
+    else if (question.includes("commuting")) questionEs = "¿Este modelo es bueno para el trayecto diario en autopista?";
+    else if (question.includes("gas mileage")) questionEs = "¿Qué rendimiento de gasolina real tiene?";
+    else if (question.includes("cargo space")) questionEs = "¿Cómo es el espacio de carga con los asientos traseros abatidos?";
+    else if (question.includes("all-wheel")) questionEs = "¿Tiene tracción en las cuatro ruedas (AWD/4WD)?";
+    else if (question.includes("battery range")) questionEs = "¿Cuál es la autonomía real de la batería con carga completa?";
+    else if (question.includes("fast charging")) questionEs = "¿Es compatible con carga rápida de CC Nivel 3?";
+    const now = new Date().toISOString();
+    await env.DB.prepare("INSERT INTO synthetic_agent_audit (created_at, vdp_id, question, persona) VALUES (?, ?, ?, ?)")
+      .bind(now, v.id, question, persona).run();
+    await env.DB.prepare("INSERT INTO comments (user_id, vdp_id, body, body_es, zip, sponsored, synthetic, created_at, status) VALUES (0, ?, ?, ?, ?, 0, 1, ?, 'approved')")
+      .bind(v.id, question, questionEs, persona, now).run();
+  } catch(e) {
+    console.error("syntheticNudger failed:", e);
+  }
 }
 // M9: transparent trade-in estimate — residual-floored per-segment depreciation. A running car never hits ~$0,
 // and trucks/SUVs/luxury hold value better than sedans. No external API; the basis string explains the math.
@@ -1487,6 +1656,7 @@ async function me(request,env,uid){
     "SELECT td.center,td.slot,td.status,td.pass_token,td.created_at,v.id vdp_id,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.photos "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE td.user_id=? AND td.status='confirmed' ORDER BY td.id DESC LIMIT 1").bind(uid).first();
   let ans=p?JSON.parse(p.answers):null;
+  ans=await decryptAnswers(ans, env.PII_KEY);
   return json({ok:true,phone:u?u.phone:null,sid:u?u.sid:null,handle:u?u.handle:null,cid:cidFor(uid),answers:ans,avatar:p?p.avatar:null,
     trade:tradeEstimate(ans),
     drive:td?{...td,cid:cidFor(td.id),photos:JSON.parse(td.photos||"[]")}:null});
@@ -1509,12 +1679,26 @@ async function dealerLead(request,env){
 // R4: Ask the Feed — ONE private CarNimbus AI research reply per ask (the persona panel was retired in Wave R).
 async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catch(()=>({})); const es=new URL(request.url).searchParams.get("lang")==="es";
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first(); if(!v) return json({ok:false,error:"not_found"},404);
-  const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}}catch(_){}
+  const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
   const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
-  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,created_at) VALUES (?,?,?,?,?,?)")
-    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,`Pensando en el ${v.year} ${v.make} ${v.model} — ¿opiniones honestas?`,String(a.zip||""),new Date().toISOString()).run();
-  const parentId=post&&post.meta?post.meta.last_row_id:0;
   const carStr=vdpText(v,sp), me=profileText(a);
+  let cardJson = null;
+  const cardSys = `You are CarNimbus AI. Given a vehicle and a buyer profile, return a structured evaluation JSON only:
+{"verdict":"Yes/No/Only if","pros":["..."],"cons":["..."],"score":85}
+Base the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliability/lifestyle fit. No markdown, no extra text.`;
+  const cardRaw = await llm(env, [{role:"system",content:cardSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
+  if (cardRaw) {
+    try {
+      const m = String(cardRaw).match(/\{[\s\S]*\}/);
+      if (m) {
+        JSON.parse(m[0]);
+        cardJson = m[0];
+      }
+    } catch(_) {}
+  }
+  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,card,status,created_at) VALUES (?,?,?,?,?,?,?,?)")
+    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,`Pensando en el ${v.year} ${v.make} ${v.model} — ¿opiniones honestas?`,String(a.zip||""),cardJson,"approved",new Date().toISOString()).run();
+  const parentId=post&&post.meta?post.meta.last_row_id:0;
   // R3/R4: ONE CarNimbus AI research agent, replying PRIVATELY to the asker (humans reply publicly in the thread).
   const rSys=es?`Eres CarNimbus AI, el agente de investigación imparcial del comprador. Respondes SOLO a este comprador, en privado. Formato: "Veredicto: Sí/No/Solo si — " + por qué (valor de mercado estilo KBB, fiabilidad/problemas conocidos de este año/marca/modelo exacto) + un detalle específico de SU perfil (pasatiempos, estilo de vida, presupuesto). 3-4 frases, específico, denso en valor, sin relleno, sin markdown. Termina EXACTAMENTE con "Score: NN/100" — tu puntuación de ajuste para ESTE comprador (presupuesto 40%, fiabilidad 30%, estilo de vida 30%).`
     :`You are CarNimbus AI, the buyer's unbiased research agent. You are replying PRIVATELY to this buyer only. Format: "Verdict: Yes/No/Only if — " + why (KBB-style market value, known reliability/common issues for this exact year/make/model) + one detail tied to THEIR profile (hobbies, lifestyle, budget). 3-4 sentences, specific, value-dense, zero fluff, no markdown. End with EXACTLY "Score: NN/100" — your fit score for THIS buyer (weighting: budget fit 40%, reliability 30%, lifestyle fit 30%).`;
@@ -1523,36 +1707,79 @@ async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catc
   if(rBody) await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,parent_id,visible_to,created_at) VALUES (0,?,?,?,?,?,?,?)")
     .bind(vdpId, "CarNimbus AI — "+rBody, es?("CarNimbus AI — "+rBody):null, "agent", parentId, uid, new Date().toISOString()).run().catch(()=>{});
   await logEvent(env,{action:"social.asked",vehicle_id:vdpId});
-  return json({ok:true,postId:parentId}); }
+  return json({ok:true,postId:parentId});}
 async function comments(request,env){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
   if(request.method==="POST"){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
     const {body,zip}=await request.json().catch(()=>({})); if(!body||String(body).length>500) return json({ok:false,error:"bad_request"},400);
     const n=await env.DB.prepare("SELECT COUNT(*) c FROM comments WHERE user_id=? AND created_at>?").bind(uid,new Date(Date.now()-3600e3).toISOString()).first();
     if(n.c>=10) return json({ok:false,error:"rate_limited"},429);
-    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,created_at) VALUES (?,?,?,?,?)").bind(uid,vdpId,String(body),String(zip||""),new Date().toISOString()).run();
-    // Feed reads human — no auto agent-reply on keyword (removed Wave B). Historical agent posts still render.
+    let cardJson = null;
+    if (String(body).trim().endsWith("?")) {
+      const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
+      if (v) {
+        const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
+        const carStr=vdpText(v,sp);
+        const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
+        let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
+        const me=profileText(a);
+        const sys = `You are CarNimbus AI. Given a vehicle and a buyer profile, return a structured evaluation JSON only:
+{"verdict":"Yes/No/Only if","pros":["..."],"cons":["..."],"score":85}
+Base the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliability/lifestyle fit. No markdown, no extra text.`;
+        const raw = await llm(env, [{role:"system",content:sys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
+        if (raw) {
+          try {
+            const m = String(raw).match(/\{[\s\S]*\}/);
+            if (m) {
+              JSON.parse(m[0]);
+              cardJson = m[0];
+            }
+          } catch(_) {}
+        }
+      }
+    }
+    let status = "approved";
+    const modSys = `You are a comment moderator. Classify the user comment. If it contains dealer solicitation (selling a car, advertising a dealership, contact info) or offensive/inappropriate content, return 'flagged'. Otherwise, return 'approved'. Return exactly one word: flagged or approved.`;
+    const modRaw = await llm(env, [{role:"system",content:modSys},{role:"user",content:String(body)}]).catch(()=>"approved");
+    if (String(modRaw).trim().toLowerCase() === "flagged") {
+      status = "flagged";
+    }
+    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,card,status,created_at) VALUES (?,?,?,?,?,?,?)").bind(uid,vdpId,String(body),String(zip||""),cardJson,status,new Date().toISOString()).run();
     return json({ok:true}); }
   const meUid=await readSession(env,request);                            // optional — caller identity (votes + private replies)
-  if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,created_at FROM comments WHERE vdp_id=? AND (visible_to=0 OR visible_to=?) ORDER BY id DESC LIMIT 50").bind(vdpId,meUid||0).all().catch(()=>({results:[]}));
-    return json({ok:true,comments:rows.results||[]}); }
+  if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,card,created_at FROM comments WHERE vdp_id=? AND status='approved' AND (visible_to=0 OR visible_to=?) ORDER BY id DESC LIMIT 50").bind(vdpId,meUid||0).all().catch(()=>({results:[]}));
+    const result = (rows.results||[]).map(r => ({
+      ...r,
+      card: r.card ? JSON.parse(r.card) : null
+    }));
+    return json({ok:true,comments:result}); }
   const lat=parseFloat(curl.searchParams.get("lat")), lng=parseFloat(curl.searchParams.get("lng"));
   const radius=parseFloat(curl.searchParams.get("radius")||"40"); let geo=Number.isFinite(lat)&&Number.isFinite(lng);
   const lang=curl.searchParams.get("lang")==="es"?"es":"en";
   const geoCols=geo?"u.lat,u.lng,":"";                                   // only touch lat/lng columns when actually ranking
   let rows=await env.DB.prepare(
-    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.parent_id,c.visible_to,c.upvotes,c.downvotes,c.images,c.sponsored,u.handle,json_extract(p.answers,'$.full_name') full_name,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
+    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.parent_id,c.visible_to,c.upvotes,c.downvotes,c.images,c.sponsored,c.card,c.synthetic,u.handle,json_extract(p.answers,'$.full_name') full_name,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
     "LEFT JOIN post_votes pv ON pv.comment_id=c.id AND pv.user_id=? "+
-    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 WHERE (c.visible_to=0 OR c.visible_to=?) ORDER BY c.sponsored DESC, c.id DESC LIMIT 300").bind(meUid||0,meUid||0).all().catch(async()=>{
+    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 WHERE c.status='approved' AND (c.visible_to=0 OR c.visible_to=?) ORDER BY c.sponsored DESC, c.id DESC LIMIT 300").bind(meUid||0,meUid||0).all().catch(async()=>{
       geo=false;                                                          // votes/lat/body_es columns not migrated yet → fall back to recency, no votes
-      return env.DB.prepare("SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 ORDER BY c.id DESC LIMIT 300").all(); });
+      return env.DB.prepare("SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,c.card,c.synthetic,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 WHERE c.status='approved' ORDER BY c.id DESC LIMIT 300").all(); });
   // Buyer-true monthlies on car chips: compute from the real price + the caller's numbers (anon = honest defaults).
-  let mans={}; if(meUid){ const mp=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(meUid).first(); mans=mp?JSON.parse(mp.answers||"{}"):{}; }
+  let mans={}; if(meUid){ const mp=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(meUid).first(); mans=mp?JSON.parse(mp.answers||"{}"):{}; mans=await decryptAnswers(mans, env.PII_KEY); }
   const mapr=aprFor(mans.fico);
-  let out=(rows.results||[]).map(r=>({...r,
-    body:(lang==="es"&&r.zip==="agent"&&r.body_es)?r.body_es:r.body,      // agent posts speak the buyer's language; rider posts stay as written
-    price_mo:r.price?monthlyFor(r.price,meUid?mans.max_down:0,mapr,72):r.price_mo,
-    photos:r.photos?JSON.parse(r.photos):[],images:r.images?JSON.parse(r.images):[]}));
+  let out=(rows.results||[]).map(r=>{
+    let handle = r.handle;
+    let full_name = r.full_name;
+    if (r.synthetic === 1) {
+      handle = r.zip;
+      full_name = r.zip;
+    }
+    return {...r,
+      handle,
+      full_name,
+      body:(lang==="es"&&r.zip==="agent"&&r.body_es)?r.body_es:r.body,      // agent posts speak the buyer's language; rider posts stay as written
+      price_mo:r.price?monthlyFor(r.price,meUid?mans.max_down:0,mapr,72):r.price_mo,
+      card:r.card?JSON.parse(r.card):null,
+      photos:r.photos?JSON.parse(r.photos):[],images:r.images?JSON.parse(r.images):[]}; });
   if(geo){ const R=3959, rad=x=>x*Math.PI/180;
     out=out.map(r=>{ if(r.zip==="agent") return {...r,_d:-1};                 // agent/AI posts stay pinned
         if(r.lat==null||r.lng==null) return {...r,_d:1e9};

@@ -3,10 +3,32 @@ document.addEventListener("DOMContentLoaded",function(){
   function esc(s){return String(s==null?"":s).replace(/[<&>"]/g,function(c){return {"<":"&lt;","&":"&amp;",">":"&gt;","\"":"&quot;"}[c];});}
   function slug(c){return String(c.year+"-"+c.make+"-"+c.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");}
   var state={buy_method:"",max_down:"0",max_monthly:""}, step=1;
-  function show(n){ step=n;
-    ["s1","s2","s3","s4"].forEach(function(id,i){ var el=$(id); if(el)el.classList.toggle("on",i+1===n); });
-    var dots=$("dots").children; for(var i=0;i<dots.length;i++) dots[i].classList.toggle("on",i<n);
+  
+  function show(n){
+    step=n;
+    var el=$("s"+n);
+    if(el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
+
+  // IntersectionObserver for active step indicator
+  if (window.IntersectionObserver) {
+    var obs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          var n = parseInt(entry.target.id.slice(1), 10);
+          if (Number.isFinite(n)) {
+            step = n;
+            var dots = $("dots").children;
+            for (var i = 0; i < dots.length; i++) {
+              dots[i].classList.toggle("on", i < n);
+            }
+          }
+        }
+      });
+    }, { threshold: 0.5 });
+    document.querySelectorAll(".step").forEach(function(el) { obs.observe(el); });
+  }
+
   // step 1 + 2: chip selects auto-advance
   document.querySelectorAll('[data-k]').forEach(function(b){ b.addEventListener("click",function(){
     var k=b.dataset.k; state[k]=b.dataset.v;
@@ -17,11 +39,15 @@ document.addEventListener("DOMContentLoaded",function(){
   $("mo").addEventListener("keydown",function(e){ if(e.key==="Enter") $("s3-go").click(); });
   $("s3-go").addEventListener("click",function(){
     state.max_monthly=$("mo").value.replace(/[^0-9]/g,""); if(!state.max_monthly){ $("mo").focus(); return; }
-    show(4); load();
+    load();
+    setTimeout(function(){show(4);},100);
   });
   $("s4-back").addEventListener("click",function(){ show(3); });
   function load(){
     $("results").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Finding your cars…</div>';
+    if (window.NimbusTelemetry) {
+      window.NimbusTelemetry.log("discovery.surf", { location: state.max_down, source: "onboarding-wizard" });
+    }
     fetch("/api/search?monthly="+state.max_monthly+"&down="+state.max_down).then(function(r){return r.json();}).then(function(d){
       var cars=(d.cars||[]);
       $("s4-sub").textContent=cars.length? (cars.length+" cars fit $"+state.max_monthly+"/mo — pick one to schedule a drive.") : "";

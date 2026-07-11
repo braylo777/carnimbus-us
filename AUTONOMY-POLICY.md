@@ -51,6 +51,7 @@ figure, an unauthorized outbound message) is a **hard demotion** — the agent d
 - **Metrics come from the event stream.** Override rate, volume, and accuracy are computed from `ai.*`
   events (`EVENT-TAXONOMY.md`) plus human veto signals — the same append-only log everything else reads.
 - **Demotion is automatic on breach.** The gate is enforced in policy, not left to judgment.
+- **Synthetic Compliance Auditing.** Synthetic agents (nudgers) are permitted for feed stimulation but must write logs to `synthetic_agent_audit`. Every synthetic comment must carry the `synthetic = 1` flag and represent its persona (e.g. "Jane D.", "Local Driver") to comply with FTC/UDAP guidelines.
 
 ## Related docs
 `AGENT-REGISTRY.md` · `MODEL-REGISTRY.md` · `EVENT-TAXONOMY.md` · `MASTERPLAN.md` (Phase 3).

@@ -9,16 +9,15 @@
 
 ---
 
-## The six Phase-1 agents
+## The active 5-node agent swarm
 
-| Agent | KPI | Autonomy | Inputs | Outputs | Events emitted |
-|-------|-----|----------|--------|---------|----------------|
-| **Inventory Intelligence** | % active VDPs enriched; enrichment CTR uplift | **L2** — writes enrichment, human can veto | Active `vdps`, Vectorize similarity, `llm()` | VDP summary, pros/cons, ideal-buyer, financing context | `ai.recommendation_shown` |
-| **Qualification** | Qualification completion rate; anon→CID stitch rate | **L1** — soft-pull with buyer consent | OTP session, profile inputs, FICO band (`aprFor`) | CID mint, financial band, affordability envelope | `finance.started_qualification`, `finance.completed_qualification` |
-| **Scheduling** | Test-drive booking rate; show rate | **L1** — books on buyer confirm | Buyer intent, dealer calendar, match list | Test-drive booking, Drive Now pass | `action.scheduled_test_drive`, `action.completed_test_drive` |
-| **Concierge** | Conversation→match→book conversion; turn depth | **L2** — replies autonomously, escalates edge cases | Session, profile, chat history (cross-session recall), matches | Chat replies, proactive openers (price drop / new match) | `ai.asked_nimbus`, `ai.conversation_turn`, `ai.recommendation_clicked` |
-| **Growth Analytics** | Weekly funnel accuracy; roll-up freshness | **L3** — read-only reporting, no user-facing action | Full event stream, `matches`, `test_drives` | Weekly funnel roll-up JSON (events→drives→sales), cohort/retention | `ai.recommendation_shown` (report-ready marker) |
-| **Content/SEO** | Indexed `/cars/<slug>` pages; organic sessions | **L2** — publishes pages, human can unpublish | Active `vdps`, enrichment, schema templates | Server-rendered VDP pages, schema.org Vehicle+FAQ, sitemap entries | `ai.recommendation_shown` |
+| Swarm Agent | Objective & Responsibilities | Host Gateway | Target Databases |
+|-------------|------------------------------|--------------|------------------|
+| **Recommend** | Matches prospective buyers with inventory based on twin profiles. | `ai.carnimbus.com` | Inventory DB (Hetzner) |
+| **Qualify**   | Handles FICO-band pre-qualification and soft checks. | `ai.carnimbus.com` | Profile DB (Hetzner) |
+| **Schedule**  | Books test drives at neighboring showrooms. | `ai.carnimbus.com` | Profile DB & Dealer DB |
+| **Notify**    | Issues SMS test-drive alerts and transaction receipts. | `ai.carnimbus.com` | Profile DB |
+| **Attribute** | Computes lead generation ROI and dealer ad-tier slots. | `ai.carnimbus.com` | Profile DB & Inventory DB |
 
 ---
 
