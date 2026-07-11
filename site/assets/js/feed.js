@@ -65,7 +65,14 @@ document.addEventListener("DOMContentLoaded",function(){
       // S4: Nimbus Score — the research agent ends with "Score: NN/100"; surface it as a chip in the byline.
       var sc=agent?body.match(/Score:\s*(\d{1,3})\s*\/\s*100\.?\s*$/):null; if(sc){ body=body.replace(/Score:\s*\d{1,3}\s*\/\s*100\.?\s*$/,"").trim(); }
       if(metas[idx])metas[idx].textContent=name+" · "+rel(c.created_at)+(sc?" · ⚡ "+Math.min(100,+sc[1])+"/100 fit":"")+(c.visible_to?" · 🔒 Only you":"");
-      if(bodies[idx]) bodies[idx].textContent=body; });
+      if(bodies[idx]){ bodies[idx].textContent=body;
+        // C2: structured verdict card (verdict + pros/cons + fit score) rendered as ✓/✗ lists when present.
+        if(c.card){ try{ var cd=JSON.parse(c.card); if(cd&&(cd.pros||cd.cons||cd.verdict)){
+          var mk=function(arr,sym,col){return (arr||[]).slice(0,3).map(function(x){return '<div style="font:600 11px Manrope;color:'+col+'">'+sym+' '+esc(String(x))+'</div>';}).join('');};
+          var vd=cd.verdict?'<div style="font:700 11px Manrope;color:#18C8FF;margin-bottom:4px">'+esc(String(cd.verdict))+(cd.score!=null?' · ⚡ '+Math.min(100,+cd.score||0)+'/100 fit':'')+'</div>':'';
+          var box=document.createElement("div"); box.style.cssText="margin-top:8px;background:rgba(6,16,40,.5);border:1px solid rgba(24,200,255,.16);border-radius:10px;padding:9px";
+          box.innerHTML=vd+mk(cd.pros,"✓","#5ee6a8")+mk(cd.cons,"✗","#ff9f9f");
+          bodies[idx].appendChild(box); } }catch(_){}} } });
   }
   function load(){fetch(feedUrl()).then(function(r){return r.json();}).then(function(d){
     var cs=d.comments||[];

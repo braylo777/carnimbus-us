@@ -1124,6 +1124,7 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
     .bind(u&&u.phone,"drive-confirm",smsBody,new Date(Date.now()+864e5).toISOString(),"none",new Date().toISOString()).run().catch(()=>{});   // +24h reminder, not duplicate
   if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
     if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${slot}. Reply here to text the buyer. Console: dealer.carnimbus.com`).catch(()=>{}); }
+  await logEvent(env,{action:"action.appointment_set",vehicle_id:vdpId,source:"drive-now"});   // E1: surf→appointment terminal event
   return json({ok:true,pass:"/pass/"+tok,center:center,slot:slot}); }
 // O4: buyer cancels a drive — clears it on their side (status=cancelled, kept for records) AND frees the dealer slot.
 async function driveCancel(request,env,uid){ const {token}=await request.json().catch(()=>({}));
@@ -1261,6 +1262,7 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
       if(oldDealer) await env.DB.prepare("UPDATE dealer_slots SET taken=0 WHERE dealer_id=? AND starts_at=?").bind(oldDealer,existing.slot).run().catch(()=>{}); }
     else await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
       .bind(uid,vdpId,b.center,b.slot,"confirmed",tok,new Date().toISOString()).run();
+    await logEvent(env,{action:"action.appointment_set",vehicle_id:vdpId,source:"car-chat"});   // E1: surf→appointment terminal event
     const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
     const chatSms=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`;
     await sendSMS(env,u.phone,chatSms).catch(()=>{});
