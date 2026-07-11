@@ -39,11 +39,13 @@ document.addEventListener("DOMContentLoaded",function(){
       // L4: Garage — current car + a specific trade-in estimate (replaces the old range row).
       if(a.current_year&&a.current_make){ $("y-garage").style.display="block";
         $("y-car").textContent=a.current_year+" "+a.current_make+" "+(a.current_model||"")+(a.current_color?(" · "+a.current_color):"")+(a.current_miles?(" · "+Number(String(a.current_miles).replace(/\D/g,"")||0).toLocaleString()+" mi"):"");
-        // M9: mock car image chosen by body/segment (self-hosted — CSP forbids external hosts).
+        // U6: prefer the AI-generated per-vehicle image; fall back to the 6-bucket stock photo if generation is
+        // pending/unavailable — never a broken <img> (the old hardcoded white-Grand-Cherokee path 404'd with no fallback).
         var img=$("y-img"); if(img){ var seg=segForCar(a.current_make,a.current_model);
-          var mkmd=(a.current_make+" "+(a.current_model||"")).toLowerCase(), src="/assets/img/garage/"+seg+".webp";
-          if(/grand cherokee/.test(mkmd) && /white/i.test(a.current_color||"")) src="/assets/img/garage/grand-cherokee-white.webp";
-          img.onload=function(){img.style.display="block";}; img.onerror=function(){img.style.display="none";}; img.src=src; }
+          var stockSrc="/assets/img/garage/"+seg+".webp", src=a.garage_img||stockSrc;
+          img.onload=function(){img.style.display="block";};
+          img.onerror=function(){ if(img.src.indexOf(stockSrc)<0){ img.src=stockSrc; } else { img.style.display="none"; } };
+          img.src=src; }
         if(me.trade){ $("y-trade").innerHTML='<span>Est. trade-in</span> $'+me.trade.point.toLocaleString()+"  ($"+me.trade.low.toLocaleString()+"–$"+me.trade.high.toLocaleString()+")";
           $("y-trade-basis").textContent=me.trade.basis; } }
       document.getElementById("y-summary").style.display="block";

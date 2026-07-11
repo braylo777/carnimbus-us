@@ -598,6 +598,22 @@ async function authVerify(request,env){ let {phone,code}=await request.json().ca
     await env.DB.prepare("UPDATE otp SET tries=tries+1 WHERE phone=?").bind(phone).run();
     return json({ok:false,error:"otp_wrong"},401); }
   return issueUserSession(env,phone,request); }
+// U6: AI-generated garage vehicle image via the existing Workers AI binding — no new vendor/secret.
+// Idempotent: only regenerates when make/model/color changed since the last generation (keyed, not on every save).
+async function garageImageFor(env,answers,prevAnswers){
+  if(!answers.current_make||!answers.current_model) return null;
+  const key=[answers.current_year,answers.current_make,answers.current_model,answers.current_color].filter(Boolean).join("|").toLowerCase();
+  if(prevAnswers&&prevAnswers.garage_img_key===key&&prevAnswers.garage_img) return {img:prevAnswers.garage_img,key};
+  try{
+    const prompt=`professional automotive listing photo of a ${answers.current_color||""} ${answers.current_year||""} ${answers.current_make} ${answers.current_model}, three-quarter front view, studio lighting, clean background, photorealistic`.replace(/\s+/g," ").trim();
+    // U6 fix (verifier MODERATE): race against a timeout so a slow/hanging image-gen call can never stall an
+    // unrelated profile save (e.g. an income update that happens to also carry unchanged garage fields).
+    const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error("garage_image_timeout")),4000));
+    const r=await Promise.race([env.AI.run("@cf/black-forest-labs/flux-1-schnell",{prompt,steps:4}),timeout]);
+    const b64=r&&r.image; if(!b64) return null;
+    return {img:"data:image/jpeg;base64,"+b64,key};
+  }catch(_){ return null; }
+}
 async function saveProfile(request,env,uid){ const {answers}=await request.json().catch(()=>({}));
   if(!answers||typeof answers!=="object") return json({ok:false,error:"bad_request"},400);
   const encryptedAnswers = { ...answers };
@@ -607,6 +623,10 @@ async function saveProfile(request,env,uid){ const {answers}=await request.json(
   if (answers.income && !answers.income.startsWith("enc:")) {
     encryptedAnswers.income = await encryptPII(answers.income, env.PII_KEY);
   }
+  const prevRow=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first().catch(()=>null);
+  let prevAnswers={}; if(prevRow){ try{ prevAnswers=JSON.parse(prevRow.answers||"{}")||{}; }catch(_){} }
+  const gi=await garageImageFor(env,answers,prevAnswers);
+  if(gi){ encryptedAnswers.garage_img=gi.img; encryptedAnswers.garage_img_key=gi.key; }
   await env.DB.prepare("INSERT INTO profiles (user_id,answers,embedding_synced,updated_at) VALUES (?,?,0,?) "+
     "ON CONFLICT(user_id) DO UPDATE SET answers=excluded.answers, embedding_synced=0, updated_at=excluded.updated_at")
     .bind(uid,JSON.stringify(encryptedAnswers),new Date().toISOString()).run();
@@ -976,6 +996,11 @@ async function computeMatches(env,uid){ try{
   { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 100").all();
     for(const r of (all.results||[])){ if(!seen.has(r.id)){ seen.add(r.id); ranked.push({id:r.id,vec:null}); } } }
   const prio=new Set(); { const pr=await env.DB.prepare("SELECT id FROM dealer_leads WHERE tier='priority'").all().catch(()=>({results:[]})); for(const r of (pr.results||[])) prio.add(r.id); }  // K3: paid-placement dealers
+  // U7 (feed-scoring v2): batch the vote-delta lookup for every candidate in ONE query — avoids an N+1 D1 round-trip
+  // per candidate inside the scoring loop below (up to ~150 candidates would otherwise mean ~150 sequential awaits).
+  const voteMap={}; { const ids=ranked.map(r=>r.id); if(ids.length){
+    const vq=await env.DB.prepare(`SELECT vdp_id,AVG(upvotes-downvotes) d FROM comments WHERE vdp_id IN (${ids.map(()=>"?").join(",")}) AND status='approved' AND sponsored=0 GROUP BY vdp_id`).bind(...ids).all().catch(()=>({results:[]}));
+    for(const row of (vq.results||[])) voteMap[row.vdp_id]=row.d; } }
   const scored=[];
   for(const r of ranked){ const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(r.id).first(); if(!v) continue;
     const mo=v.price? monthlyFor(v.price,ans.max_down,apr,72) : (Number.isFinite(v.price_mo)?v.price_mo:null);
@@ -986,7 +1011,11 @@ async function computeMatches(env,uid){ try{
     const savedBoost = (sig.saved||[]).includes(v.id) ? 1 : 0.7;
     const base = r.vec!=null ? r.vec : 0.5;
     const sponsorBoost = prio.has(v.dealer_id) ? 0.08 : 0;   // K3: additive, bounded — priority, not takeover
-    const match=Math.max(0,Math.min(99,Math.round((0.6*base+0.4*(0.5*bodyFit+0.3*priceFit+0.2*savedBoost)+sponsorBoost)*100)));
+    // U7 (feed-scoring v2): a small, bounded nudge from the community's own vote signal on this car's public posts —
+    // never overwhelms the model's own score (capped at ±0.03, i.e. ±3 of the final 0-99).
+    const vd=voteMap[v.id];
+    const voteBoost = vd!=null ? Math.max(-0.03,Math.min(0.03,vd*0.01)) : 0;
+    const match=Math.max(0,Math.min(99,Math.round((0.6*base+0.4*(0.5*bodyFit+0.3*priceFit+0.2*savedBoost)+sponsorBoost+voteBoost)*100)));
     scored.push({v,score:match}); }
   const sponsoredDealers = {};
   try {
@@ -1042,13 +1071,16 @@ async function matchesList(request,env,uid){
   let sig={}; if(sigRow){ try{ sig=JSON.parse(sigRow.signals)||{}; }catch(_){} }
   const es=lang==="es";
   const budget=parseInt(ans.max_monthly,10)||0;
+  // U7: surface the private Ask-the-Feed verdict score (feedAsk's structured card) on the match card, when the buyer has one.
+  const cardRows=await env.DB.prepare("SELECT vdp_id,card FROM comments WHERE user_id=0 AND visible_to=? AND card IS NOT NULL ORDER BY id DESC").bind(uid).all().catch(()=>({results:[]}));
+  const fitScores={}; for(const r of (cardRows.results||[])){ if(fitScores[r.vdp_id]!=null) continue; try{ const c=JSON.parse(r.card); if(c&&c.score!=null) fitScores[r.vdp_id]=Math.min(100,+c.score||0); }catch(_){} }
   const cars=(rows.results||[]).map(v=>{ const mo=v.price? monthlyFor(v.price,ans.max_down,apr,72) : v.price_mo;
     if(budget){ if(v.price){ if(mo>budget) return null; } else if(mo!=null && mo>budget*1.15) return null; }   // P2: reactive — drop over-budget on read
     const sigwhy=[];
     if(sig.top_body && String(v.body||"").toLowerCase()===sig.top_body) sigwhy.push(es?"Tu carrocería favorita":"Your go-to body style");
     if(sig.click_price_lo!=null && mo!=null && mo>=sig.click_price_lo && mo<=sig.click_price_hi) sigwhy.push(es?"En tu rango de precio":"In your click range");
     if((sig.saved||[]).includes(v.id)) sigwhy.push(es?"Sigues volviendo a este":"You keep coming back to this");
-    return {...feedCar(v,v.score,ans,lang,mo),created_at:v.created_at,status:v.status,dealer_id:v.dealer_id,sigwhy}; }).filter(Boolean);
+    return {...feedCar(v,v.score,ans,lang,mo),created_at:v.created_at,status:v.status,dealer_id:v.dealer_id,sigwhy,fitScore:fitScores[v.id]!=null?fitScores[v.id]:null}; }).filter(Boolean);
   const sponsoredDealers = {};
   try {
     const sp = await env.DB.prepare("SELECT id, ad_slot FROM dealer_leads WHERE status='active' AND ad_slot BETWEEN 1 AND 3").all();
@@ -1147,9 +1179,10 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
   const today=new Date().toISOString().slice(0,10);
   // One active test drive per buyer, ANY car — a new booking moves the existing one (never stacks).
   // Future-only: a past/stale confirmed drive must never surface as a phantom "you already have a drive booked".
-  let existing=await env.DB.prepare("SELECT id,slot,vdp_id,pass_token FROM test_drives WHERE user_id=? AND status='confirmed' ORDER BY id DESC LIMIT 1").bind(uid).first();
+  let existing=await env.DB.prepare("SELECT id,slot,vdp_id,pass_token FROM test_drives WHERE user_id=? AND status='confirmed' AND slot>=? ORDER BY id DESC LIMIT 1").bind(uid,laNow()).first();
   const sameCar=!!(existing&&existing.vdp_id===vdpId);
   let existingCar=existing&&!sameCar?await env.DB.prepare("SELECT year,make,model,dealer_id FROM vdps WHERE id=?").bind(existing.vdp_id).first():null;
+  const drove=await env.DB.prepare("SELECT created_at FROM test_drives WHERE user_id=? AND vdp_id=? AND status IN ('arrived','sold') ORDER BY id DESC LIMIT 1").bind(uid,vdpId).first();
   const aprBase=aprFor(a.fico), ltvR=v.price?(+a.max_down||0)/v.price:0;
   const apr=Math.max(3.9,+(aprBase-(ltvR>=0.2?0.8:ltvR>=0.1?0.4:0)).toFixed(1));   // R12: bigger down = better rate
   const mo=v.price? monthlyFor(v.price,a.max_down,apr,72) : v.price_mo;   // buyer's real numbers for this car
@@ -1191,6 +1224,8 @@ async function carChat(request,env,uid){ const {vdpId,messages,lang}=await reque
 MY VOICE: ${P.trait}. My personal quirk: ${styleSeed} EVERY reply weaves in ONE concrete detail that is uniquely mine (my color, engine, a feature, my history) — never generic. I NEVER reuse stock phrasings ("Anything else you want to know before I lock it in?", "shall we stick with the original time") — I say it fresh, in my voice, every time. Personality never overrides the accuracy gate.
 ${ES?"LANGUAGE: reply ONLY in neutral Latin-American Spanish; keep every number/spec/price EXACTLY as in my truth core.\n":""}MY TRUTH CORE — the only facts I may state about myself: ${truth}. My home: ${center} (LA Car Guy), 424-398-8611. My monthly for THIS buyer is $${mo}/mo — quote ONLY this number, never any other.
 ACCURACY GATE: never state a spec, number, price, or APR that isn't in my truth core or my FINANCING FLEX table. If I don't have it, I say it'll be confirmed at the dealer and keep steering toward the drive — I do NOT stall on it.
+DRIVE HISTORY: ${drove?`they already drove me on ${drove.created_at.slice(0,10)} — I may reference that naturally (e.g. "since you've already felt me on the road...").`:`they have NEVER driven me — I NEVER imply or reference a prior test drive, "another shot," or "the last time you drove me." This is our first time.`}
+${(a.hobbies||[]).length?`THEIR INTERESTS: ${a.hobbies.join(", ")} — I can reference this naturally, once, if it genuinely fits (never forced, never every reply; personality never overrides the accuracy gate).`:""}
 NEVER fake a close: I do NOT say "see you [day]" or imply a booking until the buyer has picked a specific offered time AND I've emitted <BOOK>. Before offering times I take 1-2 turns to learn what they need and answer their questions warmly.
 FORBIDDEN: I NEVER say "let me escalate to a representative" or hand off to a human; I never invent a downside; I never manufacture urgency or scarcity. There are no buttons — everything happens right here in chat.
 HOW I CLOSE — talk like a real person texting a friend, ONE step per reply. Use real openings only; NEVER invent a time. Do NOT name the dealer up front — mention who they'll meet only at the very end.
@@ -1307,7 +1342,7 @@ function icsFor(t){ const dt=String(t.slot).replace(/[^0-9]/g,"").slice(0,12);  
   const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//EN","BEGIN:VEVENT","UID:"+t.pass_token+"@carnimbus.com","DTSTAMP:"+start,"DTSTART:"+start,"DTEND:"+end,"SUMMARY:CarNimbus test drive — "+t.year+" "+t.make+" "+t.model,"LOCATION:"+(t.center||"Porsche South Bay"),"DESCRIPTION:Drive Now pass carnimbus.com/pass/"+t.pass_token,"END:VEVENT","END:VCALENDAR"].join("\r\n");
   return new Response(ics,{headers:{"content-type":"text/calendar; charset=utf-8","content-disposition":'attachment; filename="carnimbus-drive.ics"'}}); }
 async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2].replace(/\.ics$/,"")||"";
-  const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid,p.answers FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id LEFT JOIN profiles p ON p.user_id=td.user_id WHERE td.pass_token=?").bind(tok).first();
+  const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid,p.answers,s.mileage_exact,s.drivetrain_detail,s.engine,s.horsepower,s.safety_features_json,s.tech_features_json,s.comfort_features_json FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id LEFT JOIN profiles p ON p.user_id=td.user_id LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE td.pass_token=?").bind(tok).first();
   if(!t) return new Response("Pass not found",{status:404});
   const viewerUid=await readSession(env,request); const owner=viewerUid&&+viewerUid===+t.user_id;
   if(new URL(request.url).pathname.endsWith(".ics")) return icsFor(t);
@@ -1315,7 +1350,13 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   const ES=new URL(request.url).searchParams.get("lang")==="es";
   const T=ES?{pass:"PASE DRIVE NOW · SEMINUEVO CERTIFICADO",when:"Cuándo",status:"Estado",miles:"Millas",drive:"Tracción",numbers:"Tus números · listos antes de llegar",estm:"Est. mensual",down:"Enganche",method:"Método",apr:"TAE est.",credit:"Rango de crédito",income:"Rango de ingreso",disc:"Estimaciones de tu consulta suave — términos finales al firmar. 0 impacto en crédito.",track:"CID · seguimiento",code:"Código de check-in",scan:"Escanea en "+(t.center||"tu concesionario")+" para registrarte.",save:"Guardar / Imprimir PDF",resched:"Reprogramar",cancel:"Cancelar",cancelled:"Cancelada",cancelConfirm:"¿Cancelar este test drive? Se liberará tu lugar.",tag:"El superagente de IA para comprar autos"}
     :{pass:"DRIVE NOW PASS · CERTIFIED PRE-OWNED",when:"When",status:"Status",miles:"Miles",drive:"Drivetrain",numbers:"Your numbers · pre-set before you arrive",estm:"Est. monthly",down:"Down payment",method:"Method",apr:"Est. APR",credit:"Credit range",income:"Income range",disc:"Estimates from your soft-pull profile — final terms confirmed at signing. 0 credit impact.",track:"CID · tracking",code:"Check-in code",scan:"Scan at "+(t.center||"your dealership")+" to check in.",save:"Save / Print PDF",resched:"Reschedule",cancel:"Cancel",cancelled:"Cancelled",cancelConfirm:"Cancel this test drive? This frees your slot.",tag:"The AI car-buying superagent"};
-  const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||""), feats=JSON.parse(t.features||"[]");
+  const cid=cidFor(t.id), photo=(JSON.parse(t.photos||"[]")[0]||"");
+  // U5: prefer vdp_specs v2 detail (mileage_exact, drivetrain_detail, grouped feature JSON) over the coarser vdps fields.
+  const parseJ=s=>{ try{ return JSON.parse(s||"[]")||[]; }catch(_){ return []; } };
+  const feats=[...parseJ(t.safety_features_json).slice(0,2),...parseJ(t.tech_features_json).slice(0,2),...parseJ(t.comfort_features_json).slice(0,2)];
+  if(!feats.length) feats.push(...parseJ(t.features));
+  const milesLabel=t.mileage_exact!=null?Number(t.mileage_exact).toLocaleString():(t.miles||"—");
+  const driveLabel=t.drivetrain_detail||t.drivetrain||"—";
   const passSlug=(t.year+"-"+t.make+"-"+t.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");
   const safePhoto=(/^\/assets\/[\w/?=.-]*$/.test(photo)&&!photo.includes(".."))?photo:"";   // dealer-controlled → allowlist, no traversal, before CSS url()
   const carTitle=escHtml(t.year+" "+t.make+" "+t.model);
@@ -1337,22 +1378,25 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
 @media print{.noprint{display:none!important}body{background:#fff!important;padding:0!important;display:block!important}.pass{box-shadow:none!important;border:1px solid #0a1f4d!important;margin:0 auto;page-break-inside:avoid;border-radius:14px!important}}
 body{background:#06163b;color:#e2e9f2;margin:0;padding:20px;display:flex;justify-content:center}
 ${isPrint?".noprint{display:none!important}body{background:#fff;padding:8px;display:block}.pass{box-shadow:none;border:1.5px solid #0a1f4d;border-radius:14px;margin:0 auto}":""}
-.pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-.brand{display:flex;align-items:center;gap:9px;padding:13px 20px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18)}
-.hero{height:180px;background:#06163b url('${safePhoto}') center/cover}.pd{padding:20px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font:600 12px Manrope;margin-top:16px}.k{color:#8ca0c4;font:700 9px Manrope;letter-spacing:.08em;text-transform:uppercase}
-.fin{border-top:1px solid rgba(24,200,255,.18);margin-top:16px;padding-top:14px}
-.stub{border-top:2px dashed rgba(24,200,255,.3);margin-top:18px;padding-top:16px;display:flex;gap:16px;align-items:center}
-.mono{font-family:ui-monospace,Menlo,monospace}.cy{color:#18C8FF}</style></head>
+.pass{max-width:430px;width:100%;background:#0a1f4d;border:1px solid rgba(24,200,255,.28);border-radius:28px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.brand{display:flex;align-items:center;gap:9px;padding:13px 20px;background:rgba(6,16,40,.85);border-bottom:1px solid rgba(24,200,255,.18);text-decoration:none}
+.hero{height:180px;background:#06163b url('${safePhoto}') center/cover}.pd{padding:24px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;font:600 12px Manrope;margin-top:18px}.k{color:#8ca0c4;font:700 9px Manrope;letter-spacing:.08em;text-transform:uppercase}
+.fin{border-top:1px solid rgba(24,200,255,.18);margin-top:20px;padding-top:16px}
+.stub{border-top:1px solid rgba(24,200,255,.18);margin-top:22px;padding-top:18px;display:flex;gap:16px;align-items:center}
+.mono{font-family:ui-monospace,Menlo,monospace}.cy{color:#18C8FF}
+.back{display:inline-flex;align-items:center;gap:5px;font:600 11px Manrope;color:#8ca0c4;text-decoration:none;margin-bottom:2px}</style></head>
 <body><div class="pass">
-<div class="brand"><img src="/assets/logo.png" alt="" style="width:24px;height:24px"><b style="font:700 14px 'Space Grotesk',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:9px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></div>
+<a class="brand" href="https://app.carnimbus.com/matches"><img src="/assets/logo.png" alt="" style="width:24px;height:24px"><b style="font:700 14px 'Space Grotesk',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:9px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></a>
 <div class="hero"></div><div class="pd">
-<div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">${T.pass}</div>
-<div style="font:800 22px Manrope;color:#fff;margin:5px 0 3px">${carTitle}</div>
+<a class="back noprint" href="https://app.carnimbus.com/matches">‹ Back to my matches</a>
+<div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em;margin-top:8px">${T.pass}</div>
+<div style="font:800 24px Manrope;color:#fff;margin:6px 0 3px">${carTitle}</div>
 <div class="cy" style="font:700 12px Manrope">${escHtml(t.center||"CarNimbus Test Drive Center")} · LA Car Guy · 424-398-8611</div>
 <div class="grid">
 <div><div class="k">${T.when}</div>${fmtMil(t.slot)}</div><div><div class="k">${T.status}</div><span style="color:#54d699;text-transform:capitalize">${escHtml(t.status)}</span></div>
-<div><div class="k">${T.miles}</div>${escHtml(t.miles||"—")}</div><div><div class="k">${T.drive}</div>${escHtml(t.drivetrain||"—")}</div>
+<div><div class="k">${T.miles}</div>${escHtml(milesLabel)}</div><div><div class="k">${T.drive}</div>${escHtml(driveLabel)}</div>
+${t.engine?`<div><div class="k">Engine</div>${escHtml(t.engine)}</div>`:""}${t.horsepower?`<div><div class="k">Horsepower</div>${escHtml(t.horsepower)} hp</div>`:""}
 ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span class="cy">•</span> ${escHtml(f)}</div>`).join("")}
 </div>
 <div class="fin"><div class="k" style="margin-bottom:8px">${T.numbers}</div>
@@ -1574,58 +1618,50 @@ function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"cont
 async function residentAgent(env){
   const last=await env.DB.prepare("SELECT created_at FROM comments WHERE user_id=0 AND zip='agent' ORDER BY id DESC LIMIT 1").first().catch(()=>null);
   if(last && (Date.now()-Date.parse(last.created_at))<2*3600e3) return;
-  const v=await env.DB.prepare("SELECT id,year,make,model,price_mo FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
+  const v=await env.DB.prepare("SELECT id,year,make,model,price_mo,dealer_id FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
   if(!v) return;
   const en=`Okay, this ${v.year} ${v.make} ${v.model} caught my eye — right around $${v.price_mo}/mo. Worth a look before it's gone. (Soft check = 0 credit hit.)`;
   const es=`Ojo con este ${v.year} ${v.make} ${v.model} — anda por los $${v.price_mo}/mes. Vale la pena mirarlo antes de que vuele. (Chequeo suave, 0 impacto en tu crédito.)`;
-  await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,sponsored,created_at) VALUES (0,?,?,?, 'agent', 1, ?)")
-    .bind(v.id,en,es,new Date().toISOString()).run().catch(()=>{});
+  await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,sponsored,dealer_id,created_at) VALUES (0,?,?,?, 'agent', 1, ?, ?)")
+    .bind(v.id,en,es,v.dealer_id||null,new Date().toISOString()).run().catch(()=>{});
   await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
 }
+// U3 (Wave U): real persona pool + LLM-generated posts, replacing the fixed 6-string array and canned question bank.
+// Scale dial: swarm_config.active_personas/posts_per_hour_cap control the 10→100→1,000→100,000 ramp — a config
+// UPDATE, not a redeploy. Every post keeps the same audit trail already live (synthetic=1 + synthetic_agent_audit row).
 async function syntheticNudger(env){
   try {
-    const last=await env.DB.prepare("SELECT created_at FROM comments WHERE synthetic=1 ORDER BY id DESC LIMIT 1").first().catch(()=>null);
-    if(last && (Date.now()-Date.parse(last.created_at))<4*3600e3) return;
-    const v=await env.DB.prepare("SELECT id,year,make,model,body,price FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
+    const cfg=await env.DB.prepare("SELECT active_personas,posts_per_hour_cap FROM swarm_config WHERE id=1").first().catch(()=>null);
+    const activePersonas=(cfg&&cfg.active_personas)||10, capPerHour=(cfg&&cfg.posts_per_hour_cap)||5;
+    const since=new Date(Date.now()-3600e3).toISOString();
+    const recent=await env.DB.prepare("SELECT COUNT(*) c FROM comments WHERE synthetic=1 AND created_at>?").bind(since).first().catch(()=>({c:0}));
+    if((recent&&recent.c||0)>=capPerHour) return;   // spend/volume guardrail — raise posts_per_hour_cap to post more
+    const poolSize=await env.DB.prepare("SELECT COUNT(*) c FROM personas WHERE active=1").first().catch(()=>({c:0}));
+    const pool=Math.min(activePersonas,(poolSize&&poolSize.c)||0);
+    if(!pool) return;
+    const persona=await env.DB.prepare("SELECT * FROM personas WHERE active=1 ORDER BY id ASC LIMIT ?, 1")
+      .bind(Math.floor(Math.random()*pool)).first().catch(()=>null);
+    if(!persona) return;
+    // Occasionally reply into an existing synthetic thread (discussion, not just isolated broadcasts) instead of a new post.
+    const openThread=Math.random()<0.35?await env.DB.prepare("SELECT id,vdp_id FROM comments WHERE synthetic=1 AND parent_id IS NULL ORDER BY id DESC LIMIT 5").all().catch(()=>({results:[]})):null;
+    const threadPick=openThread&&openThread.results&&openThread.results.length?openThread.results[Math.floor(Math.random()*openThread.results.length)]:null;
+    const v=await env.DB.prepare("SELECT id,year,make,model,body,price FROM vdps WHERE id=? OR (1=? AND active=1) ORDER BY RANDOM() LIMIT 1").bind(threadPick?threadPick.vdp_id:0,threadPick?0:1).first().catch(()=>null);
     if(!v) return;
-    const personas = ["Jane D.", "Local Driver", "SoCal Commuter", "OC Buyer", "Road Tripper", "Eco Fan"];
-    const persona = personas[Math.floor(Math.random() * personas.length)];
-    const bodyStr = String(v.body||"").toLowerCase();
-    let questions = [
-      "Does it come with a second set of keys?",
-      "Can I see the service history records?",
-      "Is the price negotiable at all?",
-      "Has this vehicle had any accidents reported?",
-      "Is this available for a test drive this weekend?"
-    ];
-    if (bodyStr.includes("sedan")) {
-      questions.push("Is this model good for daily commuting on the highway?");
-      questions.push("What kind of real-world gas mileage are you getting with this?");
-    } else if (bodyStr.includes("suv") || bodyStr.includes("truck")) {
-      questions.push("How is the trunk/cargo space with the rear seats folded?");
-      questions.push("Does this have all-wheel drive or four-wheel drive?");
-    } else if (bodyStr.includes("ev") || bodyStr.includes("hybrid")) {
-      questions.push("What is the real-world battery range on a full charge?");
-      questions.push("Does it support Level 3 DC fast charging?");
-    }
-    const question = questions[Math.floor(Math.random() * questions.length)];
-    let questionEs = question;
-    if (question.includes("keys")) questionEs = "¿Viene con un segundo juego de llaves?";
-    else if (question.includes("service history")) questionEs = "¿Puedo ver los registros del historial de servicio?";
-    else if (question.includes("negotiable")) questionEs = "¿El precio es negociable?";
-    else if (question.includes("accidents")) questionEs = "¿Ha tenido algún accidente reportado?";
-    else if (question.includes("test drive")) questionEs = "¿Está disponible para una prueba de manejo este fin de semana?";
-    else if (question.includes("commuting")) questionEs = "¿Este modelo es bueno para el trayecto diario en autopista?";
-    else if (question.includes("gas mileage")) questionEs = "¿Qué rendimiento de gasolina real tiene?";
-    else if (question.includes("cargo space")) questionEs = "¿Cómo es el espacio de carga con los asientos traseros abatidos?";
-    else if (question.includes("all-wheel")) questionEs = "¿Tiene tracción en las cuatro ruedas (AWD/4WD)?";
-    else if (question.includes("battery range")) questionEs = "¿Cuál es la autonomía real de la batería con carga completa?";
-    else if (question.includes("fast charging")) questionEs = "¿Es compatible con carga rápida de CC Nivel 3?";
-    const now = new Date().toISOString();
+    const sys=`You are ${persona.name}, a member of a car-buyer community, NOT CarNimbus staff. Your research beat: ${persona.beat}. Write ONE short, natural, human-sounding ${threadPick?"reply to another buyer's question":"question or observation"} about this car, grounded in your beat. Reference the citation domain in your beat naturally if it fits (e.g. "per KBB-style data") — never claim a live API lookup. 1-2 sentences, no markdown, no hashtags, sound like a real person texting, not a bot.`;
+    const carStr=`${v.year} ${v.make} ${v.model}, listed around $${v.price||"—"}`;
+    const raw=await llm(env,[{role:"system",content:sys},{role:"user",content:`Car: ${carStr}`}]).catch(()=>null);
+    const question=String(raw||"").trim().slice(0,280);
+    if(!question) return;
+    const esSys=sys.replace("Write ONE short","Reply in neutral Latin-American Spanish. Write ONE short");
+    const rawEs=await llm(env,[{role:"system",content:esSys},{role:"user",content:`Car: ${carStr}`}]).catch(()=>null);
+    const questionEs=String(rawEs||question).trim().slice(0,280);
+    const now=new Date().toISOString();
     await env.DB.prepare("INSERT INTO synthetic_agent_audit (created_at, vdp_id, question, persona) VALUES (?, ?, ?, ?)")
-      .bind(now, v.id, question, persona).run();
-    await env.DB.prepare("INSERT INTO comments (user_id, vdp_id, body, body_es, zip, sponsored, synthetic, created_at, status) VALUES (0, ?, ?, ?, ?, 0, 1, ?, 'approved')")
-      .bind(v.id, question, questionEs, persona, now).run();
+      .bind(now, v.id, question, persona.name).run();
+    await env.DB.prepare("INSERT INTO comments (user_id, vdp_id, body, body_es, zip, sponsored, synthetic, parent_id, created_at, status) VALUES (0, ?, ?, ?, ?, 0, 1, ?, ?, 'approved')")
+      .bind(v.id, question, questionEs, persona.name||persona.handle, threadPick?threadPick.id:null, now).run();
+    await env.DB.prepare("UPDATE personas SET next_post_at=? WHERE id=?").bind(new Date(Date.now()+3600e3).toISOString(),persona.id).run().catch(()=>{});
+    await logEvent(env,{action:"social.synthetic_post",vehicle_id:v.id,source:"synth-agent"});
   } catch(e) {
     console.error("syntheticNudger failed:", e);
   }
@@ -1758,11 +1794,14 @@ Base the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliab
   const radius=parseFloat(curl.searchParams.get("radius")||"40"); let geo=Number.isFinite(lat)&&Number.isFinite(lng);
   const lang=curl.searchParams.get("lang")==="es"?"es":"en";
   const geoCols=geo?"u.lat,u.lng,":"";                                   // only touch lat/lng columns when actually ranking
+  // U2: never more than 3 sponsored rows in the feed — cap via a subquery of the 3 newest, join real dealer identity.
   let rows=await env.DB.prepare(
-    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.parent_id,c.visible_to,c.upvotes,c.downvotes,c.images,c.sponsored,c.card,c.synthetic,u.handle,json_extract(p.answers,'$.full_name') full_name,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos FROM comments c "+
+    "SELECT c.id,c.body,c.body_es,c.zip,c.created_at,c.vdp_id,c.parent_id,c.visible_to,c.upvotes,c.downvotes,c.images,c.sponsored,c.card,c.synthetic,u.handle,json_extract(p.answers,'$.full_name') full_name,"+geoCols+"p.avatar,pv.dir myvote,v.year,v.make,v.model,v.price_mo,v.price,v.photos,dl.dealership dealer_name,dl.logo dealer_logo FROM comments c "+
     "LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id "+
     "LEFT JOIN post_votes pv ON pv.comment_id=c.id AND pv.user_id=? "+
-    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 WHERE c.status='approved' AND (c.visible_to=0 OR c.visible_to=?) ORDER BY c.sponsored DESC, c.id DESC LIMIT 300").bind(meUid||0,meUid||0).all().catch(async()=>{
+    "LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 LEFT JOIN dealer_leads dl ON dl.id=c.dealer_id "+
+    "WHERE c.status='approved' AND (c.visible_to=0 OR c.visible_to=?) AND (c.sponsored=0 OR c.id IN (SELECT id FROM comments WHERE sponsored=1 AND status='approved' ORDER BY id DESC LIMIT 3)) "+
+    "ORDER BY c.sponsored DESC, c.id DESC LIMIT 300").bind(meUid||0,meUid||0).all().catch(async()=>{
       geo=false;                                                          // votes/lat/body_es columns not migrated yet → fall back to recency, no votes
       return env.DB.prepare("SELECT c.id,c.body,c.zip,c.created_at,c.vdp_id,c.card,c.synthetic,u.handle,p.avatar,v.year,v.make,v.model,v.price_mo,v.photos FROM comments c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN profiles p ON p.user_id=c.user_id LEFT JOIN vdps v ON v.id=c.vdp_id AND v.active=1 WHERE c.status='approved' ORDER BY c.id DESC LIMIT 300").all(); });
   // Buyer-true monthlies on car chips: compute from the real price + the caller's numbers (anon = honest defaults).

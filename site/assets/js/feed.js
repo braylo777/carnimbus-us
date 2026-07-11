@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded",function(){
     cs=threadOrder(cs);
     list.innerHTML=cs.map(function(c){
       var agent=(c.zip==="agent");
-      var av=agent?'<img src="/assets/logo-96.png" style="width:100%;height:100%;object-fit:cover">'
+      var av=agent?(c.dealer_logo?'<img src="'+esc(c.dealer_logo)+'" style="width:100%;height:100%;object-fit:cover">':(c.dealer_name?mono(c.dealer_name):'<img src="/assets/logo-96.png" style="width:100%;height:100%;object-fit:cover">'))
         :(c.avatar?'<img src="'+esc(c.avatar)+'" style="width:100%;height:100%;object-fit:cover">':mono(c.handle));
       var score=(c.upvotes||0)-(c.downvotes||0), mine=c.myvote||0;
       var rail='<div class="col" style="align-items:center;gap:1px;flex:none;width:34px;padding-top:2px">'+
@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded",function(){
         '<div class="post-body" style="font:600 12px/1.4 Manrope;margin-top:6px;color:#e2e9f2"></div>'+gallery+chip+actions+'</div></div>';
     }).join('');
     var metas=list.querySelectorAll(".post-meta"), bodies=list.querySelectorAll(".post-body");
-    cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?"CarNimbus AI":(c.handle||c.full_name||"a rider"),body=c.body||"";
+    cs.forEach(function(c,idx){ var agent=(c.zip==="agent"),name=agent?(c.dealer_name||"CarNimbus AI"):(c.synthetic?(c.zip||"a rider"):(c.handle||c.full_name||"a rider")),body=c.body||"";
       // R2: agent bodies may be stored "Name — body"; show ONE identity (CarNimbus AI) and strip the stored prefix.
       if(agent){ var m=body.match(/^(.{2,40}?) — ([\s\S]+)$/); if(m){ body=m[2]; } }
       // S4: Nimbus Score — the research agent ends with "Score: NN/100"; surface it as a chip in the byline.
