@@ -41,7 +41,9 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("appts").innerHTML=rolling.map(card).join('')||
       '<div style="grid-column:1/-1;font:600 12px Manrope;color:#aebfdf;padding:20px;text-align:center">No routed buyers yet — they appear here the moment the AI books a drive.</div>';
     // S1: rolling schedule — a 4-hour window from now glows so you can see what's coming at a glance.
-    var now=new Date(), lo=now.toISOString().slice(0,16).replace("T"," "), hiD=new Date(now.getTime()+4*3600e3), hi=hiD.toISOString().slice(0,16).replace("T"," ");
+    // Slots are stored as LA wall-clock strings — the window must be computed in the same clock, never UTC.
+    var laFmt=function(d){return d.toLocaleString("sv-SE",{timeZone:"America/Los_Angeles"}).slice(0,16);};
+    var now=new Date(), lo=laFmt(now), hi=laFmt(new Date(now.getTime()+4*3600e3));
     document.getElementById("sched").innerHTML=rolling.map(function(a){
       var pill={confirmed:"#18C8FF",arrived:"#b18cff",sold:"#54d699",requested:"#8ca0c4"}[a.status]||"#8ca0c4";
       var inWindow=String(a.slot)>=lo&&String(a.slot)<=hi;
