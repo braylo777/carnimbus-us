@@ -49,12 +49,13 @@
         </div>
       </header>
 
-      <!-- hero -->
-      <div class="z" style="max-width:640px;margin:0 auto;padding:32px 30px 44px">
+      <!-- hero: 2-col on desktop (copy+surf left, talk-to-car right); styles.css collapses 1.08fr grids to 1 col ≤900px -->
+      <div class="z" style="display:grid;grid-template-columns:1.08fr .92fr;gap:42px;padding:32px 30px 44px;align-items:start">
+        <div>
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">A social home for used car buyers</x-import>
         <h1 class="hero-h1" style="font-size:clamp(26px,4vw,36px);line-height:1.1">Buy your dream car <span class="cy">on your terms.</span></h1>
         <div style="font:500 16px/1.5 Manrope;color:#cbd5e1;margin:18px 0 0;max-width:445px">Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.</div>
-        <!-- surf widget (moved above the talk-to-car card) -->
+        <!-- surf widget (left column, above the card in mobile stacking order) -->
         <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px" id="calc">
           <div style="font:800 17px 'Space Grotesk',Manrope;color:#fff;letter-spacing:-.01em">🏄 Surf cars near you in 10 seconds</div>
           <div style="font:500 12px Manrope;color:#cbd5e1;margin:4px 0 12px">Enter your budget — see the real cars near you.</div>
@@ -74,7 +75,8 @@
           <button id="calc-go" class="btn primary md" type="button" style="width:100%;margin-top:10px;height:40px">Show Me Cars</button>
           <div id="calc-out" style="margin-top:12px"></div>
         </div>
-        <!-- talk-to-car card (below the surf widget) -->
+        </div>
+        <!-- talk-to-car card (right column on desktop; stacks below the surf widget on mobile) -->
         <div style="margin-top:22px">
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" pad="false" hint-size="100%,420px">
           <div style="position:relative;height:170px">
