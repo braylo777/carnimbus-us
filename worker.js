@@ -1823,6 +1823,7 @@ Base the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliab
       photos:r.photos?JSON.parse(r.photos):[],images:r.images?JSON.parse(r.images):[]}; });
   if(geo){ const R=3959, rad=x=>x*Math.PI/180;
     out=out.map(r=>{ if(r.zip==="agent") return {...r,_d:-1};                 // agent/AI posts stay pinned
+        if(r.synthetic) return {...r,_d:0};                                   // V8: AI-community posts are global — always visible, never geo-dropped
         if(r.lat==null||r.lng==null) return {...r,_d:1e9};
         const dLat=rad(r.lat-lat),dLng=rad(r.lng-lng);
         const a=Math.sin(dLat/2)**2+Math.cos(rad(lat))*Math.cos(rad(r.lat))*Math.sin(dLng/2)**2;

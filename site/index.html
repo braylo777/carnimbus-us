@@ -51,9 +51,29 @@
       <!-- hero -->
       <div class="z" style="max-width:640px;margin:0 auto;padding:32px 30px 44px">
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">A social home for used car buyers</x-import>
-        <h1 class="hero-h1">Buy your dream car <span class="cy">on your terms.</span></h1>
+        <h1 class="hero-h1" style="font-size:clamp(30px,4.6vw,42px);line-height:1.05">Buy your dream car <span class="cy">on your terms.</span></h1>
         <div style="font:500 16px/1.5 Manrope;color:#cbd5e1;margin:18px 0 0;max-width:445px">Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.</div>
-        <!-- talk-to-car card (promoted above the surf widget) -->
+        <!-- surf widget (moved above the talk-to-car card) -->
+        <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px" id="calc">
+          <div style="font:800 17px 'Space Grotesk',Manrope;color:#fff;letter-spacing:-.01em">🏄 Surf cars near you in 10 seconds</div>
+          <div style="font:500 12px Manrope;color:#cbd5e1;margin:4px 0 12px">Enter your budget — see the real cars near you.</div>
+          <div style="display:flex;gap:6px;margin-bottom:12px" id="calc-deal">
+            <button class="btn sm ghost" style="flex:1;height:32px;font-size:12px" data-deal="cash" type="button">Cash</button>
+            <button class="btn sm primary on" style="flex:1;height:32px;font-size:12px" data-deal="finance" type="button">Finance</button>
+            <button class="btn sm ghost" style="flex:1;height:32px;font-size:12px" data-deal="lease" type="button">Lease</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:nowrap;align-items:end">
+            <div style="flex:1;min-width:0"><label class="vh" for="calc-mo">Monthly budget</label>
+              <div style="position:relative"><span style="position:absolute;left:10px;top:10px;font:700 13px Manrope;color:#18C8FF">$</span><input id="calc-mo" class="pill" inputmode="numeric" placeholder="500/mo" style="width:100%;height:38px;padding-left:19px;font-size:12px;border-radius:10px"></div></div>
+            <div style="flex:1;min-width:0"><label class="vh" for="calc-down">Down payment</label>
+              <div style="position:relative"><span style="position:absolute;left:10px;top:10px;font:700 13px Manrope;color:#18C8FF">$</span><input id="calc-down" class="pill" inputmode="numeric" placeholder="1,000 down" style="width:100%;height:38px;padding-left:19px;font-size:12px;border-radius:10px"></div></div>
+            <div style="flex:none;width:62px"><label class="vh" for="calc-zip">ZIP</label><input id="calc-zip" class="pill" inputmode="numeric" placeholder="ZIP" maxlength="5" style="width:100%;height:38px;font-size:12px;border-radius:10px"></div>
+            <div style="flex:none;width:70px"><label class="vh" for="calc-radius">Radius</label><select id="calc-radius" class="pill" style="width:100%;height:38px;font-size:11px;border-radius:10px"><option value="">Any</option><option value="5">5 mi</option><option value="10">10 mi</option><option value="25" selected>25 mi</option><option value="50">50 mi</option></select></div>
+          </div>
+          <button id="calc-go" class="btn primary md" type="button" style="width:100%;margin-top:10px;height:40px">Show Me Cars</button>
+          <div id="calc-out" style="margin-top:12px"></div>
+        </div>
+        <!-- talk-to-car card (below the surf widget) -->
         <div style="margin-top:22px">
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" pad="false" hint-size="100%,420px">
           <div style="position:relative;height:170px">
@@ -73,25 +93,6 @@
             <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkCar }}" hint-size="auto,36px">APPROVED ✅ Come drive me tomorrow.</x-import>
           </div>
         </x-import>
-        </div>
-        <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px" id="calc">
-          <div style="font:800 17px Manrope;color:#fff;letter-spacing:-.01em">🏄 Surf cars near you in 10 seconds</div>
-          <div style="font:500 12px Manrope;color:#cbd5e1;margin:4px 0 12px">Enter your budget — see the real cars near you.</div>
-          <div style="display:flex;gap:6px;margin-bottom:12px" id="calc-deal">
-            <button class="btn sm primary on" style="flex:1" data-deal="finance" type="button">Finance</button>
-            <button class="btn sm ghost" style="flex:1" data-deal="cash" type="button">Cash</button>
-            <button class="btn sm ghost" style="flex:1" data-deal="lease" type="button">Lease</button>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
-            <div style="flex:1;min-width:110px"><label class="vh" for="calc-mo">Monthly budget</label>
-              <div style="position:relative"><span style="position:absolute;left:12px;top:10px;font:700 14px Manrope;color:#18C8FF">$</span><input id="calc-mo" class="pill" inputmode="numeric" placeholder="500/mo" style="width:100%;height:38px;padding-left:22px;font-size:12.5px;border-radius:10px"></div></div>
-            <div style="flex:1;min-width:100px"><label class="vh" for="calc-down">Down payment</label>
-              <div style="position:relative"><span style="position:absolute;left:12px;top:10px;font:700 14px Manrope;color:#18C8FF">$</span><input id="calc-down" class="pill" inputmode="numeric" placeholder="1,000 down" style="width:100%;height:38px;padding-left:22px;font-size:12.5px;border-radius:10px"></div></div>
-            <div style="flex:none;width:75px"><label class="vh" for="calc-zip">ZIP</label><input id="calc-zip" class="pill" inputmode="numeric" placeholder="ZIP" maxlength="5" style="width:100%;height:38px;font-size:12.5px;border-radius:10px"></div>
-            <div style="flex:none;width:85px"><label class="vh" for="calc-radius">Radius</label><select id="calc-radius" class="pill" style="width:100%;height:38px;font-size:12px;border-radius:10px"><option value="">Any</option><option value="5">5 mi</option><option value="10">10 mi</option><option value="25" selected>25 mi</option><option value="50">50 mi</option></select></div>
-            <button id="calc-go" class="btn primary md" type="button" style="width:100%;margin-top:10px;height:40px">Show Me Cars</button>
-          </div>
-          <div id="calc-out" style="margin-top:12px"></div>
         </div>
       </div>
       <!-- trust band -->
@@ -210,7 +211,7 @@
       <footer class="z row" style="padding:24px 30px;gap:30px;align-items:center;border-top:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.6)">
         <div style="flex:1">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="15" mark="true" mark-src="{{ logoUrl }}" hint-size="130px,26px"></x-import>
-          <div style="font:600 11px Manrope;color:#18C8FF;margin-top:8px">A social home for the used car community.</div>
+          <div style="font:600 11px Manrope;color:#18C8FF;margin-top:8px">A social home for used car buyers.</div>
           <div style="font:500 11px Manrope;color:#7f93b8;margin-top:4px">© 2026 CarNimbus, Inc. · Los Angeles, California</div>
         </div>
       </footer>

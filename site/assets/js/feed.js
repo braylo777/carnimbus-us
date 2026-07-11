@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded",function(){
     else if(navigator.geolocation){ navigator.geolocation.getCurrentPosition(toNear,function(){}); }
   }
   var nz=document.getElementById("nm-zip");
-  if(nz)nz.addEventListener("input",function(e){ var z=e.target.value.replace(/\D/g,""); var g=ZIPS[z]||(window.ZIP3&&window.ZIP3(z.slice(0,3))); if(g&&z.length>=5){ GEO=g; live(); load(); } });
+  if(nz)nz.addEventListener("input",function(e){ var z=e.target.value.replace(/\D/g,""); var g=ZIPS[z]||(window.ZIP3&&window.ZIP3(z.slice(0,3))); if(g&&z.length>=5){ GEO=g; saveGeo(); scope("near"); live(); load(); } });
   function rel(ts){var s=(Date.now()-Date.parse(ts))/1e3;if(s<3600)return Math.max(1,Math.round(s/60))+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d";}
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function mono(name){var s=String(name||"R"),h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;

@@ -268,7 +268,7 @@
     var here=location.pathname;
     var onSignin=here.indexOf("/signin")>-1;   // front door: logo + EN/ES only — no account dot/menu until they're in
     // Consumer-facing paths: hide header chrome entirely and replace it with persistent footer tab bar
-    var hideChrome=/\/(start|matches|profile|edit-profile|talk|car|pass)/.test(here) && !onSignin;
+    var hideChrome=/\/(start|edit-profile|talk|car|pass)/.test(here) && !onSignin;
     var el=document.getElementById("appnav");
     if(el){
       if(hideChrome){
@@ -345,6 +345,7 @@
   }
   function wireTabbar(){
     var here=location.pathname;
+    if(!/^app\./.test(location.hostname)) return;   // V1: the tab bar belongs to the app only, never the marketing/dealer/admin sites
     if(here.indexOf("/signin")>-1) return;   // not inside the app yet — no tab bar on the front door
     if(document.querySelector(".tabbar")) return;
     var T=[["Feed","https://app.carnimbus.com/feed","feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
