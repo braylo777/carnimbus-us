@@ -41,17 +41,18 @@
 
       <!-- nav -->
       <header class="z row" style="height:64px;align-items:center;padding:0 30px;border-bottom:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.55);backdrop-filter:blur(18px)">
-        <a href="/" aria-label="CarNimbus home" style="display:inline-flex"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="19" mark="true" mark-src="{{ logoUrl }}" hint-size="150px,30px"></x-import></a>
+        <a href="https://carnimbus.com/" aria-label="CarNimbus home" style="display:inline-flex"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="19" mark="true" mark-src="{{ logoUrl }}" hint-size="150px,30px"></x-import></a>
         <nav aria-label="Primary" class="row" style="gap:28px;margin-left:36px"></nav>
-        <div class="row" style="margin-left:auto;align-items:center;gap:14px">
-          <a class="btn ghost sm" href="https://app.carnimbus.com/signin" style="text-decoration:none">Log in</a>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>        </div>
+        <div class="row" style="margin-left:auto;align-items:center;gap:10px">
+          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>
+          <a class="btn ghost" href="https://app.carnimbus.com/signin" style="text-decoration:none;height:32px;padding:0 14px;font-size:12px;display:inline-flex;align-items:center">Log in</a>
+        </div>
       </header>
 
       <!-- hero -->
       <div class="z" style="max-width:640px;margin:0 auto;padding:32px 30px 44px">
         <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">A social home for used car buyers</x-import>
-        <h1 class="hero-h1" style="font-size:clamp(30px,4.6vw,42px);line-height:1.05">Buy your dream car <span class="cy">on your terms.</span></h1>
+        <h1 class="hero-h1" style="font-size:clamp(38px,6vw,52px);line-height:1.03">Buy your dream car <span class="cy" style="display:block">on your terms.</span></h1>
         <div style="font:500 16px/1.5 Manrope;color:#cbd5e1;margin:18px 0 0;max-width:445px">Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.</div>
         <!-- surf widget (moved above the talk-to-car card) -->
         <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px" id="calc">

@@ -38,11 +38,11 @@ const SEC = {
 };
 
 export default {
-  async fetch(request, env) {
-    try { return await this.route(request, env); }
+  async fetch(request, env, ctx) {
+    try { return await this.route(request, env, ctx); }
     catch(e){ return sec(json({ok:false,error:"server_error"},500)); }   // e.g. SESSION_SECRET unset → never fall back to a forgeable session; keep sec() headers
   },
-  async route(request, env) {
+  async route(request, env, ctx) {
     let url = new URL(request.url);
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
@@ -126,7 +126,7 @@ export default {
     if (url.pathname === "/api/drive/cancel" && request.method === "POST")  return sec(await withUser(request, env, driveCancel));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
     if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
-    if (url.pathname === "/api/feed/ask" && request.method === "POST")     return sec(await withUser(request, env, feedAsk));
+    if (url.pathname === "/api/feed/ask" && request.method === "POST")     return sec(await withUser(request, env, feedAsk, ctx));
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
@@ -225,7 +225,7 @@ async function decryptAnswers(a, secret) {
   }
   return decrypted;
 }
-async function withUser(request,env,fn){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401); return fn(request,env,uid); }
+async function withUser(request,env,fn,ctx){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401); return fn(request,env,uid,ctx); }
 function ctEq(a,b){ a=String(a); b=String(b); if(a.length!==b.length) return false; let r=0; for(let i=0;i<a.length;i++) r|=a.charCodeAt(i)^b.charCodeAt(i); return r===0; }
 async function adminOnly(request,env,fn){ if(!env.ADMIN_KEY||!ctEq(request.headers.get("x-admin-key")||"",env.ADMIN_KEY)) return json({ok:false,error:"forbidden"},403); return fn(request,env); }
 
@@ -1616,15 +1616,17 @@ function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"cont
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 // L9: first resident agent — a labeled, bounded community presence. Posts one useful bilingual pick per ≤2h.
 async function residentAgent(env){
-  const last=await env.DB.prepare("SELECT created_at FROM comments WHERE user_id=0 AND zip='agent' ORDER BY id DESC LIMIT 1").first().catch(()=>null);
-  if(last && (Date.now()-Date.parse(last.created_at))<2*3600e3) return;
-  const v=await env.DB.prepare("SELECT id,year,make,model,price_mo,dealer_id FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 1").first().catch(()=>null);
-  if(!v) return;
-  const en=`Okay, this ${v.year} ${v.make} ${v.model} caught my eye — right around $${v.price_mo}/mo. Worth a look before it's gone. (Soft check = 0 credit hit.)`;
-  const es=`Ojo con este ${v.year} ${v.make} ${v.model} — anda por los $${v.price_mo}/mes. Vale la pena mirarlo antes de que vuele. (Chequeo suave, 0 impacto en tu crédito.)`;
-  await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,sponsored,dealer_id,created_at) VALUES (0,?,?,?, 'agent', 1, ?, ?)")
-    .bind(v.id,en,es,v.dealer_id||null,new Date().toISOString()).run().catch(()=>{});
-  await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
+  // W4: keep ~3 fresh sponsored posts live (was 1 per 2h, which could never reach the 3 the feed expects).
+  const cnt=await env.DB.prepare("SELECT COUNT(*) c FROM comments WHERE user_id=0 AND zip='agent' AND sponsored=1 AND created_at>?").bind(new Date(Date.now()-24*3600e3).toISOString()).first().catch(()=>({c:0}));
+  let need=3-((cnt&&cnt.c)||0); if(need<=0) return;
+  const vs=await env.DB.prepare("SELECT id,year,make,model,price_mo,dealer_id FROM vdps WHERE active=1 ORDER BY RANDOM() LIMIT 3").all().catch(()=>({results:[]}));
+  for(const v of (vs.results||[])){ if(need<=0) break; need--;
+    const en=`Okay, this ${v.year} ${v.make} ${v.model} caught my eye — right around $${v.price_mo}/mo. Worth a look before it's gone. (Soft check = 0 credit hit.)`;
+    const es=`Ojo con este ${v.year} ${v.make} ${v.model} — anda por los $${v.price_mo}/mes. Vale la pena mirarlo antes de que vuele. (Chequeo suave, 0 impacto en tu crédito.)`;
+    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,sponsored,dealer_id,status,created_at) VALUES (0,?,?,?, 'agent', 1, ?, 'approved', ?)")
+      .bind(v.id,en,es,v.dealer_id||null,new Date().toISOString()).run().catch(()=>{});
+    await logEvent(env,{action:"social.posted",vehicle_id:v.id,source:"resident-agent"});
+  }
 }
 // U3 (Wave U): real persona pool + LLM-generated posts, replacing the fixed 6-string array and canned question bank.
 // Scale dial: swarm_config.active_personas/posts_per_hour_cap control the 10→100→1,000→100,000 ramp — a config
@@ -1715,73 +1717,37 @@ async function dealerLead(request,env){
   return json({ok:true});
 }
 // R4: Ask the Feed — ONE private CarNimbus AI research reply per ask (the persona panel was retired in Wave R).
-async function feedAsk(request,env,uid){ const {vdpId}=await request.json().catch(()=>({})); const es=new URL(request.url).searchParams.get("lang")==="es";
+async function feedAsk(request,env,uid,ctx){ const {vdpId}=await request.json().catch(()=>({})); const es=new URL(request.url).searchParams.get("lang")==="es";
   const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=? AND active=1").bind(vdpId).first(); if(!v) return json({ok:false,error:"not_found"},404);
   const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first(); let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
-  const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
-  const carStr=vdpText(v,sp), me=profileText(a);
-  let cardJson = null;
-  const cardSys = `You are CarNimbus AI. Given a vehicle and a buyer profile, return a structured evaluation JSON only:
-{"verdict":"Yes/No/Only if","pros":["..."],"cons":["..."],"score":85}
-Base the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliability/lifestyle fit. No markdown, no extra text.`;
-  const cardRaw = await llm(env, [{role:"system",content:cardSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
-  if (cardRaw) {
-    try {
-      const m = String(cardRaw).match(/\{[\s\S]*\}/);
-      if (m) {
-        JSON.parse(m[0]);
-        cardJson = m[0];
-      }
-    } catch(_) {}
-  }
-  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,card,status,created_at) VALUES (?,?,?,?,?,?,?,?)")
-    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,`Pensando en el ${v.year} ${v.make} ${v.model} — ¿opiniones honestas?`,String(a.zip||""),cardJson,"approved",new Date().toISOString()).run();
+  // W2: insert the public question post FIRST so it appears instantly; enrich with the AI card + private reply afterward (deferred).
+  const post=await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,status,created_at) VALUES (?,?,?,?,?, 'approved', ?)")
+    .bind(uid,vdpId,`Thinking about the ${v.year} ${v.make} ${v.model} — honest thoughts?`,`Pensando en el ${v.year} ${v.make} ${v.model} — ¿opiniones honestas?`,String(a.zip||""),new Date().toISOString()).run();
   const parentId=post&&post.meta?post.meta.last_row_id:0;
-  // R3/R4: ONE CarNimbus AI research agent, replying PRIVATELY to the asker (humans reply publicly in the thread).
-  const rSys=es?`Eres CarNimbus AI, el agente de investigación imparcial del comprador. Respondes SOLO a este comprador, en privado. Formato: "Veredicto: Sí/No/Solo si — " + por qué (valor de mercado estilo KBB, fiabilidad/problemas conocidos de este año/marca/modelo exacto) + un detalle específico de SU perfil (pasatiempos, estilo de vida, presupuesto). 3-4 frases, específico, denso en valor, sin relleno, sin markdown. Termina EXACTAMENTE con "Score: NN/100" — tu puntuación de ajuste para ESTE comprador (presupuesto 40%, fiabilidad 30%, estilo de vida 30%).`
-    :`You are CarNimbus AI, the buyer's unbiased research agent. You are replying PRIVATELY to this buyer only. Format: "Verdict: Yes/No/Only if — " + why (KBB-style market value, known reliability/common issues for this exact year/make/model) + one detail tied to THEIR profile (hobbies, lifestyle, budget). 3-4 sentences, specific, value-dense, zero fluff, no markdown. End with EXACTLY "Score: NN/100" — your fit score for THIS buyer (weighting: budget fit 40%, reliability 30%, lifestyle fit 30%).`;
-  const rRaw=await llm(env,[{role:"system",content:rSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
-  const rBody=String(rRaw||"").trim().slice(0,600);
-  if(rBody) await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,parent_id,visible_to,created_at) VALUES (0,?,?,?,?,?,?,?)")
-    .bind(vdpId, "CarNimbus AI — "+rBody, es?("CarNimbus AI — "+rBody):null, "agent", parentId, uid, new Date().toISOString()).run().catch(()=>{});
   await logEvent(env,{action:"social.asked",vehicle_id:vdpId});
+  const enrich=async()=>{ try{
+    const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
+    const carStr=vdpText(v,sp), me=profileText(a);
+    const cardSys=`You are CarNimbus AI. Given a vehicle and a buyer profile, return a structured evaluation JSON only:\n{"verdict":"Yes/No/Only if","pros":["..."],"cons":["..."],"score":85}\nBase the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliability/lifestyle fit. No markdown, no extra text.`;
+    const cardRaw=await llm(env,[{role:"system",content:cardSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
+    if(cardRaw){ try{ const m=String(cardRaw).match(/\{[\s\S]*\}/); if(m){ JSON.parse(m[0]); await env.DB.prepare("UPDATE comments SET card=? WHERE id=?").bind(m[0],parentId).run().catch(()=>{}); } }catch(_){} }
+    const rSys=es?`Eres CarNimbus AI, el agente de investigación imparcial del comprador. Respondes SOLO a este comprador, en privado. Formato: "Veredicto: Sí/No/Solo si — " + por qué (valor de mercado estilo KBB, fiabilidad/problemas conocidos de este año/marca/modelo exacto) + un detalle específico de SU perfil (pasatiempos, estilo de vida, presupuesto). 3-4 frases, específico, denso en valor, sin relleno, sin markdown. Termina EXACTAMENTE con "Score: NN/100" — tu puntuación de ajuste para ESTE comprador (presupuesto 40%, fiabilidad 30%, estilo de vida 30%).`
+      :`You are CarNimbus AI, the buyer's unbiased research agent. You are replying PRIVATELY to this buyer only. Format: "Verdict: Yes/No/Only if — " + why (KBB-style market value, known reliability/common issues for this exact year/make/model) + one detail tied to THEIR profile (hobbies, lifestyle, budget). 3-4 sentences, specific, value-dense, zero fluff, no markdown. End with EXACTLY "Score: NN/100" — your fit score for THIS buyer (weighting: budget fit 40%, reliability 30%, lifestyle fit 30%).`;
+    const rRaw=await llm(env,[{role:"system",content:rSys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
+    const rBody=String(rRaw||"").trim().slice(0,600);
+    if(rBody) await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,body_es,zip,parent_id,visible_to,status,created_at) VALUES (0,?,?,?,?,?,?, 'approved', ?)")
+      .bind(vdpId, "CarNimbus AI — "+rBody, es?("CarNimbus AI — "+rBody):null, "agent", parentId, uid, new Date().toISOString()).run().catch(()=>{});
+  }catch(_){} };
+  if(ctx&&ctx.waitUntil) ctx.waitUntil(enrich()); else await enrich();
   return json({ok:true,postId:parentId});}
 async function comments(request,env){ const curl=new URL(request.url); const vdpId=+curl.searchParams.get("vdpId")||0;
   if(request.method==="POST"){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
     const {body,zip}=await request.json().catch(()=>({})); if(!body||String(body).length>500) return json({ok:false,error:"bad_request"},400);
     const n=await env.DB.prepare("SELECT COUNT(*) c FROM comments WHERE user_id=? AND created_at>?").bind(uid,new Date(Date.now()-3600e3).toISOString()).first();
     if(n.c>=10) return json({ok:false,error:"rate_limited"},429);
-    let cardJson = null;
-    if (String(body).trim().endsWith("?")) {
-      const v=await env.DB.prepare("SELECT * FROM vdps WHERE id=?").bind(vdpId).first();
-      if (v) {
-        const sp=await env.DB.prepare("SELECT * FROM vdp_specs WHERE vin=?").bind(v.vin).first().catch(()=>null);
-        const carStr=vdpText(v,sp);
-        const p=await env.DB.prepare("SELECT answers FROM profiles WHERE user_id=?").bind(uid).first();
-        let a={}; try{a=p?JSON.parse(p.answers||"{}"):{}; a=await decryptAnswers(a, env.PII_KEY);}catch(_){}
-        const me=profileText(a);
-        const sys = `You are CarNimbus AI. Given a vehicle and a buyer profile, return a structured evaluation JSON only:
-{"verdict":"Yes/No/Only if","pros":["..."],"cons":["..."],"score":85}
-Base the verdict, pros (max 3), cons (max 3), and score (0-100) on budget/reliability/lifestyle fit. No markdown, no extra text.`;
-        const raw = await llm(env, [{role:"system",content:sys},{role:"user",content:`Car: ${carStr}\nBuyer: ${me}`}]).catch(()=>null);
-        if (raw) {
-          try {
-            const m = String(raw).match(/\{[\s\S]*\}/);
-            if (m) {
-              JSON.parse(m[0]);
-              cardJson = m[0];
-            }
-          } catch(_) {}
-        }
-      }
-    }
-    let status = "approved";
-    const modSys = `You are a comment moderator. Classify the user comment. If it contains dealer solicitation (selling a car, advertising a dealership, contact info) or offensive/inappropriate content, return 'flagged'. Otherwise, return 'approved'. Return exactly one word: flagged or approved.`;
-    const modRaw = await llm(env, [{role:"system",content:modSys},{role:"user",content:String(body)}]).catch(()=>"approved");
-    if (String(modRaw).trim().toLowerCase() === "flagged") {
-      status = "flagged";
-    }
-    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,card,status,created_at) VALUES (?,?,?,?,?,?,?)").bind(uid,vdpId,String(body),String(zip||""),cardJson,status,new Date().toISOString()).run();
+    // W3: post instantly — no blocking LLM (the old card+moderation calls stalled every post and silently hid real ones).
+    await env.DB.prepare("INSERT INTO comments (user_id,vdp_id,body,zip,status,created_at) VALUES (?,?,?,?, 'approved', ?)")
+      .bind(uid,vdpId,String(body),String(zip||""),new Date().toISOString()).run();
     return json({ok:true}); }
   const meUid=await readSession(env,request);                            // optional — caller identity (votes + private replies)
   if(vdpId){ const rows=await env.DB.prepare("SELECT body,zip,card,created_at FROM comments WHERE vdp_id=? AND status='approved' AND (visible_to=0 OR visible_to=?) ORDER BY id DESC LIMIT 50").bind(vdpId,meUid||0).all().catch(()=>({results:[]}));

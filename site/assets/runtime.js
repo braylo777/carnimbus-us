@@ -280,14 +280,13 @@
           '<a href="'+(onSignin?"https://carnimbus.com/":"https://app.carnimbus.com/feed")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
           '<img src="/assets/logo-96.png" alt="" width="26" height="26" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
           '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
-          '<div class="seg"><button class="on">EN</button><button>ES</button></div>'+
           (onSignin?'':'<div style="position:relative"><button class="avatar" style="width:28px;height:28px;font-size:11px;border:none;cursor:pointer" id="appnav-av" aria-label="Account menu">·</button>'+
           '<div id="appnav-menu" style="display:none;position:absolute;right:0;top:34px;z-index:60;min-width:160px;background:rgba(6,16,40,.98);border:1px solid rgba(24,200,255,.2);border-radius:12px;padding:6px">'+
             '<a href="https://app.carnimbus.com/edit-profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
             '<button id="appnav-out" type="button" style="display:block;width:100%;text-align:left;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;background:none;border:none;cursor:pointer">Sign out</button>'+
           '</div></div>')+'</div>';
         var bk=document.getElementById("appnav-back");
-        if(bk) bk.addEventListener("click",function(){ if(history.length>1) history.back(); else location.href="https://app.carnimbus.com/matches"; });
+        if(bk) bk.addEventListener("click",function(){ location.href="https://app.carnimbus.com/matches"; });
       }
     }
     
@@ -316,8 +315,7 @@
         bkBtn.style.cssText = "position:fixed;top:12px;left:12px;z-index:999;background:rgba(6,16,40,.8);border:1px solid rgba(24,200,255,.3);color:#fff;font:700 18px Manrope;line-height:1;width:28px;height:28px;border-radius:50%;cursor:pointer;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(24,200,255,.1)";
         bkBtn.innerHTML = "‹";
         bkBtn.addEventListener("click", function() {
-          if(history.length>1) history.back();
-          else location.href="https://app.carnimbus.com/matches";
+          location.href="https://app.carnimbus.com/matches";
         });
         document.body.appendChild(bkBtn);
       }
@@ -439,7 +437,7 @@
   }
   function setLang(l){ langS(l==="es"?"es":"en"); }         // write signal → effect re-patches DOM
   function initI18n(){ var s; try{s=localStorage.cn_lang;}catch(_){}
-    langS(s || ((navigator.language||"en").slice(0,2)==="es"?"es":"en"));
+    langS(s==="es"?"es":"en");   // W8: default English; only honor an explicit stored ES pick, never navigator locale
     effectFn(function(){ applyLang(langS()); });               // signal-driven; runs once + on every change
     startI18nObserver(); }                                     // re-translate JS-injected DOM (feed/match/chat cards)
   /* ===== CNMB-302/305: matched feed + car-personality chat ===== */
