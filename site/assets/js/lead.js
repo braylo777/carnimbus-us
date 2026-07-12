@@ -19,6 +19,13 @@ document.addEventListener("DOMContentLoaded",function(){
     var sub=name+" — test drive this week (via CarNimbus)";
     var body="Hi Cid,\n\nI found the exact car I want on CarNimbus: the "+name+(c.dealer_name?(" at "+c.dealer_name):"")+(c.price_mo?(" — about $"+c.price_mo+"/mo, right in my range"):"")+".\n\nI already know my numbers: "+t.deal+", ~$"+t.mo+"/mo, $"+t.dn+" down, near ZIP "+t.zip+" (within "+t.rad+" miles). "+(t.car?("This matches what I set out to find ("+t.car+").\n\n"):"\n\n")+"I'm not looking to negotiate or spend the day at a dealership — I'd like to come drive it this week, and if it's as described, I'm ready to move.\n\nWhat times work?\n\nThanks,";
     return "mailto:"+DEALER_EMAIL+"?cc="+encodeURIComponent(DEALER_CC)+"&subject="+encodeURIComponent(sub)+"&body="+encodeURIComponent(body); }
+  var ZIPSET=null;   // AC2: all valid US 5-digit ZIPs (GeoNames), lazy-loaded on first submit
+  async function zipOk(z){ if(!/^\d{5}$/.test(z)) return false;
+    if(!ZIPSET){ try{ var r=await fetch("/assets/data/us-zips.json"); var s=await r.json(); ZIPSET=new Set(s.match(/.{5}/g)); }catch(_){ return true; } }
+    return ZIPSET.has(z); }
+  var MAKES=["acura","alfa romeo","aston martin","audi","bentley","bmw","buick","cadillac","chevrolet","chevy","chrysler","dodge","ferrari","fiat","ford","genesis","gmc","honda","hummer","hyundai","infiniti","jaguar","jeep","kia","lamborghini","land rover","range rover","lexus","lincoln","lotus","lucid","maserati","mazda","mclaren","mercedes","mercedes-benz","benz","mini","mitsubishi","nissan","polestar","pontiac","porsche","ram","rivian","rolls-royce","rolls royce","saab","saturn","scion","smart","subaru","suzuki","tesla","toyota","volkswagen","vw","volvo"];
+  function carOk(s){ var q=" "+s.toLowerCase().replace(/[^a-z0-9 -]/g,"")+" ";
+    return MAKES.some(function(m){ return q.indexOf(" "+m+" ")>-1||q.indexOf(" "+m+"-")>-1; }); }
   var CARS=[];
   var f=$("lead-form"); if(!f) return;
   async function runMatch(t,quiet){
@@ -43,8 +50,10 @@ document.addEventListener("DOMContentLoaded",function(){
   f.addEventListener("submit",function(e){ e.preventDefault();
     var t=terms(), msg=$("lead-msg");
     if(!t.car){ msg.textContent=es()?"Cuéntanos el auto de tus sueños.":"Tell us your dream car."; return; }
-    if(!/^\d{5}$/.test(t.zip)){ msg.textContent=es()?"Ingresa un código postal válido.":"Enter a valid 5-digit ZIP."; return; }
-    runMatch(t,false); });
+    if(!carOk(t.car)){ msg.textContent=es()?"Dinos un auto real — incluye la marca (p. ej. Toyota, BMW).":"Tell us a real car — include the make (e.g. Toyota, BMW)."; return; }
+    zipOk(t.zip).then(function(ok){
+      if(!ok){ msg.textContent=es()?"Ingresa un código postal real de EE. UU.":"Enter a real US ZIP code."; return; }
+      msg.textContent=""; runMatch(t,false); }); });
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
     var c=CARS[+b.dataset.i]; if(!c)return; var t=terms();
     fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
