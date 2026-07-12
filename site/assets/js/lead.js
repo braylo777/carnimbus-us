@@ -27,7 +27,8 @@ document.addEventListener("DOMContentLoaded",function(){
     try{ var r=await fetch("/api/search?monthly="+t.mo+"&down="+t.dn+"&zip="+t.zip+"&radius="+t.rad+"&deal_type="+t.deal+"&q="+encodeURIComponent(t.car));
       var d=await r.json().catch(function(){return{};}); CARS=(d&&d.cars)||[];
       if(!quiet){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches"; }
-      if(!CARS.length){ if(!quiet){ msg.textContent=es()?"No encontramos autos con esos términos — prueba un radio o presupuesto mayor.":"No matches with those terms — try a wider radius or higher monthly."; } $("lead-cars").innerHTML=""; return; }
+      if(!CARS.length){ if(!quiet){ msg.textContent=es()?"No encontramos autos con esos términos — prueba un radio o presupuesto mayor.":"No matches with those terms — try a wider radius or higher monthly."; } $("lead-cars").innerHTML=""; $("lead-cars").style.display="none"; return; }
+      $("lead-cars").style.display="flex";
       $("lead-cars").innerHTML=CARS.slice(0,12).map(function(c,i){
         return '<div style="flex:none;width:210px;background:#0a1f4d;border:1px solid rgba(24,200,255,'+(i===0?'.55':'.2')+');border-radius:14px;overflow:hidden">'+
           (i===0?'<div style="font:700 9px Manrope;letter-spacing:.08em;color:#06163b;background:#18C8FF;text-align:center;padding:3px 0">⭐ '+(es()?"TU MEJOR MATCH":"YOUR TOP MATCH")+'</div>':'')+
