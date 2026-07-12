@@ -25,7 +25,7 @@
 <link rel="preload" href="/assets/fonts/manrope.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/fonts/fonts.css">
 <link rel="stylesheet" href="/assets/styles.css">
-<script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","@id":"https://carnimbus.com/#organization","name":"CarNimbus","url":"https://carnimbus.com","logo":"https://carnimbus.com/assets/logo.png","slogan":"The power's in your hands.","description":"AI-powered digital dealership — get pre-qualified with zero FICO impact, talk to the car you want, and just drive.","address":{"@type":"PostalAddress","addressLocality":"Los Angeles","addressRegion":"CA","addressCountry":"US"},"sameAs":["https://instagram.com/nimbusbros","https://www.tiktok.com/@nimbusbros","https://www.youtube.com/@nimbusbros"]},{"@context":"https://schema.org","@type":"WebSite","@id":"https://carnimbus.com/#website","url":"https://carnimbus.com","name":"CarNimbus","publisher":{"@id":"https://carnimbus.com/#organization"}},{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Will this hurt my credit?","acceptedAnswer":{"@type":"Answer","text":"No. Pre-qualification uses a soft pull only — zero FICO impact. A hard pull only ever happens later, if you choose to finance, and you'll know first."}},{"@type":"Question","name":"What does CarNimbus cost me?","acceptedAnswer":{"@type":"Answer","text":"Nothing. CarNimbus is free for buyers — we're paid by partner dealers for delivering ready-to-drive customers, not by marking up your car."}},{"@type":"Question","name":"How do test drives work?","acceptedAnswer":{"@type":"Answer","text":"Pick a car, pick a test drive center near you, pick a time. You show up expected, terms already set — no 4-hour dealership ordeal."}},{"@type":"Question","name":"Are you a dealership?","acceptedAnswer":{"@type":"Answer","text":"No — we're buyer-first. Independent dealers plug their inventory into CarNimbus; you stay in control the whole way."}},{"@type":"Question","name":"What happens to my data?","acceptedAnswer":{"@type":"Answer","text":"Your email and pre-qual info stay with us — never sold. See the Privacy Policy for the plain-English version."}},{"@type":"Question","name":"When do you launch?","acceptedAnswer":{"@type":"Answer","text":"We're rolling out across LA County first. Join the waitlist — you'll get exactly one text the day it's ready."}}]}]</script>
+<script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","@id":"https://carnimbus.com/#organization","name":"CarNimbus","url":"https://carnimbus.com","logo":"https://carnimbus.com/assets/logo.png","slogan":"The power's in your hands.","description":"AI-powered digital dealership — get pre-qualified with zero FICO impact, talk to the car you want, and just drive.","address":{"@type":"PostalAddress","addressLocality":"Los Angeles","addressRegion":"CA","addressCountry":"US"},"sameAs":["https://instagram.com/nimbusbros","https://www.tiktok.com/@nimbusbros","https://www.youtube.com/@nimbusbros"]},{"@context":"https://schema.org","@type":"WebSite","@id":"https://carnimbus.com/#website","url":"https://carnimbus.com","name":"CarNimbus","publisher":{"@id":"https://carnimbus.com/#organization"}}]</script>
 </head>
 <body>
 <noscript><div style="max-width:640px;margin:0 auto;padding:40px 24px;font-family:system-ui,sans-serif;color:#e2e9f2;background:#06163b;text-align:center">
@@ -45,58 +45,38 @@
         <nav aria-label="Primary" class="row" style="gap:28px;margin-left:36px"></nav>
         <div class="row" style="margin-left:auto;align-items:center;gap:10px">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.SegmentedControl" options="{{ langOpts }}" value="{{ lang }}" onchange="{{ setLang }}" hint-size="84px,32px"></x-import>
-          <a class="btn ghost" href="https://app.carnimbus.com/signin" style="text-decoration:none;height:32px;padding:0 14px;font-size:12px;display:inline-flex;align-items:center">Log in</a>
         </div>
       </header>
 
-      <!-- hero: 2-col on desktop (copy+surf left, talk-to-car right); styles.css collapses 1.08fr grids to 1 col ≤900px -->
-      <div class="z" style="display:grid;grid-template-columns:1.08fr .92fr;gap:42px;padding:32px 30px 44px;align-items:start">
-        <div>
-        <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">A social home for used car buyers</x-import>
-        <h1 class="hero-h1" style="font-size:clamp(26px,4vw,36px);line-height:1.1">Buy your dream car <span class="cy">on your terms.</span></h1>
-        <div style="font:500 16px/1.5 Manrope;color:#cbd5e1;margin:18px 0 0;max-width:445px">Get pre-qualified, then talk to the car you actually want. Skip the haggling, show up pre-approved — and just drive.</div>
-        <!-- surf widget (left column, above the card in mobile stacking order) -->
-        <div style="margin-top:22px;max-width:472px;border:1px solid rgba(24,200,255,.32);border-radius:20px;background:rgba(255,255,255,.03);box-shadow:0 0 40px rgba(24,200,255,.08);padding:18px" id="calc">
-          <div style="font:800 17px 'Space Grotesk',Manrope;color:#fff;letter-spacing:-.01em">🏄 Surf cars near you in 10 seconds</div>
-          <div style="font:500 12px Manrope;color:#cbd5e1;margin:4px 0 12px">Enter your budget — see the real cars near you.</div>
-          <div style="display:flex;gap:6px;margin-bottom:12px" id="calc-deal">
-            <button class="btn sm ghost" style="flex:1;height:32px;font-size:12px" data-deal="cash" type="button">Cash</button>
-            <button class="btn sm primary on" style="flex:1;height:32px;font-size:12px" data-deal="finance" type="button">Finance</button>
-            <button class="btn sm ghost" style="flex:1;height:32px;font-size:12px" data-deal="lease" type="button">Lease</button>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:nowrap;align-items:end">
-            <div style="flex:1;min-width:0"><label class="vh" for="calc-mo">Monthly budget</label>
-              <div style="position:relative"><span style="position:absolute;left:10px;top:10px;font:700 13px Manrope;color:#18C8FF">$</span><input id="calc-mo" class="pill" inputmode="numeric" placeholder="500/mo" style="width:100%;height:38px;padding-left:19px;font-size:12px;border-radius:10px"></div></div>
-            <div style="flex:1;min-width:0"><label class="vh" for="calc-down">Down payment</label>
-              <div style="position:relative"><span style="position:absolute;left:10px;top:10px;font:700 13px Manrope;color:#18C8FF">$</span><input id="calc-down" class="pill" inputmode="numeric" placeholder="1,000 down" style="width:100%;height:38px;padding-left:19px;font-size:12px;border-radius:10px"></div></div>
-            <div style="flex:none;width:62px"><label class="vh" for="calc-zip">ZIP</label><input id="calc-zip" class="pill" inputmode="numeric" placeholder="ZIP" maxlength="5" style="width:100%;height:38px;font-size:12px;border-radius:10px"></div>
-            <div style="flex:none;width:70px"><label class="vh" for="calc-radius">Radius</label><select id="calc-radius" class="pill" style="width:100%;height:38px;font-size:11px;border-radius:10px"><option value="">Any</option><option value="5">5 mi</option><option value="10">10 mi</option><option value="25" selected>25 mi</option><option value="50">50 mi</option></select></div>
-          </div>
-          <button id="calc-go" class="btn primary md" type="button" style="width:100%;margin-top:10px;height:40px">Show Me Cars</button>
-          <div id="calc-out" style="margin-top:12px"></div>
-        </div>
-        </div>
-        <!-- talk-to-car card (right column on desktop; stacks below the surf widget on mobile) -->
-        <div style="margin-top:22px">
-        <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" pad="false" hint-size="100%,420px">
-          <div style="position:relative;height:170px">
-            <img src="/assets/inventory/bmw-330i.jpg" alt="Certified BMW 330i on CarNimbus" loading="lazy" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:32px 32px 0 0">
-            <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,16,40,.1),rgba(6,16,40,.92));border-radius:32px 32px 0 0"></div>
-            <div style="position:absolute;left:18px;right:18px;bottom:13px">
-              <div class="row" style="align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#1F8A5B;box-shadow:0 0 8px #1F8A5B"></span><span class="disp" style="font-weight:600;font-size:17px">2024 BMW 330i</span></div>
-              <div style="font:600 12px Manrope;color:#cfe0ff;margin-top:3px;font-style:italic">“I don’t do speed limits. Period.”</div>
-            </div>
-          </div>
-          <div class="col" style="gap:9px;padding:16px">
-            <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkYou }}" hint-size="auto,36px">how fast can you actually go?</x-import>
-            <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkCar }}" hint-size="auto,36px">0–60 in 5 seconds. Hypothetically. I don’t judge. 🏁</x-import>
-            <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkYou }}" hint-size="auto,36px">what would I actually pay a month?</x-import>
-            <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkCar }}" hint-size="auto,36px">~$487/mo — $0 down, 72-month term. 30-sec soft check, zero credit hit.</x-import>
-            <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkYou }}" hint-size="auto,36px">ok — am I approved?</x-import>
-            <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.ChatBubble" dc-props="{{ spkCar }}" hint-size="auto,36px">APPROVED ✅ Come drive me tomorrow.</x-import>
-          </div>
-        </x-import>
-        </div>
+      <!-- Wave X (Sid): the whole site is one 5-step lead form. v9 archived at archive/site-v9-index-surf-widget.html + tag site-v9-surf-widget -->
+      <div class="z" style="max-width:560px;margin:0 auto;padding:36px 24px 46px">
+        <h1 class="hero-h1" style="font-size:clamp(28px,4.4vw,40px);line-height:1.08">Buy your dream car <span class="cy">on your terms.</span></h1>
+        <div style="font:500 15px/1.5 Manrope;color:#cbd5e1;margin:12px 0 26px">Choose your financing, payment, &amp; location. We match you to the best deals near you.</div>
+        <form id="lead-form" class="col" style="gap:18px">
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 1 · WHAT'S YOUR DREAM CAR?</div>
+            <input id="lead-car" class="pill" maxlength="80" placeholder="e.g. 2020 Toyota Tacoma" style="width:100%;height:44px;font-size:13px;border-radius:12px"></div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 2 · CASH, FINANCE, OR LEASE?</div>
+            <div style="display:flex;gap:6px" id="lead-deal">
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-deal="cash" type="button">Cash</button>
+              <button class="btn sm primary on" style="flex:1;height:36px;font-size:12px" data-deal="finance" type="button">Finance</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-deal="lease" type="button">Lease</button>
+            </div></div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · MONTHLY &amp; DOWN PAYMENT</div>
+            <div style="display:flex;gap:8px">
+              <select id="lead-monthly" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="300">~$300 / mo</option><option value="500" selected>~$500 / mo</option><option value="700">~$700 / mo</option><option value="900">$900+ / mo</option></select>
+              <select id="lead-down" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="0">$0 down</option><option value="500">$500 down</option><option value="1000" selected>$1,000 down</option><option value="2000">$2,000 down</option><option value="3000">$3,000 down</option><option value="5000">$5,000+ down</option></select>
+            </div></div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 4 · ZIP &amp; RADIUS</div>
+            <div style="display:flex;gap:8px">
+              <input id="lead-zip" class="pill" inputmode="numeric" maxlength="5" placeholder="ZIP code" style="flex:1;height:44px;font-size:13px;border-radius:12px">
+              <input id="lead-radius" class="pill" inputmode="numeric" maxlength="3" placeholder="Radius (miles)" style="flex:1;height:44px;font-size:13px;border-radius:12px">
+            </div></div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 5 · SCHEDULE YOUR TEST DRIVE</div>
+            <input id="lead-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Mobile number — a dealer texts you times" style="width:100%;height:44px;font-size:13px;border-radius:12px" class="pill">
+            <input type="text" name="website" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true" id="lead-hp">
+            <button id="lead-go" class="btn primary md" type="submit" style="width:100%;margin-top:10px;height:46px">Schedule Test Drive</button>
+            <div id="lead-msg" style="font:600 12px Manrope;color:#8ca0c4;margin-top:8px;min-height:16px"></div></div>
+        </form>
       </div>
       <!-- trust band -->
       <div class="z col" style="align-items:center;gap:13px;padding:22px 30px;border-top:1px solid rgba(24,200,255,.1);border-bottom:1px solid rgba(24,200,255,.1)">
@@ -104,117 +84,10 @@
         <div class="marq" aria-label="Test drive centers across LA County"><div class="marq-track"><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Inglewood</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Culver City</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Santa Monica</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Torrance</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Long Beach</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Downtown LA</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Pasadena</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Glendale</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Burbank</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Hawthorne</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>El Segundo</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Carson</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Downey</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Cerritos</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Van Nuys</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Whittier</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Pomona</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Santa Clarita</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Inglewood</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Culver City</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Santa Monica</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Torrance</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Long Beach</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Downtown LA</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Pasadena</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Glendale</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Burbank</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Hawthorne</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>El Segundo</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Carson</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Downey</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Cerritos</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Van Nuys</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Whittier</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Pomona</span><span class="citychip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>Santa Clarita</span></div></div>
       </div>
 
-      <!-- the problem · why it feels rigged -->
-      <div class="z" id="problem" style="padding:46px 30px 10px">
-        <div class="col" style="align-items:center;text-align:center;gap:8px;margin-bottom:22px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">The problem</x-import>
-          <h2 class="disp" style="font-size:26px;font-weight:600">Why buying a car feels rigged</h2>
-          <div style="font:500 13px Manrope;color:#aebfdf;max-width:520px">Only <b style="color:#18C8FF">2%</b> of buyers rate car dealers as high-trust. <span class="mono" style="font-size:9px;color:#7f93b8">CAREDGE '25</span><br>You already know why.</div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px" class="prob-grid">
-          <div class="glass" style="border-radius:16px;padding:18px">
-            <div style="font-size:22px">📳</div>
-            <div style="font:700 14px Manrope;margin:8px 0 4px">The harassment</div>
-            <div style="font:500 12px/1.55 Manrope;color:#aebfdf">Walk in once, get called for months. Texts, follow-ups, "just checking in" — pressure before you've even picked a car.</div>
-          </div>
-          <div class="glass" style="border-radius:16px;padding:18px">
-            <div style="font-size:22px">📉</div>
-            <div style="font:700 14px Manrope;margin:8px 0 4px">The hard pull</div>
-            <div style="font:500 12px/1.55 Manrope;color:#aebfdf">A surprise hard inquiry dings your FICO score before any deal even exists. Your credit pays first — you decide later.</div>
-          </div>
-          <div class="glass" style="border-radius:16px;padding:18px">
-            <div style="font-size:22px">🤐</div>
-            <div style="font:700 14px Manrope;margin:8px 0 4px">The murky math</div>
-            <div style="font:500 12px/1.55 Manrope;color:#aebfdf">Numbers that never sit still and a 4-hour haggle built to wear you down until you take whatever they recommend.</div>
-          </div>
-        </div>
-        <div style="text-align:center;font:600 13px Manrope;color:#cbd5e1;margin-top:18px">Navigating this alone costs the average buyer <b class="cy">$2,000–$4,000</b> per car.</div>
-      </div>
-
-      <!-- the shift · trends -->
-      <div class="z" id="shift" style="padding:46px 30px 10px">
-        <div class="col" style="align-items:center;text-align:center;gap:8px;margin-bottom:22px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">The shift</x-import>
-          <h2 class="disp" style="font-size:26px;font-weight:600">Buyers already moved. The lots didn't.</h2>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" class="shift-grid">
-          <div class="metric"><div class="v">74%</div><div class="l">shop for cars on social</div><div class="mono" style="font-size:8px;color:#7f93b8;margin-top:5px">SNAP × HARRIS '25</div></div>
-          <div class="metric"><div class="v">61%</div><div class="l">trust creators over brand ads</div><div class="mono" style="font-size:8px;color:#7f93b8;margin-top:5px">SNAP × HARRIS '25</div></div>
-          <div class="metric"><div class="v">50%</div><div class="l">of Gen Z bought their last car fully online</div><div class="mono" style="font-size:8px;color:#7f93b8;margin-top:5px">SNAP × HARRIS '25</div></div>
-          <div class="metric"><div class="v">79%</div><div class="l">want AI to recommend the right car</div><div class="mono" style="font-size:8px;color:#7f93b8;margin-top:5px">INDUSTRY SURVEY '25</div></div>
-        </div>
-        <div class="glass" style="border-radius:16px;padding:16px 18px;margin-top:14px;text-align:center;font:500 13px/1.6 Manrope;color:#cbd5e1">
-          And with a <b style="color:#fff">~$16,000</b> average gap between new and used <span class="mono" style="font-size:9px;color:#7f93b8">MARKET DATA '26</span>, smart money is buying used — a market with <b style="color:#fff">zero support on the buyer's side</b>. Until now.
-        </div>
-      </div>
-
-<!-- old way vs new way -->
-      <div class="z" style="padding:8px 30px 50px">
-        <div class="col" style="align-items:center;text-align:center;gap:8px;margin-bottom:26px"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">The fix</x-import><div class="disp" style="font-size:32px;font-weight:600">The old way vs. the CarNimbus way</div></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" pad="false" hint-size="100%,420px">
-            <div style="padding:18px 18px 0"><span style="display:inline-flex;align-items:center;gap:6px;font:700 10px 'IBM Plex Mono';letter-spacing:.14em;color:#fda4af;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:999px;padding:5px 11px">THE OLD WAY</span></div>
-            <div style="padding:14px 18px 0"><img src="/assets/story/old-way.jpg" alt="The old way: dim lot, salesman desk, paperwork, waiting" width="960" height="535" decoding="async" style="display:block;width:100%;height:auto;border-radius:16px"></div>
-            <div class="col" style="gap:11px;padding:16px 18px 20px;font:500 13px Manrope;color:#cbd5e1">
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm" style="color:#fda4af"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span>Endless negotiations the second you walk in</div>
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm" style="color:#fda4af"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span>Surprise hard pull dings your credit</div>
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm" style="color:#fda4af"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span>Inconsistent numbers, 4-hour haggle</div>
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm" style="color:#fda4af"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span>Overpay $2,000–$4,000</div>
-            </div>
-          </x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" pad="false" hint-size="100%,420px">
-            <div style="padding:18px 18px 0"><span style="display:inline-flex;align-items:center;gap:6px;font:700 10px 'IBM Plex Mono';letter-spacing:.14em;color:#18C8FF;background:rgba(24,200,255,.12);border:1px solid rgba(24,200,255,.35);border-radius:999px;padding:5px 11px">THE CARNIMBUS WAY</span></div>
-            <div style="padding:14px 18px 0"><img src="/assets/story/carnimbus-way.jpg" alt="The CarNimbus way: phone-first, glowing path straight to your car" width="960" height="535" decoding="async" style="display:block;width:100%;height:auto;border-radius:16px"></div>
-            <div class="col" style="gap:11px;padding:16px 18px 20px;font:500 13px Manrope;color:#e2e9f2">
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg></span>Talk to the car — zero pressure</div>
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg></span>Soft pull — 0 FICO impact</div>
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg></span>Clear monthly, set before you go</div>
-              <div class="row" style="align-items:center;gap:10px"><span class="ic-sm cy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg></span>Save ~$1,000 — minutes, not hours</div>
-            </div>
-          </x-import>
-        </div>
-      </div>
-
-      <!-- how it works -->
-      <div class="z" id="how-it-works" style="padding:52px 30px">
-        <div class="col" style="align-items:center;text-align:center;gap:8px;margin-bottom:30px"><x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Eyebrow" hint-size="auto,18px">How it works</x-import><div class="disp" style="font-size:32px;font-weight:600">Three steps from scroll to keys</div></div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" hint-size="100%,200px">
-            <div style="width:46px;height:46px;border-radius:14px;background:rgba(24,200,255,.12);display:grid;place-items:center;color:#18C8FF" class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5Z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg></div>
-            <div class="disp" style="font-size:19px;font-weight:600;margin:15px 0 7px">1 · Talk to the car</div>
-            <div style="font:500 13px/1.55 Manrope;color:#aebfdf">Every car has an AI personality. Ask it anything — it answers straight and sizes you up casually in chat.</div>
-          </x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" hint-size="100%,200px">
-            <div style="width:46px;height:46px;border-radius:14px;background:rgba(24,200,255,.12);display:grid;place-items:center;color:#18C8FF" class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
-            <div class="disp" style="font-size:19px;font-weight:600;margin:15px 0 7px">2 · Get pre-qualified</div>
-            <div style="font:500 13px/1.55 Manrope;color:#aebfdf">A soft pull returns a real monthly range in seconds. Zero FICO impact — no human, no pressure.</div>
-          </x-import>
-          <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.GlassCard" hint-size="100%,200px">
-            <div style="width:46px;height:46px;border-radius:14px;background:rgba(24,200,255,.12);display:grid;place-items:center;color:#18C8FF" class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.9 12.1 8.6-8.6M15 7l3 3"/></svg></div>
-            <div class="disp" style="font-size:19px;font-weight:600;margin:15px 0 7px">3 · Show up &amp; drive</div>
-            <div style="font:500 13px/1.55 Manrope;color:#aebfdf">We book you at a test drive center nearby. Walk in expected, terms already set. No 4-hour ordeal.</div>
-          </x-import>
-        </div>
-      </div>
-
-      <!-- FAQ -->
-      <div class="z" id="faq" style="padding:44px 30px">
-        <div class="col" style="align-items:center;text-align:center;gap:8px;margin-bottom:24px"><h2 class="disp" style="font-size:30px;font-weight:600">Questions, answered</h2></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:900px;margin:0 auto">
-          <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">Will this hurt my credit?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">No. Pre-qualification uses a soft pull only — zero FICO impact. A hard pull only ever happens later, if you choose to finance, and you'll know first.</p></details>
-          <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">What does CarNimbus cost me?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">Nothing. CarNimbus is free for buyers — we're paid by partner dealers for delivering ready-to-drive customers, not by marking up your car.</p></details>
-          <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">How do test drives work?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">Pick a car, pick a test drive center near you, pick a time. You show up expected, terms already set — no 4-hour dealership ordeal.</p></details>
-          <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">Are you a dealership?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">No — we're buyer-first. Independent dealers plug their inventory into CarNimbus; you stay in control the whole way.</p></details>
-          <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">What happens to my data?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">Your email and pre-qual info stay with us — never sold. See the <a href="/privacy" style="color:#18C8FF">Privacy Policy</a> for the plain-English version.</p></details>
-          <details class="glass" style="padding:16px 18px;border-radius:14px"><summary style="font:700 13px Manrope;cursor:pointer">When do you launch?</summary><p style="font:500 12.5px/1.6 Manrope;color:#aebfdf;margin-top:8px">We're rolling out across LA County first. Join the waitlist — you'll get exactly one text the day it's ready.</p></details>
-        </div>
-      </div>
-
-      <!-- footer (one page) -->
       <footer class="z row" style="padding:24px 30px;gap:30px;align-items:center;border-top:1px solid rgba(24,200,255,.12);background:rgba(6,16,40,.6)">
         <div style="flex:1">
           <x-import component-from-global-scope="CarNimbusDesignSystem_303dd7.Wordmark" variant="solid" size="15" mark="true" mark-src="{{ logoUrl }}" hint-size="130px,26px"></x-import>
-          <div style="font:600 11px Manrope;color:#18C8FF;margin-top:8px">A social home for used car buyers.</div>
+          <div style="font:600 11px Manrope;color:#18C8FF;margin-top:8px">The power's in your hands.</div>
           <div style="font:500 11px Manrope;color:#7f93b8;margin-top:4px">© 2026 CarNimbus, Inc. · Los Angeles, California</div>
         </div>
       </footer>
@@ -225,7 +98,7 @@
 <script src="/assets/runtime.js" defer></script>
 <script src="/assets/nimbus-sensor.js" defer></script>
 <script src="/assets/js/beacon.js" defer></script>
-<script src="/assets/js/calc.js" defer></script>
+<script src="/assets/js/lead.js" defer></script>
 <script src="/assets/js/marquee.js" defer></script>
 <!-- Cloudflare Web Analytics: paste token & uncomment -->
 <!-- <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"YOUR_CF_ANALYTICS_TOKEN"}'></script> -->

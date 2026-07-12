@@ -129,6 +129,7 @@ export default {
     if (url.pathname === "/api/feed/ask" && request.method === "POST")     return sec(await withUser(request, env, feedAsk, ctx));
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
+    if (url.pathname === "/api/webleads" && request.method === "POST")     return sec(await webLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
     if (url.pathname === "/api/dealer/console")                           return sec(await withDealer(request, env, dealerConsole));
     if (url.pathname === "/api/dealer/roi")                               return sec(await withDealer(request, env, dealerRoi));
@@ -1706,6 +1707,24 @@ async function saveAvatar(request,env,uid){ const {avatar}=await request.json().
   await env.DB.prepare("INSERT INTO profiles (user_id,answers,avatar,embedding_synced,updated_at) VALUES (?,?,?,0,?) "+
     "ON CONFLICT(user_id) DO UPDATE SET avatar=excluded.avatar, updated_at=excluded.updated_at")
     .bind(uid,"{}",avatar,new Date().toISOString()).run();
+  return json({ok:true}); }
+// X2 (Wave X): anonymous 5-step website lead — stored + routed to admin SMS now; CDK API drop-in later.
+async function webLead(request,env){ const b=await request.json().catch(()=>({}));
+  if(b.website) return json({ok:true});                                    // honeypot: swallow silently
+  const car=String(b.dream_car||"").trim().slice(0,80);
+  const deal=["cash","finance","lease"].includes(b.deal_type)?b.deal_type:"finance";
+  const zip=String(b.zip||"").replace(/\D/g,"").slice(0,5);
+  let ph=String(b.phone||"").replace(/\D/g,""); if(ph.length===11&&ph[0]==="1")ph=ph.slice(1);
+  if(!car||!/^\d{5}$/.test(zip)||!/^[2-9]\d{9}$/.test(ph)) return json({ok:false,error:"bad_request"},400);
+  const ip=request.headers.get("CF-Connecting-IP")||"";
+  const since=new Date(Date.now()-3600e3).toISOString();
+  const rc=await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE ip=? AND created_at>?").bind(ip,since).first().catch(()=>({c:0}));
+  if(rc&&rc.c>=5){ await logEvent(env,{action:"intent.web_lead_ratelimited",location:zip,source:"sid-form"}); return json({ok:true}); }   // per-IP cap: silent to the client, visible internally
+  const mo=String(b.monthly||"").replace(/\D/g,"").slice(0,6), dn=String(b.down||"").replace(/\D/g,"").slice(0,6), rad=String(b.radius||"").replace(/\D/g,"").slice(0,3)||"25";
+  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,new Date().toISOString()).run();
+  if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus web lead: ${car} · ${deal} · $${mo}/mo · $${dn} down · ${zip} ±${rad}mi · +1${ph}`).catch(()=>{});
+  await logEvent(env,{action:"intent.web_lead",location:zip,source:"sid-form"});
   return json({ok:true}); }
 async function dealerLead(request,env){
   const {name,dealership,role,phone,email}=await request.json().catch(()=>({}));
