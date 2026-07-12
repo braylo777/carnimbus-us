@@ -115,7 +115,7 @@ export default {
     if (url.pathname === "/api/profile" && request.method === "POST")     return sec(await withUser(request, env, saveProfile));
     if (url.pathname === "/api/avatar" && request.method === "POST")      return sec(await withUser(request, env, saveAvatar));
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
-    if (url.pathname === "/api/search")                                   return sec(await search(request, env));
+    if (url.pathname === "/api/search")                                   return sec(await search(request, env, ctx));
     if (url.pathname === "/api/matches")                                  return sec(await withUser(request, env, matchesList));
     if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
     if (url.pathname === "/api/slots")                                    return sec(await openSlots(request, env));
@@ -875,7 +875,7 @@ function feedCar(v,score,ans,lang,mo){ return {id:v.id,year:v.year,make:v.make,m
   drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
   match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
 // TASK-001: no-auth affordability search. Accepts the numbers as params (feed() only reads a stored profile).
-async function search(request,env){ try{
+async function search(request,env,ctx){ try{
   const u=new URL(request.url); const lang=u.searchParams.get("lang");
   const monthly=Math.min(Math.max(parseInt(u.searchParams.get("monthly"),10)||0,0),25000);
   const down=Math.min(Math.max(parseInt(u.searchParams.get("down"),10)||0,0),150000);
@@ -904,14 +904,27 @@ async function search(request,env){ try{
     if(out.length){ reason="widen_radius"; out.sort((a,b)=>(a._d||1e9)-(b._d||1e9)); } }
   if(!out.length){ out=scan(0,radius);                   // B1 pass 3: keep radius, drop budget (cheapest-first)
     if(out.length) reason="over_budget"; }
-  out.sort((a,b)=> reason==="widen_radius" ? (a._d||1e9)-(b._d||1e9) : (a.price_mo||0)-(b.price_mo||0));
-  // Y3: dream-car text boost — cars matching the typed dream car float to the front (stable within groups).
-  if(q){ const toks=q.split(/[^a-z0-9]+/).filter(t=>t.length>=3);
-    if(toks.length){ const hit=c=>{ const s=(c.year+" "+c.make+" "+c.model).toLowerCase(); return toks.some(t=>s.includes(t)); };
-      out=[...out.filter(hit),...out.filter(c=>!hit(c))]; } }
+  // Z1: weighted match score — dream-car text (make/model/year), segment affinity when the exact car doesn't
+  // exist in inventory (a McLaren Artura surfaces luxury/performance cars, never a family SUV), budget closeness
+  // (use their budget well, not just "cheapest"), and distance. Deterministic — no LLM latency.
+  const toks=q?q.split(/[^a-z0-9]+/).filter(t=>t.length>=3):[];
+  const SPORTY=/mclaren|ferrari|lamborghini|lambo|porsche|corvette|gt-?r|supra|artura|huracan|aventador|911|cayman|boxster|amg|\bm[2-8]\b|rs\d|maserati|aston|bentley|rolls/;
+  const qSeg=q?(SPORTY.test(q)?"luxury":segOf(q,q)):null;   // segOf regexes run over the whole typed text
+  const scoreOf=c=>{ const mk=String(c.make||"").toLowerCase(), md=String(c.model||"").toLowerCase(), yr=String(c.year||"");
+    let s=0;
+    for(const t of toks){ if(mk.includes(t)) s+=40; else if(md.includes(t)) s+=30; else if(yr===t) s+=6; }
+    if(qSeg&&segOf(c.make,c.model)===qSeg) s+=14;
+    if(monthly&&c.price_mo){ const r=Math.abs(c.price_mo-monthly)/monthly; s+=Math.max(0,10-10*Math.min(r,1)); }
+    if(c._d!=null) s+=6*(1-Math.min(c._d,50)/50);
+    return s; };
+  if(q||reason!=="widen_radius"){ out=out.map(c=>({c,s:scoreOf(c)})).sort((a,b)=>b.s-a.s||((a.c.price_mo||0)-(b.c.price_mo||0))).map(x=>x.c); }
+  else out.sort((a,b)=>(a._d||1e9)-(b._d||1e9));
   const anon=readAnon(request);
-  await logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null});
-  await logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length});  // B2 telemetry
+  // Z2: telemetry off the critical path — the response doesn't wait on two D1 INSERTs.
+  const logs=Promise.all([
+    logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null}),
+    logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length})]);
+  if(ctx&&ctx.waitUntil) ctx.waitUntil(logs); else await logs;
   return json({ok:true,count:out.length,cars:out.slice(0,60),home:home||null,reason});
   }catch(e){ return json({ok:true,cars:[],degraded:true}); } }
 async function feed(request,env){ try{ const uid=await readSession(env,request);
@@ -1682,7 +1695,7 @@ function segOf(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
   if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk)) return "luxury";
   if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md)) return "truck";
   if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md)) return "ev";
-  if(/jeep|grand cherokee|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|suv|rav4|cr-v|crv/.test(mk+" "+md)) return "suv";
+  if(/jeep|grand cherokee|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|suv|rav4|cr-v|crv|santa fe|tucson|kona|cx-5|cx-9|forester|outback|crosstrek|escape|edge|equinox|traverse|acadia|pathfinder|murano|rogue|venza/.test(mk+" "+md)) return "suv";
   return "sedan"; }
 function tradeEstimate(a){ if(!a) return null; const yr=parseInt(a.current_year,10), mk=a.current_make, md=a.current_model, mi=parseInt(String(a.current_miles||"").replace(/\D/g,""),10)||0;
   if(!yr||!mk||!md) return null;

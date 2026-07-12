@@ -1,8 +1,10 @@
 document.addEventListener("DOMContentLoaded",function(){
+  try{ if(location.search) history.replaceState(null,"",location.pathname); }catch(_){}   // Z4: keep the URL bare carnimbus.com
   function $(id){return document.getElementById(id);}
   function esc(s){return String(s==null?"":s).replace(/[<&>"]/g,function(c){return {"<":"&lt;","&":"&amp;",">":"&gt;","\"":"&quot;"}[c];});}
   function es(){try{return localStorage.cn_lang==="es";}catch(_){return false;}}
   var DEALER_EMAIL="cidsanchez@lacarguy.com";   // Y2: swap for Cid's CDK/calendar link when credentials exist
+  var DEALER_CC="maxberger@lacarguy.com";   // Z: Max Berger CC'd on every auto-drafted lead email to Cid
   var dealButtons=document.querySelectorAll("#lead-deal button");
   dealButtons.forEach(function(btn){ btn.addEventListener("click",function(){
     dealButtons.forEach(function(b){ b.classList.remove("on"); b.classList.remove("primary"); b.classList.add("ghost"); });
@@ -12,9 +14,9 @@ document.addEventListener("DOMContentLoaded",function(){
       mo:$("lead-monthly").value, dn:$("lead-down").value,
       zip:($("lead-zip").value||"").replace(/\D/g,""), rad:($("lead-radius").value||"").replace(/\D/g,"")||"25" }; }
   function mailtoFor(c,t){ var name=c.year+" "+c.make+" "+c.model;
-    var sub="Test drive request — "+name+" (via CarNimbus)";
-    var body="Hi Cid,\n\nI'm a local LA shopper and came across CarNimbus — I saw you have great deals that fit my budget. I'd like to test drive the "+name+(c.dealer_name?(" at "+c.dealer_name):"")+".\n\nMy terms: "+t.deal+", ~$"+t.mo+"/mo, $"+t.dn+" down, ZIP "+t.zip+" (±"+t.rad+" mi).\n\nWhat times in the upcoming week fit your schedule?\n\nThanks!";
-    return "mailto:"+DEALER_EMAIL+"?subject="+encodeURIComponent(sub)+"&body="+encodeURIComponent(body); }
+    var sub=name+" — test drive this week (via CarNimbus)";
+    var body="Hi Cid,\n\nI found the exact car I want on CarNimbus: the "+name+(c.dealer_name?(" at "+c.dealer_name):"")+(c.price_mo?(" — about $"+c.price_mo+"/mo, right in my range"):"")+".\n\nI already know my numbers: "+t.deal+", ~$"+t.mo+"/mo, $"+t.dn+" down, near ZIP "+t.zip+" (within "+t.rad+" miles). "+(t.car?("This matches what I set out to find ("+t.car+").\n\n"):"\n\n")+"I'm not looking to negotiate or spend the day at a dealership — I'd like to come drive it this week, and if it's as described, I'm ready to move.\n\nWhat times work?\n\nThanks,";
+    return "mailto:"+DEALER_EMAIL+"?cc="+encodeURIComponent(DEALER_CC)+"&subject="+encodeURIComponent(sub)+"&body="+encodeURIComponent(body); }
   var CARS=[];
   var f=$("lead-form"); if(!f) return;
   f.addEventListener("submit",async function(e){ e.preventDefault();
@@ -33,7 +35,7 @@ document.addEventListener("DOMContentLoaded",function(){
           '<div style="padding:10px"><div style="font:700 12px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</div>'+
           '<div style="font:700 13px Manrope;color:#18C8FF;margin-top:3px">$'+esc(c.price_mo)+'/mo</div>'+
           (c.dist?'<div style="font:600 9px Manrope;color:#8ca0c4;margin-top:2px">'+esc(c.dist)+' mi away</div>':'')+
-          '<button type="button" class="btn primary sm lead-book" data-i="'+i+'" style="width:100%;margin-top:8px">'+(es()?"Agendar prueba":"Schedule Test Drive")+'</button></div></div>';
+          '<a class="btn primary sm lead-book" data-i="'+i+'" href="'+mailtoFor(c,t).replace(/"/g,"&quot;")+'" style="width:100%;margin-top:8px;text-decoration:none;justify-content:center">'+(es()?"Conducir ya":"Drive Now")+'</a></div></div>';
       }).join('');
     }catch(_){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches";
       msg.textContent=es()?"No se pudo buscar — inténtalo de nuevo.":"Couldn't search — try again."; }
@@ -43,7 +45,5 @@ document.addEventListener("DOMContentLoaded",function(){
     fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({dream_car:t.car,deal_type:t.deal,monthly:t.mo,down:t.dn,zip:t.zip,radius:t.rad,
         matched_car:c.year+" "+c.make+" "+c.model,website:$("lead-hp").value})}).catch(function(){});
-    location.href=mailtoFor(c,t);
-    $("lead-msg").textContent=es()?"✓ Correo redactado — envíalo y Cid te responderá con horarios.":"✓ Email drafted — hit send and Cid will get back to you with times.";
   });
 });
