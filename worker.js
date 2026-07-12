@@ -922,9 +922,21 @@ async function search(request,env,ctx){ try{
   else out.sort((a,b)=>(a._d||1e9)-(b._d||1e9));
   const anon=readAnon(request);
   // Z2: telemetry off the critical path — the response doesn't wait on two D1 INSERTs.
-  const logs=Promise.all([
+  const jobs=[
     logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null}),
-    logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length})]);
+    logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length})];
+  // AC3: scans ledger — one row per validated web scan (src=scan), deduped per IP+terms; repeats counted, not re-inserted.
+  const MAKE_RE=/acura|alfa|aston|audi|bentley|bmw|buick|cadillac|chevrolet|chevy|chrysler|dodge|ferrari|fiat|ford|genesis|gmc|honda|hummer|hyundai|infiniti|jaguar|jeep|kia|lamborghini|land rover|range rover|lexus|lincoln|lotus|lucid|maserati|mazda|mclaren|mercedes|benz|mini|mitsubishi|nissan|polestar|pontiac|porsche|\bram\b|rivian|rolls|saab|saturn|scion|smart|subaru|suzuki|tesla|toyota|volkswagen|\bvw\b|volvo/;
+  if(u.searchParams.get("src")==="scan" && MAKE_RE.test(q)){
+    const ip=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
+    const deal=String(u.searchParams.get("deal_type")||"").slice(0,10);
+    const top=out[0]?[out[0].year,out[0].make,out[0].model].filter(Boolean).join(" "):null;
+    jobs.push(env.DB.prepare(
+      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,zip,radius,ua,results,top_match) VALUES (?,?,?,?,?,?,?,?,?,?) "+
+      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match")
+      .bind(ip,q,deal,monthly,down,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top).run().catch(()=>{}));
+  }
+  const logs=Promise.all(jobs);
   if(ctx&&ctx.waitUntil) ctx.waitUntil(logs); else await logs;
   return json({ok:true,count:out.length,cars:out.slice(0,60),home:home||null,reason});
   }catch(e){ return json({ok:true,cars:[],degraded:true}); } }
