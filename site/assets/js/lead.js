@@ -47,12 +47,15 @@ document.addEventListener("DOMContentLoaded",function(){
     }catch(_){ if(!quiet){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches";
       msg.textContent=es()?"No se pudo buscar — inténtalo de nuevo.":"Couldn't search — try again."; } }
   }
+  function flag(el,on){ el.style.borderColor=on?"#ff5a6e":""; el.style.boxShadow=on?"0 0 0 3px rgba(255,90,110,.18)":""; }   // AC4: red ring on invalid entry
+  ["lead-car","lead-zip"].forEach(function(id){ $(id).addEventListener("input",function(){ flag($(id),false); }); });
   f.addEventListener("submit",function(e){ e.preventDefault();
     var t=terms(), msg=$("lead-msg");
-    if(!t.car){ msg.textContent=es()?"Cuéntanos el auto de tus sueños.":"Tell us your dream car."; return; }
-    if(!carOk(t.car)){ msg.textContent=es()?"Dinos un auto real — incluye la marca (p. ej. Toyota, BMW).":"Tell us a real car — include the make (e.g. Toyota, BMW)."; return; }
+    flag($("lead-car"),false); flag($("lead-zip"),false);
+    if(!t.car){ flag($("lead-car"),true); msg.textContent=es()?"Cuéntanos el auto de tus sueños.":"Tell us your dream car."; return; }
+    if(!carOk(t.car)){ flag($("lead-car"),true); msg.textContent=es()?"Dinos un auto real — incluye la marca (p. ej. Toyota, BMW).":"Tell us a real car — include the make (e.g. Toyota, BMW)."; return; }
     zipOk(t.zip).then(function(ok){
-      if(!ok){ msg.textContent=es()?"Ingresa un código postal real de EE. UU.":"Enter a real US ZIP code."; return; }
+      if(!ok){ flag($("lead-zip"),true); msg.textContent=es()?"Ingresa un código postal real de EE. UU.":"Enter a real US ZIP code."; return; }
       msg.textContent=""; runMatch(t,false); }); });
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
     var c=CARS[+b.dataset.i]; if(!c)return; var t=terms();
