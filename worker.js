@@ -886,7 +886,7 @@ async function search(request,env,ctx){ try{
   const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
-  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
@@ -897,6 +897,7 @@ async function search(request,env,ctx){ try{
       if(radCap && dist!=null && dist>radCap) continue;   // radCap=0 → ignore radius (fallback pass)
       const car=feedCar(v,null,{},lang,mo); if(dist!=null){ car.dist=dist.toFixed(1); car._d=dist; }
       if(cd){ car.dlat=cd.lat; car.dlng=cd.lng; }        // S3: real car location → the website map popup
+      car.dealer_name=v.dealer_name||null;   // AB3: rooftop name on the card + in the lead email
       r.push(car);
     } return r; };
   let out=scan(monthly,radius), reason=null;             // strict: their exact budget + radius
