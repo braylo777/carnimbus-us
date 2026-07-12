@@ -883,6 +883,7 @@ async function search(request,env){ try{
   if(monthly<=0 || !/^\d{5}$/.test(zip)) return json({ok:true,count:0,cars:[],reason:"need_inputs"});   // P1: no valid budget/ZIP → no cars
   const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
+  const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
   const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
@@ -904,6 +905,10 @@ async function search(request,env){ try{
   if(!out.length){ out=scan(0,radius);                   // B1 pass 3: keep radius, drop budget (cheapest-first)
     if(out.length) reason="over_budget"; }
   out.sort((a,b)=> reason==="widen_radius" ? (a._d||1e9)-(b._d||1e9) : (a.price_mo||0)-(b.price_mo||0));
+  // Y3: dream-car text boost — cars matching the typed dream car float to the front (stable within groups).
+  if(q){ const toks=q.split(/[^a-z0-9]+/).filter(t=>t.length>=3);
+    if(toks.length){ const hit=c=>{ const s=(c.year+" "+c.make+" "+c.model).toLowerCase(); return toks.some(t=>s.includes(t)); };
+      out=[...out.filter(hit),...out.filter(c=>!hit(c))]; } }
   const anon=readAnon(request);
   await logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null});
   await logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length});  // B2 telemetry
@@ -1715,15 +1720,16 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   const deal=["cash","finance","lease"].includes(b.deal_type)?b.deal_type:"finance";
   const zip=String(b.zip||"").replace(/\D/g,"").slice(0,5);
   let ph=String(b.phone||"").replace(/\D/g,""); if(ph.length===11&&ph[0]==="1")ph=ph.slice(1);
-  if(!car||!/^\d{5}$/.test(zip)||!/^[2-9]\d{9}$/.test(ph)) return json({ok:false,error:"bad_request"},400);
+  if(!car||!/^\d{5}$/.test(zip)||(ph&&!/^[2-9]\d{9}$/.test(ph))) return json({ok:false,error:"bad_request"},400);   // Y4: phone optional — email is the contact channel now
+  const mc=String(b.matched_car||"").trim().slice(0,120);
   const ip=request.headers.get("CF-Connecting-IP")||"";
   const since=new Date(Date.now()-3600e3).toISOString();
   const rc=await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE ip=? AND created_at>?").bind(ip,since).first().catch(()=>({c:0}));
   if(rc&&rc.c>=5){ await logEvent(env,{action:"intent.web_lead_ratelimited",location:zip,source:"sid-form"}); return json({ok:true}); }   // per-IP cap: silent to the client, visible internally
   const mo=String(b.monthly||"").replace(/\D/g,"").slice(0,6), dn=String(b.down||"").replace(/\D/g,"").slice(0,6), rad=String(b.radius||"").replace(/\D/g,"").slice(0,3)||"25";
-  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,new Date().toISOString()).run();
-  if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus web lead: ${car} · ${deal} · $${mo}/mo · $${dn} down · ${zip} ±${rad}mi · +1${ph}`).catch(()=>{});
+  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+    .bind(car,deal,mo,dn,zip,rad,ph?("+1"+ph):"",ip,mc,new Date().toISOString()).run();
+  if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus web lead: ${car}${mc?` → matched ${mc}`:``} · ${deal} · $${mo}/mo · $${dn} down · ${zip} ±${rad}mi${ph?` · +1${ph}`:``} (emailing Cid)`).catch(()=>{});
   await logEvent(env,{action:"intent.web_lead",location:zip,source:"sid-form"});
   return json({ok:true}); }
 async function dealerLead(request,env){
