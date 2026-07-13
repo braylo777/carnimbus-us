@@ -6,3 +6,6 @@ node_modules/
 .walkthroughs/
 
 .claude/brain/
+nimbus-local/nimbus.sqlite*
+nimbus-local/.env.local
+**/*.ed25519.key
