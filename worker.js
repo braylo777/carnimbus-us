@@ -879,9 +879,13 @@ async function search(request,env,ctx){ try{
   const u=new URL(request.url); const lang=u.searchParams.get("lang");
   const monthly=Math.min(Math.max(parseInt(u.searchParams.get("monthly"),10)||0,0),25000);
   const down=Math.min(Math.max(parseInt(u.searchParams.get("down"),10)||0,0),150000);
+  const deal=String(u.searchParams.get("deal_type")||"finance").slice(0,10);                    // AD3: cash|finance|lease
+  const budget=Math.min(Math.max(parseInt(u.searchParams.get("budget"),10)||0,0),500000);       // AD3: cash total budget
+  const isCash=deal==="cash"&&budget>0, isLease=deal==="lease";
   const zip=String(u.searchParams.get("zip")||"").slice(0,10);
-  if(monthly<=0 || !/^\d{5}$/.test(zip)) return json({ok:true,count:0,cars:[],reason:"need_inputs"});   // P1: no valid budget/ZIP → no cars
+  if(((isCash&&budget<=0)||(!isCash&&monthly<=0)) || !/^\d{5}$/.test(zip)) return json({ok:true,count:0,cars:[],reason:"need_inputs"});   // P1: no valid budget/ZIP → no cars
   const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
+  const leaseMoFor=(price,dn)=>{ const resid=price*0.55, mf=0.00275; return Math.max(99,Math.round((price-dn-resid)/36+(price+resid)*mf)); };   // AD3: 36-mo, 55% residual — honest ballpark like the APR default
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
   const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
@@ -890,8 +894,8 @@ async function search(request,env,ctx){ try{
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
-      const mo=monthlyFor(v.price,down,apr,72);
-      if(budgetCap && mo>budgetCap) continue;          // budgetCap=0 → ignore budget (fallback pass)
+      const mo=isLease?leaseMoFor(v.price,down):monthlyFor(v.price,down,apr,72);
+      if(budgetCap && (isCash?v.price>budgetCap:mo>budgetCap)) continue;   // budgetCap=0 → ignore budget (fallback pass); cash caps total price
       let cd=(v.dealer_lat!=null&&v.dealer_lng!=null)?{lat:v.dealer_lat,lng:v.dealer_lng}:(cen[v.dealer_zip||v.location_zip||""]||null);
       let dist=(home&&cd)?haversineMi(home.lat,home.lng,cd.lat,cd.lng):null;
       if(radCap && dist!=null && dist>radCap) continue;   // radCap=0 → ignore radius (fallback pass)
@@ -900,8 +904,8 @@ async function search(request,env,ctx){ try{
       car.dealer_name=v.dealer_name||null;   // AB3: rooftop name on the card + in the lead email
       r.push(car);
     } return r; };
-  let out=scan(monthly,radius), reason=null;             // strict: their exact budget + radius
-  if(!out.length){ out=scan(monthly,0);                  // B1 pass 2: keep budget, drop radius (nearest-first)
+  let out=scan(isCash?budget:monthly,radius), reason=null;             // strict: their exact budget + radius
+  if(!out.length){ out=scan(isCash?budget:monthly,0);                  // B1 pass 2: keep budget, drop radius (nearest-first)
     if(out.length){ reason="widen_radius"; out.sort((a,b)=>(a._d||1e9)-(b._d||1e9)); } }
   if(!out.length){ out=scan(0,radius);                   // B1 pass 3: keep radius, drop budget (cheapest-first)
     if(out.length) reason="over_budget"; }
@@ -915,7 +919,8 @@ async function search(request,env,ctx){ try{
     let s=0;
     for(const t of toks){ if(mk.includes(t)) s+=40; else if(md.includes(t)) s+=30; else if(yr===t) s+=6; }
     if(qSeg&&segOf(c.make,c.model)===qSeg) s+=14;
-    if(monthly&&c.price_mo){ const r=Math.abs(c.price_mo-monthly)/monthly; s+=Math.max(0,10-10*Math.min(r,1)); }
+    if(isCash&&budget&&c.price){ const r=Math.abs(c.price-budget)/budget; s+=Math.max(0,10-10*Math.min(r,1)); }
+    else if(monthly&&c.price_mo){ const r=Math.abs(c.price_mo-monthly)/monthly; s+=Math.max(0,10-10*Math.min(r,1)); }
     if(c._d!=null) s+=6*(1-Math.min(c._d,50)/50);
     return s; };
   if(q||reason!=="widen_radius"){ out=out.map(c=>({c,s:scoreOf(c)})).sort((a,b)=>b.s-a.s||((a.c.price_mo||0)-(b.c.price_mo||0))).map(x=>x.c); }
@@ -929,12 +934,11 @@ async function search(request,env,ctx){ try{
   const MAKE_RE=/acura|alfa|aston|audi|bentley|bmw|buick|cadillac|chevrolet|chevy|chrysler|dodge|ferrari|fiat|ford|genesis|gmc|honda|hummer|hyundai|infiniti|jaguar|jeep|kia|lamborghini|land rover|range rover|lexus|lincoln|lotus|lucid|maserati|mazda|mclaren|mercedes|benz|mini|mitsubishi|nissan|polestar|pontiac|porsche|\bram\b|rivian|rolls|saab|saturn|scion|smart|subaru|suzuki|tesla|toyota|volkswagen|\bvw\b|volvo/;
   if(u.searchParams.get("src")==="scan" && MAKE_RE.test(q)){
     const ip=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
-    const deal=String(u.searchParams.get("deal_type")||"").slice(0,10);
     const top=out[0]?[out[0].year,out[0].make,out[0].model].filter(Boolean).join(" "):null;
     jobs.push(env.DB.prepare(
-      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,zip,radius,ua,results,top_match) VALUES (?,?,?,?,?,?,?,?,?,?) "+
-      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match")
-      .bind(ip,q,deal,monthly,down,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top).run().catch(()=>{}));
+      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,budget,zip,radius,ua,results,top_match) VALUES (?,?,?,?,?,?,?,?,?,?,?) "+
+      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,budget,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match")
+      .bind(ip,q,deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top).run().catch(()=>{}));
   }
   const logs=Promise.all(jobs);
   if(ctx&&ctx.waitUntil) ctx.waitUntil(logs); else await logs;

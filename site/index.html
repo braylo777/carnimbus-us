@@ -61,10 +61,13 @@
               <button class="btn sm primary on" style="flex:1;height:36px;font-size:12px" data-deal="finance" type="button">Finance</button>
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-deal="lease" type="button">Lease</button>
             </div></div>
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · MONTHLY &amp; DOWN PAYMENT</div>
-            <div style="display:flex;gap:8px">
+          <div><div id="lead-terms-label" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · MONTHLY &amp; DOWN PAYMENT</div>
+            <div id="lead-finance-row" style="display:flex;gap:8px">
               <select id="lead-monthly" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="300">~$300 / mo</option><option value="500" selected>~$500 / mo</option><option value="700">~$700 / mo</option><option value="900">$900+ / mo</option></select>
               <select id="lead-down" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="0">$0 down</option><option value="500">$500 down</option><option value="1000" selected>$1,000 down</option><option value="2000">$2,000 down</option><option value="3000">$3,000 down</option><option value="5000">$5,000+ down</option></select>
+            </div>
+            <div id="lead-cash-row" style="display:none">
+              <select id="lead-budget" class="pill" style="width:100%;height:44px;font-size:13px;border-radius:12px"><option value="10000">Up to $10k</option><option value="20000">$10k–$20k</option><option value="30000" selected>$20k–$30k</option><option value="50000">$30k–$50k</option><option value="75000">$50k–$75k</option><option value="250000">$75k+</option></select>
             </div></div>
           <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 4 · ZIP &amp; RADIUS</div>
             <div style="display:flex;gap:8px">
