@@ -104,7 +104,10 @@ export default {
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
       // AG-fix: root serves the DIRECTORY form ("/ai/","/admin/") not "/index.html" — Assets canonicalizes an
       // explicit index.html to its dir with a 307, which then hit the clean-URL rule below and looped.
-      url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/") : url.pathname);
+      // AH: admin + ai are one surface now — bare root of either serves the NIMBUS HUD (site/ai/index.html).
+      // Deeper admin pages (/pools,/events,/growth,/wall) still resolve via the /admin PREFIX untouched.
+      url.pathname = (url.pathname==="/" && (sub==="admin"||sub==="ai")) ? "/ai/"
+                   : PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/") : url.pathname);
       request = new Request(url, request);
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
@@ -174,6 +177,7 @@ export default {
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await adminOnly(request, env, (req,e)=>aiPulse(e)));
+    if (url.pathname === "/api/ai/graph")                                 return sec(await adminOnly(request, env, (req,e)=>aiGraph(e)));
     if (url.pathname === "/api/events" && request.method === "POST")      return sec(await postEvents(request, env));
     if (url.pathname === "/api/admin/events/tail")                        return sec(await adminOnly(request, env, eventsTail));
     if (url.pathname === "/api/admin/growth")                             return sec(await adminOnly(request, env, adminGrowth));
@@ -1754,6 +1758,24 @@ async function aiPulse(env){
     dealersOn:   await q("SELECT COUNT(*) c FROM dealer_leads WHERE engine_on=1"),
     dealersActive: await q("SELECT COUNT(*) c FROM dealer_leads WHERE subscription_status IN ('active','trialing')")
   }); }
+async function aiGraph(env){
+  const all=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]})); return r.results||[]; };
+  const NODES=[], EDGES=[], seen=new Set();
+  const add=(id,type,label,val)=>{ if(seen.has(id))return; seen.add(id); NODES.push({id,type,label:String(label||"").trim().slice(0,40),val:val||1}); };
+  const dealers=await all("SELECT id,name,dealership FROM dealer_leads WHERE engine_on=1 ORDER BY id DESC LIMIT 20");
+  dealers.forEach(d=>add("d"+d.id,"dealer",d.dealership||d.name||("Dealer "+d.id),6));
+  const cars=await all("SELECT id,year,make,model,dealer_id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 80");
+  cars.forEach(c=>{ add("c"+c.id,"car",(c.year||"")+" "+(c.make||"")+" "+(c.model||""),3);
+    if(c.dealer_id&&seen.has("d"+c.dealer_id)) EDGES.push({a:"c"+c.id,b:"d"+c.dealer_id,w:1}); });
+  const ms=await all("SELECT user_id,vdp_id,score FROM matches ORDER BY score DESC LIMIT 120");
+  const riders=new Set();
+  ms.forEach(m=>{ if(!seen.has("c"+m.vdp_id))return; riders.add(m.user_id);
+    add("u"+m.user_id,"rider","Rider "+m.user_id,3);
+    EDGES.push({a:"c"+m.vdp_id,b:"u"+m.user_id,w:Math.max(1,Math.round((m.score||0)/20))}); });
+  if(riders.size){ const ids=[...riders].slice(0,60), ph=ids.map(()=>"?").join(",");
+    const ps=await all("SELECT user_id FROM profiles WHERE user_id IN ("+ph+")",...ids);
+    ps.forEach(p=>{ add("p"+p.user_id,"profile","Twin "+p.user_id,2); EDGES.push({a:"u"+p.user_id,b:"p"+p.user_id,w:1}); }); }
+  return json({ok:true, nodes:NODES.slice(0,200), edges:EDGES}); }
 async function dealerActivate(request,env){ const {leadId}=await request.json().catch(()=>({}));
   if(!leadId) return json({ok:false,error:"bad_request"},400);
   const no=genCode("CN");

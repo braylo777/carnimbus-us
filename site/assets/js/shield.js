@@ -14,8 +14,6 @@
     "input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text}"+
     "img{-webkit-user-drag:none;user-drag:none}"+
     "@media print{body{display:none!important}}"+
-    "#cn-veil{position:fixed;inset:0;z-index:2147483647;background:#06163b;display:none;"+
-      "align-items:center;justify-content:center;color:#8ca0c4;font:600 14px system-ui;text-align:center;padding:24px}"+
     "#cn-wm{position:fixed;inset:0;z-index:2147483000;pointer-events:none;opacity:.04;overflow:hidden}";
   document.head.appendChild(st);
 
@@ -32,13 +30,9 @@
   wm.innerHTML=rows.join("");
   (document.body||document.documentElement).appendChild(wm);
 
-  // passive devtools veil — window-size heuristic; dismissible by resizing so it never bricks a real user
-  var veil=document.createElement("div"); veil.id="cn-veil";
-  veil.textContent="Content hidden. Close developer tools to continue.";
-  (document.body||document.documentElement).appendChild(veil);
-  function check(){ var open=(window.outerWidth-window.innerWidth>200)||(window.outerHeight-window.innerHeight>200);
-    veil.style.display=open?"flex":"none"; }
-  window.addEventListener("resize",check); check();
+  // (removed) devtools veil: the window-size heuristic false-positives on mobile browser chrome
+  // (top status bar + bottom URL bar exceed the threshold), bricking real phone users, and devtools
+  // detection is trivially bypassed anyway. Copy/drag deterrents + the leak watermark stay.
 
   // invisible Turnstile widget — only when a sitekey is configured
   var sk=(document.querySelector('meta[name="cf-turnstile-sitekey"]')||{}).content||"";
