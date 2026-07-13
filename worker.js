@@ -65,6 +65,8 @@ export default {
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
     // AG: ai.carnimbus.com serves the NIMBUS ops HUD again (admin-gated at the API). APIs (/api/ai/*) resolve here.
     // (redirect removed — the /ai PREFIX + /index.html fallback serves site/ai/index.html; noindex via asset header.)
+    // AH2: admin.carnimbus.com is retired — ai.carnimbus.com is the single NIMBUS access point.
+    if(sub==="admin" && !url.pathname.startsWith("/api/")) return Response.redirect("https://ai.carnimbus.com"+url.pathname.replace(/^\/admin/,"")+url.search,301);
     // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
     if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
       if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
@@ -104,9 +106,9 @@ export default {
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
       // AG-fix: root serves the DIRECTORY form ("/ai/","/admin/") not "/index.html" — Assets canonicalizes an
       // explicit index.html to its dir with a 307, which then hit the clean-URL rule below and looped.
-      // AH: admin + ai are one surface now — bare root of either serves the NIMBUS HUD (site/ai/index.html).
-      // Deeper admin pages (/pools,/events,/growth,/wall) still resolve via the /admin PREFIX untouched.
-      url.pathname = (url.pathname==="/" && (sub==="admin"||sub==="ai")) ? "/ai/"
+      // AH2: ai.carnimbus.com is the ONLY console door — root serves the NIMBUS HUD (site/ai/index.html);
+      // deeper ai paths (/pools,/events,/growth,/wall) serve the admin tool pages from site/admin/.
+      url.pathname = sub==="ai" ? (url.pathname==="/" ? "/ai/" : "/admin"+url.pathname)
                    : PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/") : url.pathname);
       request = new Request(url, request);
     }
