@@ -102,7 +102,9 @@ export default {
        !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") && !url.pathname.startsWith("/used/") &&
        !url.pathname.startsWith("/sitemap") && url.pathname!=="/robots.txt" &&
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
-      url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/index.html") : url.pathname);
+      // AG-fix: root serves the DIRECTORY form ("/ai/","/admin/") not "/index.html" — Assets canonicalizes an
+      // explicit index.html to its dir with a 307, which then hit the clean-URL rule below and looped.
+      url.pathname = PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/") : url.pathname);
       request = new Request(url, request);
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
