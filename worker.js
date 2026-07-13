@@ -14,11 +14,22 @@ const ALLOWED_ORIGINS = [
   "https://carnimbus.us",
   "https://www.carnimbus.us",
 ];
+// H-CSRF: same-origin gate for state-changing POSTs. Empty Origin allowed (same-origin nav + server-to-server);
+// browsers always attach Origin on cross-site POST — the actual CSRF vector we reject. Any carnimbus subdomain
+// (app./dealer./admin./ai.) is first-party — they POST same-origin to /api/* — so accept the whole domain family,
+// not just the ALLOWED_ORIGINS apex list (which is for the marketing waitlist only).
+function sameOrigin(request){ const o=request.headers.get("Origin")||""; if(!o) return true;
+  try{ const h=new URL(o).hostname; return h==="carnimbus.com"||h==="carnimbus.us"||h.endsWith(".carnimbus.com")||h.endsWith(".carnimbus.us"); }
+  catch(_){ return false; } }
 
 const SEC = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
+  "X-XSS-Protection": "0",
+  "X-DNS-Prefetch-Control": "off",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "geolocation=(), microphone=(), camera=(self), interest-cohort=()",
   "Content-Security-Policy": [
@@ -31,9 +42,12 @@ const SEC = {
     "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
     "frame-src https://challenges.cloudflare.com",
     "connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
+    "manifest-src 'self'",
     "base-uri 'none'",
     "form-action 'self'",
+    "frame-ancestors 'none'",
     "object-src 'none'",
+    "upgrade-insecure-requests",
   ].join("; "),
 };
 
@@ -103,6 +117,11 @@ export default {
       const dest = new URL(url); dest.pathname = url.pathname.toLowerCase();
       return Response.redirect(dest.toString(), 301);
     }
+    // H-CSRF: block cross-origin POSTs to any /api/* except the signature-verified Twilio webhook.
+    if (request.method === "POST" && url.pathname.startsWith("/api/") &&
+        url.pathname !== "/api/sms/inbound" && !sameOrigin(request)) {
+      return sec(json({ ok: false, error: "forbidden" }, 403));
+    }
     if (url.pathname === "/api/waitlist" && request.method === "POST") {
       return sec(await waitlist(request, env));
     }
@@ -155,7 +174,7 @@ export default {
       const ct=h.get("content-type")||"";
       // HTML + JS always revalidate — stale app shells were serving old code for days. Images/fonts stay cached.
       if (ct.includes("text/html")||ct.includes("javascript")) {
-        h.set("Cache-Control","no-cache, must-revalidate");
+        h.set("Cache-Control","no-store, no-cache, must-revalidate");
       } else if (ct.includes("image/") || ct.includes("font/") || url.pathname.endsWith(".woff2")) {
         h.set("Cache-Control","public, max-age=31536000, immutable");
       }
@@ -884,6 +903,9 @@ async function search(request,env,ctx){ try{
   const isCash=deal==="cash"&&budget>0, isLease=deal==="lease";
   const zip=String(u.searchParams.get("zip")||"").slice(0,10);
   if(((isCash&&budget<=0)||(!isCash&&monthly<=0)) || !/^\d{5}$/.test(zip)) return json({ok:true,count:0,cars:[],reason:"need_inputs"});   // P1: no valid budget/ZIP → no cars
+  { const ipx=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
+    const rl=await env.DB.prepare("SELECT COUNT(*) c FROM scans WHERE ip=? AND last_ts> datetime('now','-60 seconds')").bind(ipx).first().catch(()=>({c:0}));
+    if(rl&&rl.c>40) return json({ok:true,count:0,cars:[],reason:"slow_down"}); }   // D: silent per-IP scrape ceiling (~40/min); CF rate-limit is the real wall
   const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
   const leaseMoFor=(price,dn)=>{ const resid=price*0.55, mf=0.00275; return Math.max(99,Math.round((price-dn-resid)/36+(price+resid)*mf)); };   // AD3: 36-mo, 55% residual — honest ballpark like the APR default
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
@@ -1473,7 +1495,7 @@ async function postEvents(request,env){ const body=await request.json().catch(()
       location:e.location,device:e.device,session_id:e.session_id,source:e.source,
       duration_ms:e.duration_ms,confidence:e.confidence}); }
   const h={"content-type":"application/json","cache-control":"no-store"};
-  if(mint) h["Set-Cookie"]=`cn_anon=${anon}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`;
+  if(mint) h["Set-Cookie"]=`cn_anon=${anon}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`;
   return new Response(JSON.stringify({ok:true}),{headers:h}); }
 async function eventsTail(request,env){ const n=Math.min(200,parseInt(new URL(request.url).searchParams.get("n"),10)||50);
   const rows=await env.DB.prepare("SELECT id,ts,cid,anon_id,action,vehicle_id,source FROM events ORDER BY id DESC LIMIT ?").bind(n).all();
@@ -1649,6 +1671,7 @@ async function adminStats(request,env){
   return json({ok:true,waitlist:w.c,users:u.c,profiles:p.c,drives:t.c,activeCars:v.c,comments:cm.c,dealerLeads:dl.results||[],activeSessions,recentDrives,convRate});
 }
 function logout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
+  "Clear-Site-Data":"\"cache\", \"cookies\", \"storage\"",
   "Set-Cookie":"cn_sess=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
 // L9: first resident agent — a labeled, bounded community presence. Posts one useful bilingual pick per ≤2h.
 async function residentAgent(env){
@@ -1746,6 +1769,7 @@ async function saveAvatar(request,env,uid){ const {avatar}=await request.json().
 // X2 (Wave X): anonymous 5-step website lead — stored + routed to admin SMS now; CDK API drop-in later.
 async function webLead(request,env){ const b=await request.json().catch(()=>({}));
   if(b.website) return json({ok:true});                                    // honeypot: swallow silently
+  if(env.TURNSTILE_SECRET && !(await verifyTurnstile(b.cf_token, request.headers.get("CF-Connecting-IP")||"", env.TURNSTILE_SECRET))) return json({ok:true});   // bot: swallow silently
   const car=String(b.dream_car||"").trim().slice(0,80);
   const deal=["cash","finance","lease"].includes(b.deal_type)?b.deal_type:"finance";
   const zip=String(b.zip||"").replace(/\D/g,"").slice(0,5);

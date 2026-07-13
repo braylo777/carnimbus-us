@@ -65,10 +65,11 @@ document.addEventListener("DOMContentLoaded",function(){
     zipOk(t.zip).then(function(ok){
       if(!ok){ flag($("lead-zip"),true); msg.textContent=es()?"Ingresa un código postal real de EE. UU.":"Enter a real US ZIP code."; return; }
       msg.textContent=""; runMatch(t,false); }); });
+  function cfToken(){ try{ return (window.turnstile&&document.querySelector(".cf-turnstile"))?(window.turnstile.getResponse()||""):""; }catch(_){ return ""; } }
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
     var c=CARS[+b.dataset.i]; if(!c)return; var t=terms();
     fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({dream_car:t.car,deal_type:t.deal,monthly:t.mo,down:t.dn,zip:t.zip,radius:t.rad,
-        matched_car:c.year+" "+c.make+" "+c.model,website:$("lead-hp").value})}).catch(function(){});
+        matched_car:c.year+" "+c.make+" "+c.model,cf_token:cfToken(),website:$("lead-hp").value})}).catch(function(){});
   });
 });

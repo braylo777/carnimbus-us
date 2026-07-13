@@ -437,7 +437,8 @@
   }
   function setLang(l){ langS(l==="es"?"es":"en"); }         // write signal → effect re-patches DOM
   function initI18n(){ var s; try{s=localStorage.cn_lang;}catch(_){}
-    langS(s==="es"?"es":"en");   // W8: default English; only honor an explicit stored ES pick, never navigator locale
+    var app=/^(app|dealer|admin|ai)\./.test(location.hostname);
+    langS((app && s==="es")?"es":"en");   // W8+: marketing homepage ALWAYS boots English (founder); app subdomains still honor a stored ES pick. ES stays one tap away in-session.
     effectFn(function(){ applyLang(langS()); });               // signal-driven; runs once + on every change
     startI18nObserver(); }                                     // re-translate JS-injected DOM (feed/match/chat cards)
   /* ===== CNMB-302/305: matched feed + car-personality chat ===== */
