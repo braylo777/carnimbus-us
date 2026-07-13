@@ -19,15 +19,30 @@ document.addEventListener("DOMContentLoaded",function(){
     requestAnimationFrame(draw); })();
 
   // ---------- unlock / auth ----------
+  // Two custody modes:
+  //  * FLASH (tethered): key loaded from the drive via a live FileSystemFileHandle. Key lives in MEMORY ONLY
+  //    (never persisted); a 4s heartbeat re-reads the file — unplugging the drive kills the read → instant lock.
+  //  * TYPED (fallback): key typed by hand → localStorage, untethered (also used where the File System Access
+  //    API doesn't exist, e.g. Safari/mobile file-picker loads — no handle survives, so no tether possible).
   var lock=document.getElementById("nimbus-lock"), msg=document.getElementById("nl-msg");
   var KEYS=["cars","scansToday","scansTotal","profiles","profilesToday","riders","ridersToday",
             "leadsToday","leadsTotal","drives","drivesToday","embeddings","chats","eventsToday","dealersOn","dealersActive"];
-  function key(){ try{ return localStorage.getItem("cn_admin")||""; }catch(_){ return ""; } }
-  function setKey(k){ try{ localStorage.setItem("cn_admin",k); }catch(_){} }
+  var memKey="", flashHandle=null, tether=null;
+  function key(){ if(memKey) return memKey; try{ return localStorage.getItem("cn_admin")||""; }catch(_){ return ""; } }
   function showLock(m){ lock.style.display="flex"; if(m) msg.textContent=m; }
   function hideLock(){ lock.style.display="none"; }
   function fmt(n){ return (n==null)?"–":Number(n).toLocaleString(); }
-  function authFail(){ try{localStorage.removeItem("cn_admin");}catch(_){}; showLock("Wrong key — try again."); }
+  function lockNow(m){ memKey=""; flashHandle=null; if(tether){ clearInterval(tether); tether=null; }
+    try{localStorage.removeItem("cn_admin");}catch(_){}
+    GN=[]; GE=[]; if(graphOn) setView(false);
+    showLock(m||""); }
+  function authFail(){ lockNow("Wrong key — try again."); }
+  function startTether(){ if(tether) clearInterval(tether);
+    tether=setInterval(function(){ if(!flashHandle) return;
+      flashHandle.getFile().then(function(f){ return f.text(); }).then(function(t){
+        if(String(t||"").trim()!==memKey) lockNow("Key changed on flash — reinsert and unlock.");
+      }).catch(function(){ lockNow("Flash disconnected — NIMBUS locked."); });
+    },4000); }
   function load(){ var k=key(); if(!k){ showLock(""); return; }
     fetch("/api/ai/pulse",{headers:{"x-admin-key":k}}).then(function(r){
       if(r.status===403){ authFail(); return null; } return r.json();
@@ -37,15 +52,30 @@ document.addEventListener("DOMContentLoaded",function(){
       sub("ai-scansTotal","total ",d.scansTotal); sub("ai-profilesToday","+",d.profilesToday);
       sub("ai-leadsTotal","total ",d.leadsTotal); sub("ai-drives","total ",d.drives);
       sub("ai-riders","total ",d.riders); sub("ai-dealersActive","paid ",d.dealersActive);
-      var st=document.getElementById("ai-stamp"); if(st) st.textContent=(d.today||"")+" · LIVE";
+      var st=document.getElementById("ai-stamp"); if(st) st.textContent=(d.today||"")+" · LIVE"+(flashHandle?" · TETHERED":"");
     }).catch(function(){});
   }
-  function unlock(k){ k=(k||"").trim(); if(!k){ msg.textContent="Enter your key."; return; } setKey(k); msg.textContent=""; load(); if(graphOn) loadGraph(); }
-  document.getElementById("nl-go").addEventListener("click",function(){ unlock(document.getElementById("nl-key").value); });
-  document.getElementById("nl-key").addEventListener("keydown",function(e){ if(e.key==="Enter") unlock(this.value); });
-  document.getElementById("nl-file").addEventListener("click",function(){ document.getElementById("nl-fileinput").click(); });
+  function unlockTyped(k){ k=(k||"").trim(); if(!k){ msg.textContent="Enter your key."; return; }
+    memKey=""; flashHandle=null; if(tether){ clearInterval(tether); tether=null; }
+    try{ localStorage.setItem("cn_admin",k); }catch(_){}
+    msg.textContent=""; load(); if(graphOn) loadGraph(); }
+  function unlockFlash(k,handle){ k=(k||"").trim(); if(!k){ msg.textContent="That file is empty."; return; }
+    memKey=k; flashHandle=handle||null;
+    try{localStorage.removeItem("cn_admin");}catch(_){}   // flash sessions never persist the key
+    msg.textContent=""; if(flashHandle) startTether();
+    load(); if(graphOn) loadGraph(); }
+  document.getElementById("nl-go").addEventListener("click",function(){ unlockTyped(document.getElementById("nl-key").value); });
+  document.getElementById("nl-key").addEventListener("keydown",function(e){ if(e.key==="Enter") unlockTyped(this.value); });
+  document.getElementById("nl-file").addEventListener("click",function(){
+    if(window.showOpenFilePicker){
+      showOpenFilePicker({multiple:false}).then(function(hs){ var h=hs&&hs[0]; if(!h) return;
+        h.getFile().then(function(f){ return f.text(); }).then(function(t){ unlockFlash(String(t||""),h); })
+         .catch(function(){ msg.textContent="Couldn't read that file."; });
+      }).catch(function(){});                              // picker dismissed
+    } else { document.getElementById("nl-fileinput").click(); }
+  });
   document.getElementById("nl-fileinput").addEventListener("change",function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return;
-    var rd=new FileReader(); rd.onload=function(){ unlock(String(rd.result||"")); }; rd.readAsText(f); });
+    var rd=new FileReader(); rd.onload=function(){ unlockFlash(String(rd.result||""),null); }; rd.readAsText(f); });
 
   // ---------- neural-net graph (vanilla force-directed) ----------
   var ng=document.getElementById("netgraph"), ngx=ng.getContext("2d"), hud=document.querySelector(".hud");
