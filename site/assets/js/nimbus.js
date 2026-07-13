@@ -19,30 +19,30 @@ document.addEventListener("DOMContentLoaded",function(){
     requestAnimationFrame(draw); })();
 
   // ---------- unlock / auth ----------
-  // Two custody modes:
-  //  * FLASH (tethered): key loaded from the drive via a live FileSystemFileHandle. Key lives in MEMORY ONLY
-  //    (never persisted); a 4s heartbeat re-reads the file — unplugging the drive kills the read → instant lock.
-  //  * TYPED (fallback): key typed by hand → localStorage, untethered (also used where the File System Access
-  //    API doesn't exist, e.g. Safari/mobile file-picker loads — no handle survives, so no tether possible).
+  // FLASH-ONLY custody: the ONLY way in is loading the keyfile from the drive. The key lives in MEMORY ONLY —
+  // never localStorage/sessionStorage — so a reload, closed tab, or unplug always demands the drive again.
+  // A 2s heartbeat re-reads the file via its live handle; unplugging kills the read → wipe + hard refresh.
+  try{localStorage.removeItem("cn_admin");}catch(_){}      // kill any pre-tether stored key (legacy sessions)
   var lock=document.getElementById("nimbus-lock"), msg=document.getElementById("nl-msg");
   var KEYS=["cars","scansToday","scansTotal","profiles","profilesToday","riders","ridersToday",
             "leadsToday","leadsTotal","drives","drivesToday","embeddings","chats","eventsToday","dealersOn","dealersActive"];
-  var memKey="", flashHandle=null, tether=null;
-  function key(){ if(memKey) return memKey; try{ return localStorage.getItem("cn_admin")||""; }catch(_){ return ""; } }
+  var memKey="", flashHandle=null, tether=null, reloading=false;
+  function key(){ return memKey; }
   function showLock(m){ lock.style.display="flex"; if(m) msg.textContent=m; }
   function hideLock(){ lock.style.display="none"; }
   function fmt(n){ return (n==null)?"–":Number(n).toLocaleString(); }
   function lockNow(m){ memKey=""; flashHandle=null; if(tether){ clearInterval(tether); tether=null; }
     try{localStorage.removeItem("cn_admin");}catch(_){}
     GN=[]; GE=[]; if(graphOn) setView(false);
-    showLock(m||""); }
+    showLock(m||"");
+    if(!reloading){ reloading=true; setTimeout(function(){ location.replace(location.pathname); },700); } }  // hard refresh → clean locked slate
   function authFail(){ lockNow("Wrong key — try again."); }
   function startTether(){ if(tether) clearInterval(tether);
     tether=setInterval(function(){ if(!flashHandle) return;
       flashHandle.getFile().then(function(f){ return f.text(); }).then(function(t){
         if(String(t||"").trim()!==memKey) lockNow("Key changed on flash — reinsert and unlock.");
       }).catch(function(){ lockNow("Flash disconnected — NIMBUS locked."); });
-    },4000); }
+    },2000); }
   function load(){ var k=key(); if(!k){ showLock(""); return; }
     fetch("/api/ai/pulse",{headers:{"x-admin-key":k}}).then(function(r){
       if(r.status===403){ authFail(); return null; } return r.json();
@@ -55,17 +55,11 @@ document.addEventListener("DOMContentLoaded",function(){
       var st=document.getElementById("ai-stamp"); if(st) st.textContent=(d.today||"")+" · LIVE"+(flashHandle?" · TETHERED":"");
     }).catch(function(){});
   }
-  function unlockTyped(k){ k=(k||"").trim(); if(!k){ msg.textContent="Enter your key."; return; }
-    memKey=""; flashHandle=null; if(tether){ clearInterval(tether); tether=null; }
-    try{ localStorage.setItem("cn_admin",k); }catch(_){}
-    msg.textContent=""; load(); if(graphOn) loadGraph(); }
   function unlockFlash(k,handle){ k=(k||"").trim(); if(!k){ msg.textContent="That file is empty."; return; }
     memKey=k; flashHandle=handle||null;
-    try{localStorage.removeItem("cn_admin");}catch(_){}   // flash sessions never persist the key
     msg.textContent=""; if(flashHandle) startTether();
+    else msg.textContent="Unlocked (no live handle — this browser can't watch the drive).";
     load(); if(graphOn) loadGraph(); }
-  document.getElementById("nl-go").addEventListener("click",function(){ unlockTyped(document.getElementById("nl-key").value); });
-  document.getElementById("nl-key").addEventListener("keydown",function(e){ if(e.key==="Enter") unlockTyped(this.value); });
   document.getElementById("nl-file").addEventListener("click",function(){
     if(window.showOpenFilePicker){
       showOpenFilePicker({multiple:false}).then(function(hs){ var h=hs&&hs[0]; if(!h) return;
