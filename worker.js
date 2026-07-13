@@ -119,15 +119,20 @@ export default {
       const dest = new URL(url); dest.pathname = url.pathname.toLowerCase();
       return Response.redirect(dest.toString(), 301);
     }
-    // H-CSRF: block cross-origin POSTs to any /api/* except the signature-verified Twilio webhook.
+    // H-CSRF: block cross-origin POSTs to any /api/* except the signature-verified machine webhooks.
     if (request.method === "POST" && url.pathname.startsWith("/api/") &&
-        url.pathname !== "/api/sms/inbound" && !sameOrigin(request)) {
+        url.pathname !== "/api/sms/inbound" && url.pathname !== "/api/stripe/webhook" && !sameOrigin(request)) {
       return sec(json({ ok: false, error: "forbidden" }, 403));
     }
     if (url.pathname === "/api/waitlist" && request.method === "POST") {
       return sec(await waitlist(request, env));
     }
     if (url.pathname === "/api/sms/inbound" && request.method === "POST") return sec(await smsInbound(request, env));
+    if (url.pathname === "/api/stripe/webhook" && request.method === "POST") return sec(await stripeWebhook(request, env));
+    if (url.pathname === "/api/unsubscribe")                              return sec(await unsubscribe(request, env));   // public GET opt-out
+    if (url.pathname === "/api/admin/dealer/contact" && request.method === "POST") return sec(await adminOnly(request, env, dealerContact));
+    if (url.pathname === "/api/admin/outreach" && request.method === "POST")       return sec(await adminOnly(request, env, adminOutreach));
+    if (url.pathname === "/api/admin/dealer/engine" && request.method === "POST")  return sec(await adminOnly(request, env, adminEngineToggle));
     if (url.pathname === "/api/sms/send" && request.method === "POST")    return sec(await adminOnly(request, env, smsSendRoute));
     if (url.pathname === "/api/sms/numbers")                              return sec(await adminOnly(request, env, smsNumbers));
     if (url.pathname === "/api/vdp/ingest" && request.method === "POST")  return sec(await adminOnly(request, env, vdpIngest));
@@ -194,6 +199,7 @@ export default {
       for(const r of (us.results||[])){ await computeSignals(env, r.user_id).catch(()=>{}); await computeMatches(env, r.user_id).catch(()=>{}); } }catch(_){}
     await enrichInventory(env).catch(()=>{});   // Wave E1: inventory intelligence, 3 vehicles/run
     await growthRollup(env).catch(()=>{});      // Wave E4: funnel snapshot, ≤1/day
+    await syncDealerFeeds(env).catch(()=>{});   // AF: pull each subscribed dealer's authorized feed, ≤1/day
     await driveReminders(env).catch(()=>{});    // Wave H1: enqueue T-2h test-drive reminders
   },
 };
@@ -661,16 +667,111 @@ async function saveProfile(request,env,uid){ const {answers}=await request.json(
   await computeSignals(env,uid).catch(()=>{});   // Wave G: refresh behavioral twin before ranking
   await computeMatches(env,uid).catch(()=>{});   // refresh persisted backend matches on every profile save
   return json({ok:true}); }
-async function vdpIngest(request,env){ const cars=await request.json().catch(()=>null);
+async function vdpIngest(request,env){ const body=await request.json().catch(()=>null);
+  const cars=Array.isArray(body)?body:(body&&Array.isArray(body.cars)?body.cars:null);
+  const did=(body&&!Array.isArray(body)&&body.dealer_id!=null)?(parseInt(body.dealer_id,10)||null):null;
   if(!Array.isArray(cars)) return json({ok:false,error:"bad_request"},400);
-  for(const c of cars) await env.DB.prepare(
-    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,active,embedding_synced,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, location_zip=excluded.location_zip, active=1, embedding_synced=0, updated_at=excluded.updated_at")
+  for(const c of cars){ const cd=(c.dealer_id!=null?(parseInt(c.dealer_id,10)||null):did);
+    await env.DB.prepare(
+    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,dealer_id,active,embedding_synced,updated_at) "+
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, location_zip=excluded.location_zip, dealer_id=COALESCE(excluded.dealer_id,vdps.dealer_id), active=1, embedding_synced=0, updated_at=excluded.updated_at")
     .bind(c.vin,c.year,c.make,c.model,c.trim||"",c.price_mo,c.miles||"",c.drivetrain||"",c.body||"",
       JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),
       parseInt(c.price_total,10)||null, parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null, String(c.location_zip||"").slice(0,10),
-      new Date().toISOString()).run();
+      cd, new Date().toISOString()).run(); }
   return json({ok:true,count:cars.length}); }
+// ===== AF: Dealer Engine — Stripe billing → inventory on/off, per-dealer feed sync, compliant outreach =====
+async function stripeValid(request, raw, env){
+  const sig=request.headers.get("Stripe-Signature")||""; if(!env.STRIPE_WEBHOOK_SECRET) return false;   // fail closed
+  const parts=Object.fromEntries(sig.split(",").map(kv=>kv.split("=")));
+  const t=parts.t, v1=parts.v1; if(!t||!v1) return false;
+  if(Math.abs(Date.now()/1000 - (+t)) > 300) return false;                     // 5-min skew window
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(env.STRIPE_WEBHOOK_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const mac=await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(t+"."+raw));
+  const hex=[...new Uint8Array(mac)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  return ctEq(hex, v1);
+}
+async function stripeWebhook(request, env){
+  const raw=await request.text();
+  if(!(await stripeValid(request, raw, env))) return json({ok:false,error:"bad_signature"},400);
+  let ev; try{ ev=JSON.parse(raw); }catch(_){ return json({ok:false},400); }
+  const o=ev.data&&ev.data.object||{};
+  const setBy=async(where,bind,fields)=>{ await env.DB.prepare(`UPDATE dealer_leads SET ${fields} WHERE ${where}`).bind(...bind).run().catch(()=>{}); };
+  const onOff=st=>(st==="active"||st==="trialing")?1:0;
+  if(ev.type==="checkout.session.completed" && o.customer){
+    const did=o.metadata&&o.metadata.dealer_id; const em=o.customer_details&&o.customer_details.email;
+    if(did) await setBy("id=?",[o.customer,+did],"stripe_customer_id=?");
+    else if(em) await setBy("lower(email)=lower(?)",[o.customer,em],"stripe_customer_id=?");
+  } else if(ev.type.startsWith("customer.subscription.")){
+    const st=ev.type.endsWith("deleted")?"canceled":o.status; const pend=o.current_period_end?new Date(o.current_period_end*1000).toISOString():null;
+    await setBy("stripe_customer_id=?",[o.id,st,pend,onOff(st),o.customer],"stripe_subscription_id=?, subscription_status=?, current_period_end=?, engine_on=?");
+  } else if(ev.type==="invoice.payment_failed"){
+    await setBy("stripe_customer_id=?",["past_due",0,o.customer],"subscription_status=?, engine_on=?");
+  } else if(ev.type==="invoice.payment_succeeded"){
+    const pend=o.lines&&o.lines.data&&o.lines.data[0]&&o.lines.data[0].period&&o.lines.data[0].period.end?new Date(o.lines.data[0].period.end*1000).toISOString():null;
+    await setBy("stripe_customer_id=?",["active",1,pend,o.customer],"subscription_status=?, engine_on=?, current_period_end=COALESCE(?,current_period_end)");
+  }
+  return json({ok:true,received:true});
+}
+async function syncDealerFeeds(env){
+  // Per-dealer staleness (NOT a global gate) so no dealer starves past the first 10: each tick pulls the 10
+  // most-stale subscribed feeds (synced >24h ago or never), oldest first, cycling through all of them.
+  const ds=await env.DB.prepare("SELECT id,feed_url FROM dealer_leads WHERE engine_on=1 AND subscription_status IN ('active','trialing') AND feed_url IS NOT NULL AND (feed_synced_at IS NULL OR feed_synced_at < datetime('now','-1 day')) ORDER BY feed_synced_at ASC LIMIT 10").all().catch(()=>({results:[]}));
+  for(const d of (ds.results||[])){
+    try{ const r=await fetch(d.feed_url,{cf:{cacheTtl:0}}); if(!r.ok) continue; const cars=await r.json().catch(()=>null); if(!Array.isArray(cars)) continue;
+      const vins=[];
+      for(const c of cars){ if(!c.vin) continue; vins.push(String(c.vin));
+        await env.DB.prepare("INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,dealer_id,active,embedding_synced,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, active=1, embedding_synced=0, dealer_id=?, updated_at=excluded.updated_at")
+          .bind(c.vin,c.year,c.make,c.model,c.trim||"",c.price_mo,c.miles||"",c.drivetrain||"",c.body||"",JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),parseInt(c.price_total,10)||null,parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null,String(c.location_zip||"").slice(0,10),d.id,new Date().toISOString(),d.id).run().catch(()=>{});
+      }
+      // reconcile: deactivate this dealer's VINs no longer in the fresh feed (sold cars drop off)
+      if(vins.length){ const ph=vins.map(()=>"?").join(","); await env.DB.prepare(`UPDATE vdps SET active=0 WHERE dealer_id=? AND vin NOT IN (${ph})`).bind(d.id,...vins).run().catch(()=>{}); }
+      await env.DB.prepare("UPDATE dealer_leads SET feed_synced_at=? WHERE id=?").bind(new Date().toISOString(),d.id).run().catch(()=>{});
+    }catch(_){}
+  }
+}
+async function dealerContact(request,env){ const b=await request.json().catch(()=>({}));
+  const id=parseInt(b.dealer_id,10); if(!id) return json({ok:false,error:"bad_request"},400);
+  await env.DB.prepare("UPDATE dealer_leads SET gm_name=?, gm_email=?, contact_source=? WHERE id=?")
+    .bind(String(b.gm_name||"").slice(0,80),String(b.gm_email||"").slice(0,160).toLowerCase(),String(b.contact_source||"manual").slice(0,40),id).run();
+  return json({ok:true}); }
+async function adminEngineToggle(request,env){ const b=await request.json().catch(()=>({}));
+  const id=parseInt(b.dealer_id,10); if(!id) return json({ok:false,error:"bad_request"},400);
+  await env.DB.prepare("UPDATE dealer_leads SET engine_on=? WHERE id=?").bind(b.on?1:0,id).run();
+  return json({ok:true,engine_on:!!b.on}); }
+async function adminOutreach(request,env){ const b=await request.json().catch(()=>({}));
+  const ids=Array.isArray(b.dealer_ids)?b.dealer_ids.map(x=>parseInt(x,10)).filter(Boolean):[];
+  let queued=0; for(const id of ids){ const r=await sendDealerOutreach(env,id); if(r) queued++; }
+  return json({ok:true,queued}); }
+async function sendDealerOutreach(env, dealerId){
+  const d=await env.DB.prepare("SELECT id,dealership,gm_name,gm_email FROM dealer_leads WHERE id=?").bind(dealerId).first();
+  if(!d||!d.gm_email) return false;
+  const sup=await env.DB.prepare("SELECT email FROM email_suppression WHERE email=?").bind(d.gm_email).first().catch(()=>null);
+  if(sup){ await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,status,created_at) VALUES (?,?, 'suppressed', datetime('now'))").bind(dealerId,d.gm_email).run().catch(()=>{}); return false; }
+  const token=genCode("UNS");
+  const subject="Pre-qualified LA buyers for "+(d.dealership||"your store");
+  const optOut="https://carnimbus.com/api/unsubscribe?t="+token;
+  const ADDR="CarNimbus, Inc. · 000 [address] , Los Angeles, CA 90000";   // runbook: founder confirms exact postal address
+  const body="Hi "+(d.gm_name||"there")+",\n\nCarNimbus routes pre-qualified, ready-to-drive buyers to LA dealerships. "+
+    "We can turn your rooftop's Drive Now engine on this week — your live inventory, matched to real local buyers, no work on your side.\n\n"+
+    "If you're open to a 10-minute look, just reply. If not, no worries.\n\n— The CarNimbus team\n\n"+
+    ADDR+"\nUnsubscribe: "+optOut;
+  await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,subject,status,unsub_token,sent_at,created_at) VALUES (?,?,?,?,?,?,datetime('now'))")
+    .bind(dealerId,d.gm_email,subject,(env.RESEND_API_KEY?"sent":"queued"),token,(env.RESEND_API_KEY?new Date().toISOString():null)).run().catch(()=>{});
+  if(env.RESEND_API_KEY){
+    await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"content-type":"application/json"},
+      body:JSON.stringify({from:"CarNimbus <hello@carnimbus.com>",to:[d.gm_email],subject,text:body,
+        headers:{"List-Unsubscribe":"<"+optOut+">","List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}})}).catch(()=>{});
+  }
+  return true;
+}
+async function unsubscribe(request,env){
+  const t=new URL(request.url).searchParams.get("t")||"";
+  const row=t?await env.DB.prepare("SELECT email FROM dealer_outreach WHERE unsub_token=?").bind(t).first().catch(()=>null):null;
+  if(row&&row.email){ await env.DB.prepare("INSERT INTO email_suppression (email,reason) VALUES (?, 'opt-out') ON CONFLICT(email) DO NOTHING").bind(row.email).run().catch(()=>{});
+    await env.DB.prepare("UPDATE dealer_outreach SET status='unsub' WHERE unsub_token=?").bind(t).run().catch(()=>{}); }
+  return new Response("<!doctype html><meta charset=utf-8><body style='font:16px system-ui;padding:40px;max-width:520px;margin:auto'><h2>You're unsubscribed.</h2><p>You won't receive further emails from CarNimbus. This takes effect immediately.</p></body>",{headers:{"content-type":"text/html; charset=utf-8"}});
+}
 const BUYER_COLS=["phone","full_name","zip","buy_method","max_down","max_monthly","fico","income","dream_car","reason","hobbies","current_year","current_make","current_model","current_miles","trade_in","trade_value","timeline","body_pref","must_haves"];
 async function profilesIngest(request,env){ const rows=await request.json().catch(()=>null);
   if(!Array.isArray(rows)) return json({ok:false,error:"expected array"},400);
@@ -916,7 +1017,7 @@ async function search(request,env,ctx){ try{
   const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
-  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 AND (v.dealer_id IS NULL OR v.dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
@@ -968,7 +1069,7 @@ async function feed(request,env){ try{ const uid=await readSession(env,request);
       if(q){ for(const m of q.matches){ const id=m.metadata.vdpId; if(id!=null&&!seen.has(id)){ seen.add(id); ranked.push({id,vec:m.score}); } } } } }
   // Always union in the live active inventory so real cars show even when the vector index is stale
   // (e.g. right after an inventory swap, before re-embedding catches up). Vector hits keep their rank; the rest append.
-  { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 100").all();
+  { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 AND (dealer_id IS NULL OR dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY updated_at DESC LIMIT 100").all();
     for(const r of (all.results||[])){ if(!seen.has(r.id)){ seen.add(r.id); ranked.push({id:r.id,vec:null}); } } }
   const budget=parseInt(ans.max_monthly,10)||0, CAP=budget?budget*1.15:0;
   const apr=aprFor(ans.fico);
@@ -1044,7 +1145,7 @@ async function computeMatches(env,uid){ try{
   let ranked=[]; const seen=new Set();
   const q=await env.MATCH_INDEX.query(await embed(env,profileText(ans,sig)),{topK:50,filter:{kind:"vdp"}}).catch(()=>null);
   if(q){ for(const m of q.matches){ const id=m.metadata.vdpId; if(id!=null&&!seen.has(id)){ seen.add(id); ranked.push({id,vec:m.score}); } } }
-  { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 100").all();
+  { const all=await env.DB.prepare("SELECT id FROM vdps WHERE active=1 AND (dealer_id IS NULL OR dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY updated_at DESC LIMIT 100").all();
     for(const r of (all.results||[])){ if(!seen.has(r.id)){ seen.add(r.id); ranked.push({id:r.id,vec:null}); } } }
   const prio=new Set(); { const pr=await env.DB.prepare("SELECT id FROM dealer_leads WHERE tier='priority'").all().catch(()=>({results:[]})); for(const r of (pr.results||[])) prio.add(r.id); }  // K3: paid-placement dealers
   // U7 (feed-scoring v2): batch the vote-delta lookup for every candidate in ONE query — avoids an N+1 D1 round-trip
@@ -1645,8 +1746,9 @@ async function dealerActivate(request,env){ const {leadId}=await request.json().
 async function whoami(request,env,uid){
   const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
   const digits=String(u&&u.phone||"").replace(/\D/g,"").slice(-10);
-  const d=digits?await env.DB.prepare("SELECT status,client_no FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1").bind("%"+digits).first():null;
-  return json({ok:true,buyer:true,dealer:!!(d&&d.status==="active"&&d.client_no)}); }
+  const d=digits?await env.DB.prepare("SELECT status,client_no,engine_on,subscription_status,current_period_end FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1").bind("%"+digits).first():null;
+  return json({ok:true,buyer:true,dealer:!!(d&&d.status==="active"&&d.client_no),
+    engine_on:!!(d&&d.engine_on),subscription_status:(d&&d.subscription_status)||"none",next_bill:(d&&d.current_period_end)||null}); }
 async function adminStats(request,env){
   const w=await env.DB.prepare("SELECT COUNT(*) c FROM waitlist").first();
   const u=await env.DB.prepare("SELECT COUNT(*) c FROM users").first();
