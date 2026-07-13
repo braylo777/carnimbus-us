@@ -50,6 +50,7 @@ document.addEventListener("DOMContentLoaded",function(){
           '<div style="height:100px;background:#06163b '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></div>'+
           '<div style="padding:10px"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><div style="font:700 11px Manrope;color:#fff;min-width:0">'+esc(c.year+" "+c.make+" "+c.model)+'</div><div style="font:700 12px Manrope;color:#18C8FF;flex:none">'+(t.deal==="cash"?"$"+esc(Number(c.price).toLocaleString()):"$"+esc(c.price_mo)+"/mo")+'</div></div>'+
           '<div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px"><div style="font:600 9px Manrope;color:#8ca0c4;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.dealer_name||"LA Car Guy")+'</div>'+(c.dist!=null?'<div style="font:600 9px Manrope;color:#8ca0c4;flex:none">'+distLabel(c.dist)+'</div>':'')+'</div>'+
+          ((c.reasons&&c.reasons.length)?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+c.reasons.slice(0,4).map(function(rz){return '<span style="font:600 8px Manrope;color:#18C8FF;background:rgba(24,200,255,.12);border-radius:8px;padding:2px 6px">'+esc(rz)+'</span>';}).join('')+'</div>':'')+
           '<a class="btn primary sm lead-book" data-i="'+i+'" href="'+mailtoFor(c,t).replace(/"/g,"&quot;")+'" style="width:100%;margin-top:8px;text-decoration:none;justify-content:center">'+(es()?"Conducir ya":"Drive Now")+'</a></div></div>';
       }).join('');
     }catch(_){ if(!quiet){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches";
@@ -71,5 +72,8 @@ document.addEventListener("DOMContentLoaded",function(){
     fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({dream_car:t.car,deal_type:t.deal,monthly:t.mo,down:t.dn,zip:t.zip,radius:t.rad,
         matched_car:c.year+" "+c.make+" "+c.model,cf_token:cfToken(),website:$("lead-hp").value})}).catch(function(){});
+    // AE4: real-signal groundwork — which ranked card the buyer actually clicked (rank = confidence).
+    fetch("/api/events",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({events:[{action:"intent.match_click",vehicle_id:c.id,confidence:(+b.dataset.i)+1,source:"scanner"}]})}).catch(function(){});
   });
 });

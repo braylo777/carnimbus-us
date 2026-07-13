@@ -8,6 +8,8 @@
 //  - CSP currently allows Google Fonts + Wikimedia inventory images; tighten to 'self'
 //    after fonts are self-hosted (P1) and inventory images are localized.
 
+import { scoreCar, segOf } from "./site/assets/match.js";   // AE: single-source matching scorer (shared with eval harness)
+
 const ALLOWED_ORIGINS = [
   "https://carnimbus.com",
   "https://www.carnimbus.com",
@@ -891,7 +893,9 @@ function monthlyFor(price,down,aprPct,term){ term=term||72; const P=Math.max(0,(
   return r? Math.round(P*r*Math.pow(1+r,term)/(Math.pow(1+r,term)-1)) : Math.round(P/term); }
 function feedCar(v,score,ans,lang,mo){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,
   price_mo:(mo!=null?mo:v.price_mo),price:v.price||null,miles:v.miles,
-  drivetrain:v.drivetrain,body:v.body,features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
+  drivetrain:v.drivetrain||v.drivetrain_detail||"",body:v.body||v.body_style||"",features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
+  color:v.exterior_color||null,fuel:v.fuel_type||null,mileage_exact:(v.mileage_exact!=null?v.mileage_exact:null),
+  certified:v.certified||0,cond:v.condition_grade||null,mkt:v.market_price_avg||null,pvm:v.price_vs_market||null,updated_at:v.updated_at||null,
   match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
 // TASK-001: no-auth affordability search. Accepts the numbers as params (feed() only reads a stored profile).
 async function search(request,env,ctx){ try{
@@ -912,7 +916,7 @@ async function search(request,env,ctx){ try{
   const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
-  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
@@ -931,21 +935,10 @@ async function search(request,env,ctx){ try{
     if(out.length){ reason="widen_radius"; out.sort((a,b)=>(a._d||1e9)-(b._d||1e9)); } }
   if(!out.length){ out=scan(0,radius);                   // B1 pass 3: keep radius, drop budget (cheapest-first)
     if(out.length) reason="over_budget"; }
-  // Z1: weighted match score — dream-car text (make/model/year), segment affinity when the exact car doesn't
-  // exist in inventory (a McLaren Artura surfaces luxury/performance cars, never a family SUV), budget closeness
-  // (use their budget well, not just "cheapest"), and distance. Deterministic — no LLM latency.
-  const toks=q?q.split(/[^a-z0-9]+/).filter(t=>t.length>=3):[];
-  const SPORTY=/mclaren|ferrari|lamborghini|lambo|porsche|corvette|gt-?r|supra|artura|huracan|aventador|911|cayman|boxster|amg|\bm[2-8]\b|rs\d|maserati|aston|bentley|rolls/;
-  const qSeg=q?(SPORTY.test(q)?"luxury":segOf(q,q)):null;   // segOf regexes run over the whole typed text
-  const scoreOf=c=>{ const mk=String(c.make||"").toLowerCase(), md=String(c.model||"").toLowerCase(), yr=String(c.year||"");
-    let s=0;
-    for(const t of toks){ if(mk.includes(t)) s+=40; else if(md.includes(t)) s+=30; else if(yr===t) s+=6; }
-    if(qSeg&&segOf(c.make,c.model)===qSeg) s+=14;
-    if(isCash&&budget&&c.price){ const r=Math.abs(c.price-budget)/budget; s+=Math.max(0,10-10*Math.min(r,1)); }
-    else if(monthly&&c.price_mo){ const r=Math.abs(c.price_mo-monthly)/monthly; s+=Math.max(0,10-10*Math.min(r,1)); }
-    if(c._d!=null) s+=6*(1-Math.min(c._d,50)/50);
-    return s; };
-  if(q||reason!=="widen_radius"){ out=out.map(c=>({c,s:scoreOf(c)})).sort((a,b)=>b.s-a.s||((a.c.price_mo||0)-(b.c.price_mo||0))).map(x=>x.c); }
+  // AE: shared deterministic scorer (site/assets/match.js) — same code the 20-phase eval harness tuned to 100%.
+  const mctx={monthly,budget,isCash,isLease};
+  if(q||reason!=="widen_radius"){ out=out.map(c=>{ const r=scoreCar(q,c,mctx); c.reasons=r.reasons; return {c,s:r.s}; })
+      .sort((a,b)=>b.s-a.s||((a.c.price_mo||0)-(b.c.price_mo||0))).map(x=>x.c); }
   else out.sort((a,b)=>(a._d||1e9)-(b._d||1e9));
   const anon=readAnon(request);
   // Z2: telemetry off the critical path — the response doesn't wait on two D1 INSERTs.
@@ -1731,12 +1724,7 @@ async function syntheticNudger(env){
 // and trucks/SUVs/luxury hold value better than sedans. No external API; the basis string explains the math.
 const SEG={luxury:{base:55000,rate:0.85,res:0.16}, truck:{base:45000,rate:0.88,res:0.18}, suv:{base:38000,rate:0.87,res:0.15},
   ev:{base:42000,rate:0.82,res:0.12}, sport:{base:48000,rate:0.86,res:0.15}, sedan:{base:28000,rate:0.86,res:0.12}, default:{base:26000,rate:0.86,res:0.12}};
-function segOf(mk,md){ mk=(mk||"").toLowerCase(); md=(md||"").toLowerCase();
-  if(/lexus|bmw|mercedes|audi|genesis|acura|infiniti|volvo|porsche|cadillac/.test(mk)) return "luxury";
-  if(/f-150|silverado|ram|tundra|tacoma|sierra|ranger|frontier/.test(md)) return "truck";
-  if(/tesla|ioniq|mach-e|leaf|bolt|ev\b/.test(mk+" "+md)) return "ev";
-  if(/jeep|grand cherokee|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|suv|rav4|cr-v|crv|santa fe|tucson|kona|cx-5|cx-9|forester|outback|crosstrek|escape|edge|equinox|traverse|acadia|pathfinder|murano|rogue|venza/.test(mk+" "+md)) return "suv";
-  return "sedan"; }
+// segOf is imported from ./site/assets/match.js (AE) — single source of truth, shared with the eval harness.
 function tradeEstimate(a){ if(!a) return null; const yr=parseInt(a.current_year,10), mk=a.current_make, md=a.current_model, mi=parseInt(String(a.current_miles||"").replace(/\D/g,""),10)||0;
   if(!yr||!mk||!md) return null;
   const age=Math.max(0,(new Date().getFullYear())-yr);
