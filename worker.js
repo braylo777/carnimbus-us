@@ -63,8 +63,8 @@ export default {
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
     const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
-    // S2: AI.carnimbus.com is retired — its SQL views live under admin now. APIs (/api/ai/*) still resolve here.
-    if(sub==="ai" && !url.pathname.startsWith("/api/")) return Response.redirect("https://admin.carnimbus.com"+(url.pathname==="/"?"/pools":url.pathname.replace(/^\/ai/,"")),301);
+    // AG: ai.carnimbus.com serves the NIMBUS ops HUD again (admin-gated at the API). APIs (/api/ai/*) resolve here.
+    // (redirect removed — the /ai PREFIX + /index.html fallback serves site/ai/index.html; noindex via asset header.)
     // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
     if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
       if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
@@ -171,7 +171,7 @@ export default {
     if (url.pathname === "/api/chats/recent")                             return sec(await withUser(request, env, recentChat));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
-    if (url.pathname === "/api/ai/pulse")                                 return sec(await aiPulse(env));
+    if (url.pathname === "/api/ai/pulse")                                 return sec(await adminOnly(request, env, (req,e)=>aiPulse(e)));
     if (url.pathname === "/api/events" && request.method === "POST")      return sec(await postEvents(request, env));
     if (url.pathname === "/api/admin/events/tail")                        return sec(await adminOnly(request, env, eventsTail));
     if (url.pathname === "/api/admin/growth")                             return sec(await adminOnly(request, env, adminGrowth));
@@ -1732,12 +1732,26 @@ async function dealerChat(request,env,uid,dealer){ const curl=new URL(request.ur
   const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 40").bind(td.user_id,td.vdp_id).all();
   return json({ok:true,messages:rows.results||[]}); }
 async function aiPulse(env){
-  const v=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE active=1").first();
-  const u=await env.DB.prepare("SELECT COUNT(*) c FROM users").first();
-  const t=await env.DB.prepare("SELECT COUNT(*) c FROM test_drives").first();
-  const e=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE embedding_synced=1").first();
-  const ch=await env.DB.prepare("SELECT COUNT(*) c FROM chats").first();
-  return json({ok:true,cars:v.c,riders:u.c,drives:t.c,embeddings:e.c,chats:ch.c}); }
+  const today=new Date().toISOString().slice(0,10);
+  const q=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).first().catch(()=>({c:0})); return r?r.c:0; };
+  return json({ok:true, today,
+    cars:        await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
+    scansToday:  await q("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)=?", today),
+    scansTotal:  await q("SELECT COUNT(*) c FROM scans"),
+    profiles:    await q("SELECT COUNT(*) c FROM profiles"),
+    profilesToday: await q("SELECT COUNT(*) c FROM profiles WHERE substr(updated_at,1,10)=?", today),
+    riders:      await q("SELECT COUNT(*) c FROM users"),
+    ridersToday: await q("SELECT COUNT(*) c FROM users WHERE substr(created_at,1,10)=?", today),
+    leadsToday:  await q("SELECT COUNT(*) c FROM web_leads WHERE substr(created_at,1,10)=?", today),
+    leadsTotal:  await q("SELECT COUNT(*) c FROM web_leads"),
+    drives:      await q("SELECT COUNT(*) c FROM test_drives"),
+    drivesToday: await q("SELECT COUNT(*) c FROM test_drives WHERE substr(created_at,1,10)=?", today),
+    embeddings:  await q("SELECT COUNT(*) c FROM vdps WHERE embedding_synced=1"),
+    chats:       await q("SELECT COUNT(*) c FROM chats"),
+    eventsToday: await q("SELECT COUNT(*) c FROM events WHERE substr(ts,1,10)=?", today),
+    dealersOn:   await q("SELECT COUNT(*) c FROM dealer_leads WHERE engine_on=1"),
+    dealersActive: await q("SELECT COUNT(*) c FROM dealer_leads WHERE subscription_status IN ('active','trialing')")
+  }); }
 async function dealerActivate(request,env){ const {leadId}=await request.json().catch(()=>({}));
   if(!leadId) return json({ok:false,error:"bad_request"},400);
   const no=genCode("CN");

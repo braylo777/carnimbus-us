@@ -11,31 +11,61 @@
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
 @keyframes corepulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.06);opacity:1}}
-.aistage{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 45%,#0a2050 0%,#06163b 55%,#040d24 100%);overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.core{position:relative;width:min(30vmin,260px);height:min(30vmin,260px);border-radius:50%;background:radial-gradient(circle at 40% 35%,rgba(24,200,255,.95),rgba(11,99,229,.55) 45%,rgba(11,99,229,.08) 72%);box-shadow:0 0 120px rgba(24,200,255,.45),0 0 300px rgba(11,99,229,.3);animation:corepulse 5s ease-in-out infinite}
-.ringlab{position:absolute;font:700 10px Manrope;letter-spacing:.18em;color:#8ca0c4;background:rgba(6,16,40,.75);border:1px solid rgba(24,200,255,.25);border-radius:99px;padding:5px 11px;white-space:nowrap;z-index:2}
-.tick{display:flex;gap:2vw;margin-top:5vh;position:relative;z-index:2;flex-wrap:wrap;justify-content:center}
-.tick .t{backdrop-filter:blur(12px);background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.2);border-radius:16px;padding:14px 22px;text-align:center}
-.tick .tv{font:700 clamp(22px,3vw,42px) 'Space Grotesk';color:#18C8FF}
-.tick .tl{font:700 9px Manrope;color:#8ca0c4;letter-spacing:.2em;margin-top:4px}
+.aistage{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 42%,#0a2050 0%,#06163b 55%,#040d24 100%);overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:5vh 4vw}
+.core{position:relative;width:min(20vmin,150px);height:min(20vmin,150px);border-radius:50%;background:radial-gradient(circle at 40% 35%,rgba(24,200,255,.95),rgba(11,99,229,.55) 45%,rgba(11,99,229,.08) 72%);box-shadow:0 0 90px rgba(24,200,255,.45),0 0 220px rgba(11,99,229,.3);animation:corepulse 5s ease-in-out infinite;z-index:2}
+.disp{font-size:clamp(18px,3vw,30px);letter-spacing:.34em;margin-top:2.5vh;position:relative;z-index:2}
+.hud{position:relative;z-index:2;width:100%;max-width:960px;margin-top:3vh}
+.hudlab{font:700 9px Manrope;letter-spacing:.28em;color:#7f93b8;margin:18px 6px 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.t{backdrop-filter:blur(12px);background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.2);border-radius:16px;padding:16px 18px;text-align:center}
+.t.big{border-color:rgba(24,200,255,.5);box-shadow:0 0 40px rgba(24,200,255,.12)}
+.tv{font:700 clamp(24px,3.4vw,44px) 'Space Grotesk';color:#18C8FF;line-height:1}
+.tl{font:700 9px Manrope;color:#8ca0c4;letter-spacing:.2em;margin-top:6px}
+.tsub{font:600 10px 'IBM Plex Mono';color:#5ee6a8;margin-top:4px}
+#nimbus-lock{position:fixed;inset:0;z-index:50;background:rgba(4,13,36,.92);backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+#nimbus-lock .field{max-width:320px}
+#nl-msg{font:600 12px Manrope;color:#fda4af;min-height:16px}
 </style>
 </head>
 <body>
 <div class="aistage">
-  <canvas id="orbit" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+  <canvas id="orbit" style="position:fixed;inset:0;width:100%;height:100%;z-index:1"></canvas>
   <div class="core"></div>
-  <span class="ringlab" style="top:16%;left:14%">INFERENCE · GLM-5.2 · 1TB DDR5</span>
-  <span class="ringlab" style="top:22%;right:12%">VECTOR STORE · CARNIMBUS-MATCH</span>
-  <span class="ringlab" style="bottom:26%;left:18%">RELATIONAL · SQLITE</span>
-  <div class="disp" style="font-size:2.6vw;letter-spacing:.34em;margin-top:3vh;position:relative;z-index:2">N I M B U S</div>
-  <div class="tick">
-    <div class="t"><div class="tv" id="ai-cars">–</div><div class="tl">CARS LIVE</div></div>
-    <div class="t"><div class="tv" id="ai-riders">–</div><div class="tl">RIDERS</div></div>
-    <div class="t"><div class="tv" id="ai-drives">–</div><div class="tl">DRIVES BOOKED</div></div>
-    <div class="t"><div class="tv" id="ai-embeddings">–</div><div class="tl">EMBEDDINGS</div></div>
-    <div class="t"><div class="tv" id="ai-chats">–</div><div class="tl">CONVERSATIONS</div></div>
+  <div class="disp">N I M B U S</div>
+  <div class="hud">
+    <div class="hudlab">CORE METRICS</div>
+    <div class="grid">
+      <div class="t big"><div class="tv" id="ai-scansToday">–</div><div class="tl">DAILY SCANS</div><div class="tsub" id="ai-scansTotal"></div></div>
+      <div class="t big"><div class="tv" id="ai-profiles">–</div><div class="tl">PROFILES</div><div class="tsub" id="ai-profilesToday"></div></div>
+      <div class="t big"><div class="tv" id="ai-cars">–</div><div class="tl">INVENTORY LIVE</div></div>
+    </div>
+    <div class="hudlab">TODAY</div>
+    <div class="grid">
+      <div class="t"><div class="tv" id="ai-leadsToday">–</div><div class="tl">LEADS</div><div class="tsub" id="ai-leadsTotal"></div></div>
+      <div class="t"><div class="tv" id="ai-drivesToday">–</div><div class="tl">DRIVES BOOKED</div><div class="tsub" id="ai-drives"></div></div>
+      <div class="t"><div class="tv" id="ai-ridersToday">–</div><div class="tl">NEW RIDERS</div><div class="tsub" id="ai-riders"></div></div>
+      <div class="t"><div class="tv" id="ai-eventsToday">–</div><div class="tl">TRAFFIC EVENTS</div></div>
+    </div>
+    <div class="hudlab">SYSTEM</div>
+    <div class="grid">
+      <div class="t"><div class="tv" id="ai-embeddings">–</div><div class="tl">EMBEDDINGS</div></div>
+      <div class="t"><div class="tv" id="ai-chats">–</div><div class="tl">CONVERSATIONS</div></div>
+      <div class="t"><div class="tv" id="ai-dealersOn">–</div><div class="tl">DEALERS ON</div><div class="tsub" id="ai-dealersActive"></div></div>
+    </div>
+    <div class="mono" style="font-size:10px;color:#7f93b8;letter-spacing:.24em;margin:22px 6px 4vh">NIMBUS · ONLINE · CLOUDFLARE EDGE · <span id="ai-stamp">–</span></div>
   </div>
-  <div class="mono" style="font-size:10px;color:#7f93b8;letter-spacing:.3em;margin-top:4vh;position:relative;z-index:2">NIMBUS · ONLINE · PROJECTED FROM CLOUDFLARE EDGE · AWAITING HARDWARE CUTOVER · <a href="/pools" style="color:#18C8FF;text-decoration:none">POOLS →</a></div>
+</div>
+<div id="nimbus-lock">
+  <div class="core" style="width:90px;height:90px;animation:corepulse 5s ease-in-out infinite"></div>
+  <div class="disp" style="font-size:20px;letter-spacing:.3em">N I M B U S</div>
+  <div class="mono" style="font-size:11px;color:#8ca0c4;letter-spacing:.2em">LOCKED · INSERT KEY</div>
+  <input id="nl-key" class="field pill" type="password" placeholder="Admin key" autocomplete="off" style="height:44px">
+  <div class="row" style="gap:8px;display:flex">
+    <button id="nl-go" class="btn primary md" type="button">Unlock</button>
+    <button id="nl-file" class="btn ghost md" type="button">Load key from flash</button>
+  </div>
+  <input id="nl-fileinput" type="file" style="display:none">
+  <div id="nl-msg"></div>
 </div>
 <script src="/assets/js/nimbus.js" defer></script>
 </body>
