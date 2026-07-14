@@ -1,4 +1,13 @@
-{ "train": [
+{ "type": [
+  {"type":"truck","monthly":700,"deal":"finance","zip":"90404","radius":40,"expect":{"type":"truck"},"weight":2},
+  {"type":"truck","budget":30000,"deal":"cash","zip":"90404","radius":40,"expect":{"type":"truck","maxPrice":30000},"weight":2},
+  {"type":"suv","budget":30000,"deal":"cash","zip":"90045","radius":40,"expect":{"type":"suv","maxPrice":30000},"weight":2},
+  {"type":"suv","monthly":650,"deal":"finance","zip":"90064","radius":40,"expect":{"type":"suv"},"weight":2},
+  {"type":"sedan","monthly":400,"deal":"finance","zip":"90280","radius":30,"expect":{"type":"sedan"},"weight":2},
+  {"type":"sedan","budget":20000,"deal":"cash","zip":"90280","radius":30,"expect":{"type":"sedan","maxPrice":20000},"weight":1},
+  {"type":"sport","monthly":400,"deal":"finance","zip":"90210","radius":50,"expect":{"type":"sport"},"weight":1}
+],
+ "train": [
   {"q":"2020 toyota tacoma","monthly":600,"deal":"finance","zip":"90404","radius":30,"expect":{"segment":"truck","makeFamily":"toyota"},"weight":2},
   {"q":"toyota tacoma truck","budget":35000,"deal":"cash","zip":"90404","radius":40,"expect":{"segment":"truck","makeFamily":"toyota","maxPrice":35000},"weight":2},
   {"q":"black mclaren artura","monthly":900,"deal":"finance","zip":"90277","radius":40,"expect":{"segment":"luxury","color":"black"},"weight":2},

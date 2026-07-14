@@ -8,7 +8,7 @@
 //  - CSP currently allows Google Fonts + Wikimedia inventory images; tighten to 'self'
 //    after fonts are self-hosted (P1) and inventory images are localized.
 
-import { scoreCar, segOf } from "./site/assets/match.js";   // AE: single-source matching scorer (shared with eval harness)
+import { scoreCar, segOf, typeOf } from "./site/assets/match.js";   // AE: single-source matching scorer (shared with eval harness)
 
 const ALLOWED_ORIGINS = [
   "https://carnimbus.com",
@@ -1022,7 +1022,10 @@ async function search(request,env,ctx){ try{
   const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
   const leaseMoFor=(price,dn)=>{ const resid=price*0.55, mf=0.00275; return Math.max(99,Math.round((price-dn-resid)/36+(price+resid)*mf)); };   // AD3: 36-mo, 55% residual — honest ballpark like the APR default
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
-  const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text
+  const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text (legacy: calc.js/start.js send none; homepage now sends type=)
+  const TYPE_OK=new Set(["sedan","suv","truck","sport"]);
+  const tRaw=String(u.searchParams.get("type")||"").toLowerCase().slice(0,8);
+  const carType=TYPE_OK.has(tRaw)?tRaw:null;   // AI: unknown value ⇒ no type signal, never a crash
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
   const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 AND (v.dealer_id IS NULL OR v.dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
@@ -1045,10 +1048,15 @@ async function search(request,env,ctx){ try{
   if(!out.length){ out=scan(0,radius);                   // B1 pass 3: keep radius, drop budget (cheapest-first)
     if(out.length) reason="over_budget"; }
   // AE: shared deterministic scorer (site/assets/match.js) — same code the 20-phase eval harness tuned to 100%.
-  const mctx={monthly,budget,isCash,isLease};
-  if(q||reason!=="widen_radius"){ out=out.map(c=>{ const r=scoreCar(q,c,mctx); c.reasons=r.reasons; return {c,s:r.s}; })
+  const mctx={monthly,budget,isCash,isLease,type:carType};
+  // AI: `||carType` is load-bearing — without it, an empty q in the widen_radius fallback skips scoring entirely
+  // and the buyer's type bubble is silently ignored (distance-only list) in exactly the sparse-inventory ZIPs.
+  if(q||carType||reason!=="widen_radius"){ out=out.map(c=>{ const r=scoreCar(q,c,mctx); c.reasons=r.reasons; return {c,s:r.s}; })
       .sort((a,b)=>b.s-a.s||((a.c.price_mo||0)-(b.c.price_mo||0))).map(x=>x.c); }
   else out.sort((a,b)=>(a._d||1e9)-(b._d||1e9));
+  // AI: the type signal is soft (never filters `out`), so a buyer can click Truck and get sedans with no
+  // explanation. Disclose it the same way widen_radius/over_budget already do.
+  if(carType && out.length && !out.some(c=>typeOf(c)===carType)) reason="no_type_match";
   const anon=readAnon(request);
   // Z2: telemetry off the critical path — the response doesn't wait on two D1 INSERTs.
   const jobs=[
@@ -1056,13 +1064,15 @@ async function search(request,env,ctx){ try{
     logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length})];
   // AC3: scans ledger — one row per validated web scan (src=scan), deduped per IP+terms; repeats counted, not re-inserted.
   const MAKE_RE=/acura|alfa|aston|audi|bentley|bmw|buick|cadillac|chevrolet|chevy|chrysler|dodge|ferrari|fiat|ford|genesis|gmc|honda|hummer|hyundai|infiniti|jaguar|jeep|kia|lamborghini|land rover|range rover|lexus|lincoln|lotus|lucid|maserati|mazda|mclaren|mercedes|benz|mini|mitsubishi|nissan|polestar|pontiac|porsche|\bram\b|rivian|rolls|saab|saturn|scion|smart|subaru|suzuki|tesla|toyota|volkswagen|\bvw\b|volvo/;
-  if(u.searchParams.get("src")==="scan" && MAKE_RE.test(q)){
+  // AI: `||carType` keeps the ledger alive — the homepage no longer sends free text, so MAKE_RE never matches and
+  // scans would silently stop recording (NIMBUS DAILY SCANS → 0). dream_car now holds the type for scanner rows.
+  if(u.searchParams.get("src")==="scan" && (MAKE_RE.test(q)||carType)){
     const ip=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
     const top=out[0]?[out[0].year,out[0].make,out[0].model].filter(Boolean).join(" "):null;
     jobs.push(env.DB.prepare(
       "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,budget,zip,radius,ua,results,top_match) VALUES (?,?,?,?,?,?,?,?,?,?,?) "+
       "ON CONFLICT(ip,dream_car,deal_type,monthly,down,budget,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match")
-      .bind(ip,q,deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top).run().catch(()=>{}));
+      .bind(ip,q||carType,deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top).run().catch(()=>{}));
   }
   const logs=Promise.all(jobs);
   if(ctx&&ctx.waitUntil) ctx.waitUntil(logs); else await logs;
@@ -1897,6 +1907,34 @@ async function saveAvatar(request,env,uid){ const {avatar}=await request.json().
     .bind(uid,"{}",avatar,new Date().toISOString()).run();
   return json({ok:true}); }
 // X2 (Wave X): anonymous 5-step website lead — stored + routed to admin SMS now; CDK API drop-in later.
+// AI/TASK-006: ADF (Auto-lead Data Format) — the XML every major dealer CRM ingests (CDK, VinSolutions,
+// DealerSocket). We can build the lead today; only the DESTINATION needs Cid. Dormant until CRM_ENDPOINT is set —
+// until then routeLead() returns "unrouted" and the existing SMS + buyer mailto remain the delivery path,
+// byte-for-byte unchanged. See DEALER-CRM-RUNBOOK.md.
+function xesc(s){ return String(s==null?"":s).replace(/[<>&'"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;","'":"&apos;",'"':"&quot;"}[c])); }
+function adfFor(L){
+  const [yr,mk,...md]=String(L.matched_car||"").split(" ");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?adf version="1.0"?>
+<adf>
+  <prospect status="new">
+    <requestdate>${new Date().toISOString()}</requestdate>
+    <vehicle interest="buy" status="used">
+      <year>${xesc(yr)}</year><make>${xesc(mk)}</make><model>${xesc(md.join(" "))}</model>
+      ${L.vin?`<vin>${xesc(L.vin)}</vin>`:``}
+    </vehicle>
+    <customer>
+      <contact>${L.phone?`<phone type="voice">${xesc(L.phone)}</phone>`:``}</contact>
+      <comments>${xesc(`CarNimbus match. Type: ${L.dream_car}. Terms: ${L.deal_type} ${L.deal_type==="cash"?`$${L.budget||""} cash`:`$${L.monthly}/mo, $${L.down} down`}. Near ${L.zip} (±${L.radius}mi). Buyer is ready to drive this week.`)}</comments>
+    </customer>
+    <vendor><vendorname>CarNimbus</vendorname></vendor>
+    <provider><name part="full">CarNimbus</name><service>CarNimbus Match</service></provider>
+  </prospect>
+</adf>`; }
+async function routeLead(env, L){
+  if(!env.CRM_ENDPOINT) return "unrouted";
+  try{ const r=await fetch(env.CRM_ENDPOINT,{method:"POST",headers:{"content-type":"application/xml"},body:adfFor(L)});
+    return r.ok?"routed":("crm_"+r.status); }catch(_){ return "crm_error"; } }
 async function webLead(request,env){ const b=await request.json().catch(()=>({}));
   if(b.website) return json({ok:true});                                    // honeypot: swallow silently
   if(env.TURNSTILE_SECRET && !(await verifyTurnstile(b.cf_token, request.headers.get("CF-Connecting-IP")||"", env.TURNSTILE_SECRET))) return json({ok:true});   // bot: swallow silently
@@ -1913,6 +1951,10 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   const mo=String(b.monthly||"").replace(/\D/g,"").slice(0,6), dn=String(b.down||"").replace(/\D/g,"").slice(0,6), rad=String(b.radius||"").replace(/\D/g,"").slice(0,3)||"25";
   await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
     .bind(car,deal,mo,dn,zip,rad,ph?("+1"+ph):"",ip,mc,new Date().toISOString()).run();
+  // AI/TASK-006: drop-in CRM seam. No-op ("unrouted") until CRM_ENDPOINT exists, so this changes nothing today.
+  const routed=await routeLead(env,{matched_car:mc,vin:String(b.vin||"").slice(0,17),phone:ph?("+1"+ph):"",
+    dream_car:car,deal_type:deal,monthly:mo,down:dn,budget:String(b.budget||"").replace(/\D/g,"").slice(0,7),zip,radius:rad});
+  await logEvent(env,{action:"intent.web_lead_routed",location:zip,source:routed}).catch(()=>{});
   if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus web lead: ${car}${mc?` → matched ${mc}`:``} · ${deal} · $${mo}/mo · $${dn} down · ${zip} ±${rad}mi${ph?` · +1${ph}`:``} (emailing Cid)`).catch(()=>{});
   await logEvent(env,{action:"intent.web_lead",location:zip,source:"sid-form"});
   return json({ok:true}); }

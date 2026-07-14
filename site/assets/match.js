@@ -18,7 +18,8 @@ export const WEIGHTS = {
   wMiles:6,
   wFresh:3,
   wCond:4,
-  wValue:4
+  wValue:4,
+  wType:45
 };
 const COLORS = { black:/black|onyx|ebony|obsidian|midnight|jet/, white:/white|pearl|quartz|frost|ivory|snow/,
   gray:/gray|grey|steel|graphite|gunmetal|slate|granite|ash|magnetic/, silver:/silver|platinum|aluminum|titanium|chrome/,
@@ -45,6 +46,26 @@ const BODYWORDS = { truck:/truck|pickup|troca|pick-?up|camioneta/, suv:/\bsuv\b|
   van:/van|minivan/, hatch:/hatch|hatchback/, wagon:/wagon|estate/, convertible:/convertible|cabrio|roadster|convertible/ };
 function bodyIntent(q){ for(const k in BODYWORDS){ if(BODYWORDS[k].test(q)) return k; } return null; }
 function bodyOf(c){ return String(c.body||c.body_style||"").toLowerCase(); }
+// ── AI: structured type classifier (homepage bubbles). Independent of segOf() BY DESIGN: segOf models shopping
+// segments (luxury/ev shadow the shape) and the 66-case golden set depends on it; typeOf models body shape only.
+// Never make one call the other. NOTE: `porsche` is deliberately NOT a sport make here (Macan/Cayenne are SUVs) —
+// this is why the SPORTY const above cannot be reused.
+const T_SPORT_MK = /ferrari|lamborghini|lambo|mclaren|lotus|aston/;
+const T_SPORT_MD = /\b911\b|cayman|boxster|corvette|\bvette\b|mustang|camaro|challenger|\bsupra\b|gr86|\bbrz\b|\b86\b|miata|\bmx-?5\b|\bgt-?r\b|amg ?gt|\bm[2-8]\b|\brs ?[3-7]\b|huracan|aventador|artura|\bf8\b|\broma\b|\bemira\b|\btype ?r\b|\bsti\b/;
+const T_TRUCK = /f-?[1234]50|silverado|\bram\b|\b[23]500\b|super ?duty|tundra|tacoma|sierra|ranger|frontier|colorado|canyon|gladiator|ridgeline|maverick|titan|cybertruck|r1t|lightning|\bpickup\b/;
+const T_SUV = /jeep|cherokee|wrangler|bronco|4runner|land cruiser|tahoe|yukon|suburban|expedition|sequoia|telluride|palisade|wagoneer|explorer|pilot|highlander|rav-?4|cr-?v|hr-?v|santa fe|tucson|kona|venue|cx-?[3359]0?|forester|outback|ascent|crosstrek|escape|\bedge\b|equinox|traverse|blazer|acadia|pathfinder|murano|rogue|venza|sorento|sportage|seltos|\bq[357]\b|\bqx\d\d\b|\bmdx\b|\brdx\b|\bx[1-7]\b|\bgx\b|\brx\b|\bnx\b|\brz\b|\bux\b|gl[abcees]|\beq[bcgs]\b|macan|cayenne|model ?[xy]|mach-?e|ioniq ?5|id\.?4|xc\d\d|gv\d\d|e-?tron|discovery|range rover|defender|velar|evoque|grecale|levante|stelvio|taos|atlas|tiguan|corsair|aviator|nautilus|\bev6\b|ariya|\bsuv\b/;
+// Total function, exactly 4 buckets. Body is primary POSITIVE evidence but model regex is a co-equal OR —
+// the body column is dirty (observed: GLC 300 body="Coupe" but is an SUV; GV60/i4 body="EV", a fuel type).
+export function typeOf(c){
+  const mk=String(c.make||"").toLowerCase(), md=String(c.model||"").toLowerCase(), s=mk+" "+md;
+  const b=bodyOf(c);
+  if(T_SPORT_MK.test(mk) || T_SPORT_MD.test(md)) return "sport";
+  if(/truck|pickup/.test(b) || T_TRUCK.test(s))  return "truck";
+  if(/suv|sport utility|crossover/.test(b) || T_SUV.test(s)) return "suv";
+  if(/minivan|\bvan\b|wagon/.test(b))            return "suv";     // no van bubble → nearest hauler
+  if(/coupe|convertible|roadster/.test(b))       return "sport";   // 2-door, no sport-model hit
+  return "sedan";                                                   // incl. hatchback + the dirty "EV" body rows
+}
 export function scoreCar(q, c, ctx){
   q=String(q||"").toLowerCase(); const W=WEIGHTS, reasons=[]; let s=0;
   const toks=q?q.split(/[^a-z0-9]+/).filter(t=>t.length>=3 && !STOP.has(t)):[];
@@ -61,6 +82,9 @@ export function scoreCar(q, c, ctx){
     if((qb==="suv"&&/suv|sport utility|crossover/.test(b))||(qb==="truck"&&/truck|pickup/.test(b))||
        (qb==="coupe"&&/coupe/.test(b))||(qb==="sedan"&&/sedan/.test(b))||(qb==="van"&&/van/.test(b))||
        (qb==="hatch"&&/hatch/.test(b))||(qb==="wagon"&&/wagon/.test(b))||(qb==="convertible"&&/convertible|roadster/.test(b))){ s+=W.wBody; reasons.push("🚗 "+qb); } }
+  // AI: structured type bubble. ctx.type absent ⇒ zero-op (byte-identical to pre-change scoring for text callers).
+  // Keep `ctx.type` BEFORE typeOf(c) — short-circuit keeps typeOf off the hot path for the 66 text goldens.
+  if(ctx && ctx.type && typeOf(c)===ctx.type){ s+=W.wType; reasons.push("🚙 "+ctx.type); }
   // drivetrain
   if(/awd|all.?wheel|4wd|4x4|four.?wheel/.test(q) && /awd|all-wheel|4wd|4x4|four/.test(String(c.drivetrain||"").toLowerCase())){ s+=W.wDrive; reasons.push("AWD"); }
   // fuel / EV

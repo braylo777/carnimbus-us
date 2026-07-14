@@ -52,17 +52,15 @@
       <!-- Wave X (Sid): the whole site is one 5-step lead form. v9 archived at archive/site-v9-index-surf-widget.html + tag site-v9-surf-widget -->
       <div class="z" style="max-width:560px;margin:0 auto;padding:18px 24px 8px">
         <h1 class="hero-h1" style="font-size:clamp(32px,5.2vw,46px);line-height:1.08">Buy your dream car <span class="cy">on your terms.</span></h1>
-        <div style="font:500 15px/1.5 Manrope;color:#cbd5e1;margin:12px 0 22px">Choose your financing, payment, &amp; location. <span style="display:block">We'll match you to the best deal.</span></div>
+        <div style="font:500 15px/1.5 Manrope;color:#cbd5e1;margin:12px 0 22px">Choose your financing, payment, &amp; location. <span style="display:block">No haggling or negotiations. Our price guaranteed.</span></div>
         <form id="lead-form" class="col" style="gap:18px">
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 1 · WHAT'S YOUR DREAM CAR?</div>
-            <input id="lead-car" class="pill" maxlength="80" placeholder="e.g. 2020 Toyota Tacoma" style="width:100%;height:44px;font-size:13px;border-radius:12px"></div>
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 2 · CASH, FINANCE, OR LEASE?</div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 1 · CASH, FINANCE, OR LEASE?</div>
             <div style="display:flex;gap:6px" id="lead-deal">
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-deal="cash" type="button">Cash</button>
               <button class="btn sm primary on" style="flex:1;height:36px;font-size:12px" data-deal="finance" type="button">Finance</button>
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-deal="lease" type="button">Lease</button>
             </div></div>
-          <div><div id="lead-terms-label" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · MONTHLY &amp; DOWN PAYMENT</div>
+          <div><div id="lead-terms-label" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 2 · MONTHLY &amp; DOWN PAYMENT</div>
             <div id="lead-finance-row" style="display:flex;gap:8px">
               <select id="lead-monthly" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="300">~$300 / mo</option><option value="500" selected>~$500 / mo</option><option value="700">~$700 / mo</option><option value="900">$900+ / mo</option></select>
               <select id="lead-down" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="0">$0 down</option><option value="500">$500 down</option><option value="1000" selected>$1,000 down</option><option value="2000">$2,000 down</option><option value="3000">$3,000 down</option><option value="5000">$5,000+ down</option></select>
@@ -70,10 +68,17 @@
             <div id="lead-cash-row" style="display:none">
               <select id="lead-budget" class="pill" style="width:100%;height:44px;font-size:13px;border-radius:12px"><option value="10000">Up to $10k</option><option value="20000">$10k–$20k</option><option value="30000" selected>$20k–$30k</option><option value="50000">$30k–$50k</option><option value="75000">$50k–$75k</option><option value="250000">$75k+</option></select>
             </div></div>
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 4 · ZIP &amp; RADIUS</div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · ZIP &amp; RADIUS</div>
             <div style="display:flex;gap:8px">
               <input id="lead-zip" class="pill" inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="ZIP code" style="flex:1;height:44px;font-size:13px;border-radius:12px">
               <select id="lead-radius" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="5">5 miles</option><option value="10">10 miles</option><option value="15" selected>15 miles</option><option value="30">30 miles</option><option value="50">50 miles</option></select>
+            </div></div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 4 · WHAT'S YOUR TYPE?</div>
+            <div style="display:flex;gap:6px" id="lead-type">
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="sedan" type="button">Sedan</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="suv" type="button">SUV</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="truck" type="button">Truck</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="sport" type="button">Sport</button>
             </div></div>
           <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 5 · CHOOSE YOUR CAR</div>
             <input type="text" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true" id="lead-hp">

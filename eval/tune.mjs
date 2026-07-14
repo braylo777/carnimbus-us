@@ -7,7 +7,8 @@ const gold = JSON.parse(readFileSync(new URL("./golden.json", import.meta.url)))
 // Keep-if-better; multi-scale steps; stop early only if holdout is truly ≥99.9%.
 let W = {...WEIGHTS};
 let best = accuracy(gold.train, W);
-const KEYS = Object.keys(W);
+const FROZEN = new Set(["wType"]);   // AI: policy constant (wType > 35 = the dominance invariant), not an empirical fit
+const KEYS = Object.keys(W).filter(k => !FROZEN.has(k));
 const STEP = { overPenalty:0.15, dNear:1, dScale:2 };   // default step is 2 for the rest
 const SCALES = [4, 2, 1];
 
@@ -36,7 +37,7 @@ const startBest = accuracy(gold.train, {...WEIGHTS});
 const path=new URL("../site/assets/match.js", import.meta.url);
 if(best > startBest + 1e-9){
   const src=readFileSync(path,"utf8");
-  const body=KEYS.map(k=>`  ${k}:${W[k]}`).join(",\n");
+  const body=Object.keys(W).map(k=>`  ${k}:${W[k]}`).join(",\n");   // AI: write ALL keys back, incl. frozen — KEYS would DELETE wType
   const lit=`export const WEIGHTS = {\n${body}\n};`;
   writeFileSync(path, src.replace(/export const WEIGHTS = \{[\s\S]*?\};/, lit));
   console.log("weights improved → written");
