@@ -66,6 +66,23 @@ export function typeOf(c){
   if(/coupe|convertible|roadster/.test(b))       return "sport";   // 2-door, no sport-model hit
   return "sedan";                                                   // incl. hatchback + the dirty "EV" body rows
 }
+// AJ: condition gradient for the match card. DISPLAY ONLY — deliberately not wired into scoreCar, so the 66-case
+// golden set and the tuned WEIGHTS are byte-unaffected. Derived, not read: vdp_specs.condition_grade is populated
+// on 18/100 rows and holds CARFAX marketing strings ('CARFAX Great Value'), not a condition scale. year and
+// mileage_exact are 100/100 and factual, and the buyer can check the grade against the exact-miles pill next to it.
+// Certification is NOT a tier here (78/100 are CPO — it would swallow the scale); it already pays into wCond.
+// Total: returns null when year/mileage are absent rather than inventing a grade.
+export function condOf(c){
+  const yr=+c.year, mi=(c.mileage_exact!=null?+c.mileage_exact:null);
+  if(!yr || mi==null || !isFinite(mi)) return null;
+  const age=Math.max(0,(new Date().getFullYear())-yr);
+  if(age<=1 && mi<=2000)           return "Brand New";
+  if(age<=2 && mi<=15000)          return "Like New";
+  if(age===0)                      return "Like New";           // new-model-year car above 15k miles
+  if(mi <  age*7000)               return "Low Miles";          // well under the ~12k/yr expectation
+  if(mi <= age*13000)              return "Well Kept";          // at or near normal use
+  return "Higher Miles";
+}
 export function scoreCar(q, c, ctx){
   q=String(q||"").toLowerCase(); const W=WEIGHTS, reasons=[]; let s=0;
   const toks=q?q.split(/[^a-z0-9]+/).filter(t=>t.length>=3 && !STOP.has(t)):[];

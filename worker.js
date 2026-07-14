@@ -8,7 +8,7 @@
 //  - CSP currently allows Google Fonts + Wikimedia inventory images; tighten to 'self'
 //    after fonts are self-hosted (P1) and inventory images are localized.
 
-import { scoreCar, segOf, typeOf } from "./site/assets/match.js";   // AE: single-source matching scorer (shared with eval harness)
+import { scoreCar, segOf, typeOf, condOf } from "./site/assets/match.js";   // AE: single-source matching scorer (shared with eval harness)
 
 const ALLOWED_ORIGINS = [
   "https://carnimbus.com",
@@ -1000,11 +1000,27 @@ function aprFor(fico){ if(APR_FICO[fico]!=null) return APR_FICO[fico];
   return lo>=800?6.4:lo>=770?6.8:lo>=740?7.1:lo>=710?8.2:lo>=680?9.3:lo>=650?11.4:lo>=620?13.5:17.9; }
 function monthlyFor(price,down,aprPct,term){ term=term||72; const P=Math.max(0,(+price||0)-(+down||0)), r=(+aprPct||0)/1200;
   return r? Math.round(P*r*Math.pow(1+r,term)/(Math.pow(1+r,term)-1)) : Math.round(P/term); }
+// AJ: per-car APR estimate for the match card. Anonymous scanner ⇒ no FICO, no credit pull ⇒ this is an ESTIMATE
+// and is labelled as one. Only real rate mechanisms are inputs: base band, vehicle age (used rates step by model
+// year), a >100k-mile surcharge, and LTV from the buyer's down payment — the LTV step and the 3.9 floor are the
+// same policy already used at the chat path (see aprBase/ltvR ~1356), not a second rate table.
+// NOT inputs, on purpose: "demand" (days_on_lot is NULL on 100/100 rows — no demand signal exists in the schema)
+// and the buyer's monthly (a payment is the OUTPUT of a rate; deriving term from monthly while monthly derives
+// from APR is circular — down payment carries that intent instead).
+function aprEst(price,down,year,miles){
+  const base=aprFor("670-739");
+  const age=Math.max(0,(new Date().getFullYear())-(+year||0));
+  const ageAdj = age<=1?-0.6 : age<=3?-0.3 : age<=6?0 : age<=9?0.8 : 1.6;
+  const miAdj  = (+miles>100000)?0.7 : 0;
+  const ltvR   = (+price>0)?(+down||0)/(+price):0;
+  const ltvAdj = ltvR>=0.2?-0.8 : ltvR>=0.1?-0.4 : 0;
+  return Math.max(3.9, +(base+ageAdj+miAdj+ltvAdj).toFixed(1));   // one decimal: how lenders quote, and all our inputs support
+}
 function feedCar(v,score,ans,lang,mo){ return {id:v.id,year:v.year,make:v.make,model:v.model,trim:v.trim,
   price_mo:(mo!=null?mo:v.price_mo),price:v.price||null,miles:v.miles,
   drivetrain:v.drivetrain||v.drivetrain_detail||"",body:v.body||v.body_style||"",features:JSON.parse(v.features||"[]"),photos:JSON.parse(v.photos||"[]"),
   color:v.exterior_color||null,fuel:v.fuel_type||null,mileage_exact:(v.mileage_exact!=null?v.mileage_exact:null),
-  certified:v.certified||0,cond:v.condition_grade||null,mkt:v.market_price_avg||null,pvm:v.price_vs_market||null,updated_at:v.updated_at||null,
+  certified:v.certified||0,cond:v.condition_grade||null,title_status:v.title_status||null,mkt:v.market_price_avg||null,pvm:v.price_vs_market||null,updated_at:v.updated_at||null,
   match:score,why:carWhy(v,ans,lang),dist:carDist(v.id),persona:carPersona(v,lang)}; }
 // TASK-001: no-auth affordability search. Accepts the numbers as params (feed() only reads a stored profile).
 async function search(request,env,ctx){ try{
@@ -1019,7 +1035,8 @@ async function search(request,env,ctx){ try{
   { const ipx=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
     const rl=await env.DB.prepare("SELECT COUNT(*) c FROM scans WHERE ip=? AND last_ts> datetime('now','-60 seconds')").bind(ipx).first().catch(()=>({c:0}));
     if(rl&&rl.c>40) return json({ok:true,count:0,cars:[],reason:"slow_down"}); }   // D: silent per-IP scrape ceiling (~40/min); CF rate-limit is the real wall
-  const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file)
+  const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file); AJ: per-car aprEst() now prices each car in scan()
+  const LEASE_APR_EQ=+(0.00275*2400).toFixed(1);     // AJ: MF→APR-equiv (standard ×2400). Constant: leaseMoFor's money factor is fixed.
   const leaseMoFor=(price,dn)=>{ const resid=price*0.55, mf=0.00275; return Math.max(99,Math.round((price-dn-resid)/36+(price+resid)*mf)); };   // AD3: 36-mo, 55% residual — honest ballpark like the APR default
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
   const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text (legacy: calc.js/start.js send none; homepage now sends type=)
@@ -1028,16 +1045,21 @@ async function search(request,env,ctx){ try{
   const carType=TYPE_OK.has(tRaw)?tRaw:null;   // AI: unknown value ⇒ no type signal, never a crash
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
-  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 AND (v.dealer_id IS NULL OR v.dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.title_status, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 AND (v.dealer_id IS NULL OR v.dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
-      const mo=isLease?leaseMoFor(v.price,down):monthlyFor(v.price,down,apr,72);
+      const carApr=aprEst(v.price,down,v.year,v.mileage_exact);   // AJ: per-car rate — NOTE this moves price_mo, which the budget filter below tests
+      const mo=isLease?leaseMoFor(v.price,down):monthlyFor(v.price,down,carApr,72);
       if(budgetCap && (isCash?v.price>budgetCap:mo>budgetCap)) continue;   // budgetCap=0 → ignore budget (fallback pass); cash caps total price
       let cd=(v.dealer_lat!=null&&v.dealer_lng!=null)?{lat:v.dealer_lat,lng:v.dealer_lng}:(cen[v.dealer_zip||v.location_zip||""]||null);
       let dist=(home&&cd)?haversineMi(home.lat,home.lng,cd.lat,cd.lng):null;
       if(radCap && dist!=null && dist>radCap) continue;   // radCap=0 → ignore radius (fallback pass)
       const car=feedCar(v,null,{},lang,mo); if(dist!=null){ car.dist=dist.toFixed(1); car._d=dist; }
+      // AJ: fixed 3-pill card data. NEW keys on purpose — `cond` already holds condition_grade and is read by
+      // scoreCar (match.js /excellent|great|clean/); reusing it would silently move the tuned scoring.
+      car.cond_label=condOf(car);
+      car.apr_est=isCash?null:(isLease?LEASE_APR_EQ:carApr);      // cash has no APR; lease shows the MF equivalent
       if(cd){ car.dlat=cd.lat; car.dlng=cd.lng; }        // S3: real car location → the website map popup
       car.dealer_name=v.dealer_name||null;   // AB3: rooftop name on the card + in the lead email
       r.push(car);

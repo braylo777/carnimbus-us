@@ -5,6 +5,20 @@ document.addEventListener("DOMContentLoaded",function(){
   function esc(s){return String(s==null?"":s).replace(/[<&>"]/g,function(c){return {"<":"&lt;","&":"&amp;",">":"&gt;","\"":"&quot;"}[c];});}
   function es(){try{return localStorage.cn_lang==="es";}catch(_){return false;}}
   function distLabel(x){ var d=parseFloat(x); if(!isFinite(d)) return ""; var m=d<1?"<1 mi":Math.round(d)+" mi"; return m+(es()?" de ti":" away"); }
+  // AJ: fixed 3 pills on every card — Condition · Exact miles · Est. APR. Replaces the old reason-pills, which
+  // were up to 4, differed per car, and mostly restated the buyer's own inputs (type / in budget / distance).
+  var COND_ES={"Brand New":"Nuevo","Like New":"Como nuevo","Low Miles":"Pocas millas","Well Kept":"Bien cuidado","Higher Miles":"Más millas"};
+  // No deal-type param needed: apr_est is null from the worker for cash deals only, so the fallbacks below are
+  // reachable only on a cash card.
+  function pillsFor(c){ var p=[];
+    if(c.cond_label) p.push(es()?(COND_ES[c.cond_label]||c.cond_label):c.cond_label);
+    if(c.mileage_exact!=null) p.push(Number(c.mileage_exact).toLocaleString()+" mi");
+    if(c.apr_est!=null) p.push((es()?"aprox. ":"est. ")+c.apr_est+"% APR");
+    // Cash has no APR — nothing to estimate. Best remaining third fact, in order of strength. 3/100 cars carry
+    // neither and honestly render 2 pills; inventing a filler would defeat the point of the other two.
+    else if(c.certified) p.push(es()?"Certificado":"Certified");
+    else if(/clean|carfax/i.test(String(c.title_status||""))) p.push(es()?"Título limpio":"Clean title");
+    return p.slice(0,3); }
   var DEALER_EMAIL="cidsanchez@lacarguy.com";   // Y2: swap for Cid's CDK/calendar link when credentials exist
   var DEALER_CC="maxberger@lacarguy.com";   // Z: Max Berger CC'd on every auto-drafted lead email to Cid
   var dealButtons=document.querySelectorAll("#lead-deal button");
@@ -58,7 +72,7 @@ document.addEventListener("DOMContentLoaded",function(){
           '<div style="height:100px;background:#06163b '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></div>'+
           '<div style="padding:10px"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><div style="font:700 11px Manrope;color:#fff;min-width:0">'+esc(c.year+" "+c.make+" "+c.model)+'</div><div style="font:700 12px Manrope;color:#18C8FF;flex:none">'+(t.deal==="cash"?"$"+esc(Number(c.price).toLocaleString()):"$"+esc(c.price_mo)+"/mo")+'</div></div>'+
           '<div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px"><div style="font:600 9px Manrope;color:#8ca0c4;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.dealer_name||"LA Car Guy")+'</div>'+(c.dist!=null?'<div style="font:600 9px Manrope;color:#8ca0c4;flex:none">'+distLabel(c.dist)+'</div>':'')+'</div>'+
-          ((c.reasons&&c.reasons.length)?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+c.reasons.slice(0,4).map(function(rz){return '<span style="font:600 8px Manrope;color:#18C8FF;background:rgba(24,200,255,.12);border-radius:8px;padding:2px 6px">'+esc(rz)+'</span>';}).join('')+'</div>':'')+
+          (function(pz){ return pz.length?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+pz.map(function(rz){return '<span style="font:600 8px Manrope;color:#18C8FF;background:rgba(24,200,255,.12);border-radius:8px;padding:2px 6px">'+esc(rz)+'</span>';}).join('')+'</div>':''; })(pillsFor(c))+
           '<a class="btn primary sm lead-book" data-i="'+i+'" href="'+mailtoFor(c,t).replace(/"/g,"&quot;")+'" style="width:100%;margin-top:8px;text-decoration:none;justify-content:center">'+(es()?"Conducir ya":"Drive Now")+'</a></div></div>';
       }).join('');
     }catch(_){ if(!quiet){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches";
