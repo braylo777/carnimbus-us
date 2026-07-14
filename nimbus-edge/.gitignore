@@ -1,0 +1,16 @@
+# compiled daemons (source is tracked, binaries are not)
+static
+balancer
+dns
+monitor
+statsd
+shorty
+configd
+tunnel
+# runtime artifacts
+shorty.db
+config.out
+*.log
+# macOS AppleDouble sidecars the CNMB drive spawns
+._*
+.DS_Store

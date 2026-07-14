@@ -110,6 +110,15 @@ target of **42 rooftops** — not a hand-wavy TAM slide.
   `site/assets/runtime.js`; reactive state via `site/assets/signals.js`.
 - `migrations/` — D1 schema (through `0035_auth_ip_log`).
 - `wrangler.jsonc` — Worker config; custom domain `carnimbus.com`.
+- `nimbus-local/` — the **off-grid projection**: the real, unmodified `worker.js` run on Node builtins
+  (`node:http`/`node:sqlite`/`node:crypto`), serving the whole site + 48 API routes straight from the flash —
+  no Cloudflare, no GitHub, no npm in the path. Beyond.js proven off the edge. CNMB drive = Ed25519 hardware key.
+- `nimbus-edge/` — the **same thesis one layer down, in C**: a "mini-Cloudflare" edge stack — a
+  path-traversal-safe static server, a round-robin reverse proxy, a caching DNS resolver, an uptime monitor, a
+  stats tracker, a URL shortener, a token-gated config API, and a CONNECT relay. Eight single-file ANSI-C daemons,
+  warns-clean, loopback-only. An **R&D sandbox today** (production stays on Cloudflare); `nimbus-edge/MASTER-PLAN.md`
+  sequences the honest cutover — TLS, DDoS parity, supervision, backups, and monitoring must all be green before
+  any public traffic or customer PII leaves the managed edge.
 - `AGENT-REGISTRY.md` — Core parameters and database interfaces for the 5-node agent swarm.
 - `AUTONOMY-POLICY.md` — Governance protocols and human-in-the-loop fallback conditions.
 - `MASTERPLAN.md` — Multi-wave launch roadmap and infrastructure orchestration timelines.
