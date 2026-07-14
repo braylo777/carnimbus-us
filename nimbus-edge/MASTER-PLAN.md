@@ -33,6 +33,28 @@ here touches the live Worker, its D1 data, or any public DNS.
 Until all five are green, **customer PII and public traffic stay on Cloudflare.** That is not caution for its own
 sake — it is the difference between "we own our stack" and "we dropped a live business onto an unhardened box."
 
+## The wake trigger — flash-in boots the brain (Brandon's mental model, 2026-07-14)
+The idea: plugging the verified CNMB drive into a trusted machine is the trigger that "wakes the brain" — it opens
+Nimbus, brings up our own edge/VPS, and lands you in `ai.carnimbus.com`, the way waking from sleep switches your
+awareness on. This is the right model, and most of it already exists — but one honest constraint sets the shape:
+
+- **A webpage cannot detect the drive being plugged in.** No browser API exposes USB/mass-storage mount events
+  (this is the same wall the 01aa67 flash-key work hit). So the trigger CANNOT live in the site itself.
+- **An OS-level agent can, and that's the real mechanism.** A tiny always-installed launch agent on the trusted
+  Mac (`launchd` + a DiskArbitration/mount watch on `/Volumes/CNMB`) fires the moment the drive mounts. On mount it:
+  1. verifies the drive is really ours — the **Ed25519 keystore already in `nimbus-local/`** (private key on the
+     drive, machine holds only the pubkey) is exactly this "verified computer + verified drive" handshake;
+  2. boots the stack — `nimbus-local/serve.js` (Node projection) and/or the `nimbus-edge` daemons, and in Phase B
+     connects up to the always-on VPS;
+  3. opens `ai.carnimbus.com`. **Brain online.**
+- **Unplug = sleep.** This half is already built and shipping: the site's 2s File-System-Access heartbeat wipes the
+  key, locks, and hard-reloads within ~2.3s of the drive leaving (measured, live). The launch agent tears the local
+  daemons down the same way. Plug in → wake; pull out → sleep.
+
+So the path is: **a signed `launchd` "wake agent" on the trusted machine** that does verify → boot → open. It is the
+missing 10% around parts we already own (Ed25519 custody + auto-lock). Scoped for tomorrow's "integrity" pass with
+Brandon; everything runs behind `ai.carnimbus.com` as he specified.
+
 ## Adjacent tracks (not blocking the cutover)
 - **eLEAD/CDK custom-API tunnel** (from the call): once `configd`/`tunnel` are hardened, build the custom API tunnel
   that pushes scheduled test-drive packets to the dealer CRM. Cross-check against `../DEALER-CRM-RUNBOOK.md` — the
