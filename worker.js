@@ -180,6 +180,10 @@ export default {
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await adminOnly(request, env, (req,e)=>aiPulse(e)));
     if (url.pathname === "/api/ai/graph")                                 return sec(await adminOnly(request, env, (req,e)=>aiGraph(e)));
+    if (url.pathname === "/api/ai/trends")                                return sec(await adminOnly(request, env, (req,e)=>aiTrends(e)));
+    if (url.pathname === "/api/ai/ask" && request.method === "POST")      return sec(await adminOnly(request, env, (req,e)=>aiAsk(req,e)));
+    if (url.pathname === "/api/ai/act" && request.method === "POST")      return sec(await adminOnly(request, env, (req,e)=>aiAct(req,e)));
+    if (url.pathname === "/api/admin/buyers")                             return sec(await adminOnly(request, env, (req,e)=>adminBuyers(e)));
     if (url.pathname === "/api/events" && request.method === "POST")      return sec(await postEvents(request, env));
     if (url.pathname === "/api/admin/events/tail")                        return sec(await adminOnly(request, env, eventsTail));
     if (url.pathname === "/api/admin/growth")                             return sec(await adminOnly(request, env, adminGrowth));
@@ -679,15 +683,19 @@ async function vdpIngest(request,env){ const body=await request.json().catch(()=
   const cars=Array.isArray(body)?body:(body&&Array.isArray(body.cars)?body.cars:null);
   const did=(body&&!Array.isArray(body)&&body.dealer_id!=null)?(parseInt(body.dealer_id,10)||null):null;
   if(!Array.isArray(cars)) return json({ok:false,error:"bad_request"},400);
+  let count=0, skipped=0, failed=0;
   for(const c of cars){ const cd=(c.dealer_id!=null?(parseInt(c.dealer_id,10)||null):did);
+    if(!c.vin||!String(c.vin).trim()){ skipped++; continue; }        // BI: never write a vin-less row
+    try{
     await env.DB.prepare(
     "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,dealer_id,active,embedding_synced,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, location_zip=excluded.location_zip, dealer_id=COALESCE(excluded.dealer_id,vdps.dealer_id), active=1, embedding_synced=0, updated_at=excluded.updated_at")
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, location_zip=excluded.location_zip, dealer_id=COALESCE(excluded.dealer_id,vdps.dealer_id), active=1, embedding_synced=0, deactivated_at=NULL, updated_at=excluded.updated_at")
     .bind(c.vin,c.year,c.make,c.model,c.trim||"",c.price_mo,c.miles||"",c.drivetrain||"",c.body||"",
       JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),
       parseInt(c.price_total,10)||null, parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null, String(c.location_zip||"").slice(0,10),
-      cd, new Date().toISOString()).run(); }
-  return json({ok:true,count:cars.length}); }
+      cd, new Date().toISOString()).run();
+    count++; }catch(_){ failed++; } }
+  return json({ok:true,count,skipped,failed}); }
 // ===== AF: Dealer Engine — Stripe billing → inventory on/off, per-dealer feed sync, compliant outreach =====
 async function stripeValid(request, raw, env){
   const sig=request.headers.get("Stripe-Signature")||""; if(!env.STRIPE_WEBHOOK_SECRET) return false;   // fail closed
@@ -733,7 +741,7 @@ async function syncDealerFeeds(env){
           .bind(c.vin,c.year,c.make,c.model,c.trim||"",c.price_mo,c.miles||"",c.drivetrain||"",c.body||"",JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),parseInt(c.price_total,10)||null,parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null,String(c.location_zip||"").slice(0,10),d.id,new Date().toISOString(),d.id).run().catch(()=>{});
       }
       // reconcile: deactivate this dealer's VINs no longer in the fresh feed (sold cars drop off)
-      if(vins.length){ const ph=vins.map(()=>"?").join(","); await env.DB.prepare(`UPDATE vdps SET active=0 WHERE dealer_id=? AND vin NOT IN (${ph})`).bind(d.id,...vins).run().catch(()=>{}); }
+      if(vins.length){ const ph=vins.map(()=>"?").join(","); await env.DB.prepare(`UPDATE vdps SET active=0, deactivated_at=datetime('now') WHERE dealer_id=? AND active=1 AND vin NOT IN (${ph})`).bind(d.id,...vins).run().catch(()=>{}); }
       await env.DB.prepare("UPDATE dealer_leads SET feed_synced_at=? WHERE id=?").bind(new Date().toISOString(),d.id).run().catch(()=>{});
     }catch(_){}
   }
@@ -749,29 +757,39 @@ async function adminEngineToggle(request,env){ const b=await request.json().catc
   return json({ok:true,engine_on:!!b.on}); }
 async function adminOutreach(request,env){ const b=await request.json().catch(()=>({}));
   const ids=Array.isArray(b.dealer_ids)?b.dealer_ids.map(x=>parseInt(x,10)).filter(Boolean):[];
-  let queued=0; for(const id of ids){ const r=await sendDealerOutreach(env,id); if(r) queued++; }
-  return json({ok:true,queued}); }
+  const t={sent:0,queued:0,suppressed:0,disabled:0,failed:0,skipped:0};
+  for(const id of ids){ const r=await sendDealerOutreach(env,id); if(t[r]!=null) t[r]++; else t.skipped++; }
+  const out={ok:true,...t};
+  if(ids.length && t.disabled===ids.length){ out.disabled_all=true; out.reason="outreach disabled — set OUTREACH_FROM_ADDRESS to enable"; }
+  return json(out); }
 async function sendDealerOutreach(env, dealerId){
+  // BI: gated OFF until a real CAN-SPAM postal address is provisioned (env.OUTREACH_FROM_ADDRESS). No fake-address
+  // mail, no rows written while disabled. Returns a status string so adminOutreach reports the truth (no swallow).
+  if(!env.OUTREACH_FROM_ADDRESS) return "disabled";
   const d=await env.DB.prepare("SELECT id,dealership,gm_name,gm_email FROM dealer_leads WHERE id=?").bind(dealerId).first();
-  if(!d||!d.gm_email) return false;
+  if(!d||!d.gm_email) return "skipped";
   const sup=await env.DB.prepare("SELECT email FROM email_suppression WHERE email=?").bind(d.gm_email).first().catch(()=>null);
-  if(sup){ await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,status,created_at) VALUES (?,?, 'suppressed', datetime('now'))").bind(dealerId,d.gm_email).run().catch(()=>{}); return false; }
+  if(sup){ try{ await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,status,created_at) VALUES (?,?, 'suppressed', datetime('now'))").bind(dealerId,d.gm_email).run(); }catch(_){ return "failed"; } return "suppressed"; }
   const token=genCode("UNS");
   const subject="Pre-qualified LA buyers for "+(d.dealership||"your store");
   const optOut="https://carnimbus.com/api/unsubscribe?t="+token;
-  const ADDR="CarNimbus, Inc. · 000 [address] , Los Angeles, CA 90000";   // runbook: founder confirms exact postal address
+  const ADDR=env.OUTREACH_FROM_ADDRESS;
   const body="Hi "+(d.gm_name||"there")+",\n\nCarNimbus routes pre-qualified, ready-to-drive buyers to LA dealerships. "+
     "We can turn your rooftop's Drive Now engine on this week — your live inventory, matched to real local buyers, no work on your side.\n\n"+
     "If you're open to a 10-minute look, just reply. If not, no worries.\n\n— The CarNimbus team\n\n"+
     ADDR+"\nUnsubscribe: "+optOut;
-  await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,subject,status,unsub_token,sent_at,created_at) VALUES (?,?,?,?,?,?,datetime('now'))")
-    .bind(dealerId,d.gm_email,subject,(env.RESEND_API_KEY?"sent":"queued"),token,(env.RESEND_API_KEY?new Date().toISOString():null)).run().catch(()=>{});
+  const status=env.RESEND_API_KEY?"sent":"queued";
+  try{
+    await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,subject,status,unsub_token,sent_at,created_at) VALUES (?,?,?,?,?,?,datetime('now'))")
+      .bind(dealerId,d.gm_email,subject,status,token,(env.RESEND_API_KEY?new Date().toISOString():null)).run();
+  }catch(_){ return "failed"; }
   if(env.RESEND_API_KEY){
-    await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"content-type":"application/json"},
+    const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"content-type":"application/json"},
       body:JSON.stringify({from:"CarNimbus <hello@carnimbus.com>",to:[d.gm_email],subject,text:body,
-        headers:{"List-Unsubscribe":"<"+optOut+">","List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}})}).catch(()=>{});
+        headers:{"List-Unsubscribe":"<"+optOut+">","List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}})}).catch(()=>null);
+    if(!r||!r.ok) return "failed";
   }
-  return true;
+  return status;
 }
 async function unsubscribe(request,env){
   const t=new URL(request.url).searchParams.get("t")||"";
@@ -1772,26 +1790,80 @@ async function dealerChat(request,env,uid,dealer){ const curl=new URL(request.ur
   const rows=await env.DB.prepare("SELECT role,body,created_at FROM chats WHERE user_id=? AND vdp_id=? ORDER BY id ASC LIMIT 40").bind(td.user_id,td.vdp_id).all();
   return json({ok:true,messages:rows.results||[]}); }
 async function aiPulse(env){
+  // BI: refocused on the three metrics that matter (scans → drive-nows → inventory in/out). `degraded` distinguishes
+  // a real DB failure (value=null → UI shows "–") from a genuine zero. Legacy fields kept for anything else.
   const today=new Date().toISOString().slice(0,10);
-  const q=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).first().catch(()=>({c:0})); return r?r.c:0; };
-  return json({ok:true, today,
-    cars:        await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
-    scansToday:  await q("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)=?", today),
+  const yday=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  let degraded=0;
+  const q=async(sql,...b)=>{ try{ const r=await env.DB.prepare(sql).bind(...b).first(); return r?r.c:0; }catch(_){ degraded++; return null; } };
+  const scansToday     = await q("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)=?", today);
+  const driveNowsToday = await q("SELECT COUNT(*) c FROM web_leads WHERE substr(created_at,1,10)=?", today);
+  const body={ ok:true, today,
+    scansToday, scansYesterday: await q("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)=?", yday),
     scansTotal:  await q("SELECT COUNT(*) c FROM scans"),
-    profiles:    await q("SELECT COUNT(*) c FROM profiles"),
-    profilesToday: await q("SELECT COUNT(*) c FROM profiles WHERE substr(updated_at,1,10)=?", today),
-    riders:      await q("SELECT COUNT(*) c FROM users"),
-    ridersToday: await q("SELECT COUNT(*) c FROM users WHERE substr(created_at,1,10)=?", today),
-    leadsToday:  await q("SELECT COUNT(*) c FROM web_leads WHERE substr(created_at,1,10)=?", today),
-    leadsTotal:  await q("SELECT COUNT(*) c FROM web_leads"),
-    drives:      await q("SELECT COUNT(*) c FROM test_drives"),
-    drivesToday: await q("SELECT COUNT(*) c FROM test_drives WHERE substr(created_at,1,10)=?", today),
-    embeddings:  await q("SELECT COUNT(*) c FROM vdps WHERE embedding_synced=1"),
-    chats:       await q("SELECT COUNT(*) c FROM chats"),
-    eventsToday: await q("SELECT COUNT(*) c FROM events WHERE substr(ts,1,10)=?", today),
-    dealersOn:   await q("SELECT COUNT(*) c FROM dealer_leads WHERE engine_on=1"),
-    dealersActive: await q("SELECT COUNT(*) c FROM dealer_leads WHERE subscription_status IN ('active','trialing')")
+    driveNowsToday, driveNowsTotal: await q("SELECT COUNT(*) c FROM web_leads"),
+    convRate: (scansToday&&driveNowsToday!=null)? Math.round(driveNowsToday/scansToday*100) : 0,
+    liveInventory: await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
+    inToday:  await q("SELECT COUNT(*) c FROM vdps WHERE substr(updated_at,1,10)=? AND active=1", today),
+    outToday: await q("SELECT COUNT(*) c FROM vdps WHERE substr(deactivated_at,1,10)=?", today),
+    apptsToday: 0, appt_pending: true,
+    // legacy (not shown on the new console, retained for compatibility)
+    cars: await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
+    leadsToday: driveNowsToday, leadsTotal: await q("SELECT COUNT(*) c FROM web_leads") };
+  body.degraded=degraded>0; return json(body); }
+async function aiTrends(env){
+  // BI: aggregates for the console's trend charts — models/types/zips coming through the portal.
+  const rows=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]})); return (r.results||[]).map(x=>({t:String(x.t??""),c:x.c})); };
+  return json({ ok:true,
+    byType:  await rows("SELECT dream_car t, COUNT(*) c FROM scans WHERE dream_car<>'' GROUP BY dream_car ORDER BY c DESC"),
+    byDeal:  await rows("SELECT deal_type t, COUNT(*) c FROM scans WHERE deal_type IS NOT NULL AND deal_type<>'' GROUP BY deal_type ORDER BY c DESC"),
+    topCars: await rows("SELECT matched_car t, COUNT(*) c FROM web_leads WHERE matched_car IS NOT NULL AND matched_car<>'' GROUP BY matched_car ORDER BY c DESC LIMIT 8"),
+    byZip:   await rows("SELECT zip t, COUNT(*) c FROM scans WHERE zip IS NOT NULL AND zip<>'' GROUP BY zip ORDER BY c DESC LIMIT 10"),
+    overTime:((await env.DB.prepare("SELECT substr(first_ts,1,10) d, COUNT(*) c FROM scans GROUP BY d ORDER BY d DESC LIMIT 14").all().catch(()=>({results:[]}))).results||[]).reverse()
   }); }
+async function adminBuyers(env){
+  // BI: the new one-line buyer record (zip + selections + picked car + email), from web_leads. Old name/phone
+  // profiles are archived (0045) and no longer shown.
+  const r=await env.DB.prepare("SELECT created_at, zip, dream_car, deal_type, monthly, down, matched_car, email FROM web_leads ORDER BY id DESC LIMIT 500").all().catch(()=>({results:[]}));
+  return json({ok:true, buyers:r.results||[]}); }
+// ===== BI: Nimbus conversational ops brain — insights (aiAsk) + guarded actions (aiAct). =====
+const NIMBUS_ACTIONS = { dealer_engine:"turn a dealer's inventory engine on/off (args: dealer_id, on)",
+  reindex:"re-embed inventory + profiles into search (no args)",
+  activate_vin:"put a car back in inventory (args: vin)",
+  deactivate_vin:"take a car out of inventory (args: vin)" };
+async function aiAsk(request,env){
+  const {question,history}=await request.json().catch(()=>({}));
+  if(!question) return json({ok:false,error:"bad_request"},400);
+  const p=await aiPulse(env).then(r=>r.json()).catch(()=>({}));
+  const t=await aiTrends(env).then(r=>r.json()).catch(()=>({}));
+  const state=`STATE (live): scansToday=${p.scansToday} driveNowsToday=${p.driveNowsToday} convRate=${p.convRate}% liveInventory=${p.liveInventory} in=${p.inToday} out=${p.outToday}. `+
+    `topTypes=${(t.byType||[]).map(x=>x.t+":"+x.c).join(", ")}. topCars=${(t.topCars||[]).slice(0,5).map(x=>x.t+":"+x.c).join(", ")}. topZips=${(t.byZip||[]).slice(0,5).map(x=>x.t+":"+x.c).join(", ")}.`;
+  const sys="You are Nimbus, the operations intelligence for CarNimbus (a car-buying platform). Answer the operator "+
+    "concisely from the live STATE below. If they ask you to CHANGE something, do NOT do it — propose exactly one "+
+    "action on its own final line as `<ACTION name=NAME arg1=v1 arg2=v2>` and explain it in one sentence. "+
+    "Available actions: "+Object.entries(NIMBUS_ACTIONS).map(([k,v])=>k+" — "+v).join("; ")+". "+state;
+  const msgs=[{role:"system",content:sys},...((history||[]).slice(-8)),{role:"user",content:String(question).slice(0,600)}];
+  let text=await llm(env,msgs);
+  let proposed=null; const m=/<ACTION\s+name=(\w+)([^>]*)>/i.exec(text||"");
+  if(m){ const args={}; (m[2]||"").trim().split(/\s+/).filter(Boolean).forEach(kv=>{ const [k,...rest]=kv.split("="); if(k) args[k]=rest.join("="); });
+    if(NIMBUS_ACTIONS[m[1]]) proposed={name:m[1],args}; text=String(text).replace(m[0],"").trim(); }
+  return json({ok:true, answer:text, proposed_action:proposed}); }
+async function aiAct(request,env){
+  const {action,args,confirm}=await request.json().catch(()=>({}));
+  if(!confirm) return json({ok:false,error:"unconfirmed"},400);
+  if(!NIMBUS_ACTIONS[action]) return json({ok:false,error:"unknown_action"},400);
+  const a=args||{}; let result="done";
+  try{
+    if(action==="dealer_engine"){ const id=parseInt(a.dealer_id,10); const on=(a.on==="1"||a.on==="true"||a.on===1||a.on===true)?1:0;
+      if(!id) return json({ok:false,error:"bad_dealer"},400);
+      await env.DB.prepare("UPDATE dealer_leads SET engine_on=? WHERE id=?").bind(on,id).run(); result=`dealer ${id} engine ${on?"ON":"OFF"}`; }
+    else if(action==="reindex"){ await reindexAll(request,env); result="reindex started"; }
+    else if(action==="activate_vin"||action==="deactivate_vin"){ const on=action==="activate_vin"?1:0; const vin=String(a.vin||"").trim();
+      if(!vin) return json({ok:false,error:"bad_vin"},400);
+      await env.DB.prepare("UPDATE vdps SET active=?, deactivated_at=? WHERE vin=?").bind(on, on?null:new Date().toISOString(), vin).run(); result=`${vin} ${on?"activated":"deactivated"}`; }
+  }catch(e){ return json({ok:false,error:"act_failed"},500); }
+  await logEvent(env,{action:"admin.nimbus_act",source:action+" "+JSON.stringify(a)}).catch(()=>{});
+  return json({ok:true, result}); }
 async function aiGraph(env){
   const all=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]})); return r.results||[]; };
   const NODES=[], EDGES=[], seen=new Set();

@@ -1,53 +1,6 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
-<meta name="theme-color" content="#06163b">
-<title>CarNimbus — Admin</title>
-<meta name="robots" content="noindex">
-<link rel="stylesheet" href="/assets/fonts/fonts.css">
-<link rel="stylesheet" href="/assets/styles.css">
-<style>
-@media(max-width:700px){[style*="grid-template-columns:repeat(3,1fr)"]{grid-template-columns:1fr 1fr!important}}
-</style>
-</head>
+<html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>NIMBUS</title></head>
 <body>
-<main class="stage">
-<div style="padding:0 20px 40px"><div class="bw cv">
-  <div style="position:relative;background:#06163b;min-height:600px;padding:22px">
-    <div class="cine"><div class="cine-grid"></div></div>
-    <div class="z">
-      <div class="disp" style="font-size:24px;font-weight:700">Nimbus <span style="font:600 12px Manrope;color:#8ca0c4">· the Jarvis screen</span></div>
-      <div style="font:500 12px Manrope;color:#8ca0c4;margin-top:2px">Nimbus internal · this is where the agents live.</div>
-      <div class="row" style="gap:10px;margin-top:10px;flex-wrap:wrap"><a class="btn ghost sm" href="/pools" style="text-decoration:none">🗄 Data pools (SQL)</a><a class="btn ghost sm" href="/events" style="text-decoration:none">⚡ Event stream</a><a class="btn ghost sm" href="/growth" style="text-decoration:none">📈 Growth</a></div>
-      <div class="row" style="gap:10px;margin-top:16px;max-width:480px">
-        <label class="vh" for="a-key">Admin key</label>
-        <input id="a-key" class="field" type="password" placeholder="Admin key" style="flex:1">
-        <button id="a-load" class="btn primary md" type="button">Load</button>
-      </div>
-      <div class="wl-msg" id="a-msg" style="display:none"></div>
-      <div id="stats" style="display:none">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px">
-          <div class="metric"><div class="v" id="s-waitlist">–</div><div class="l">Waitlist</div></div>
-          <div class="metric"><div class="v" id="s-users">–</div><div class="l">Users</div></div>
-          <div class="metric"><div class="v" id="s-profiles">–</div><div class="l">Profiles</div></div>
-          <div class="metric"><div class="v" id="s-drives">–</div><div class="l">Drives</div></div>
-          <div class="metric"><div class="v" id="s-activeCars">–</div><div class="l">Active cars</div></div>
-          <div class="metric"><div class="v" id="s-comments">–</div><div class="l">Comments</div></div>
-          <div class="metric"><div class="v" id="s-activeSessions">–</div><div class="l">Active sessions (7d)</div></div>
-          <div class="metric"><div class="v" id="s-recentDrives">–</div><div class="l">Recent drives (7d)</div></div>
-          <div class="metric"><div class="v" id="s-convRate" style="color:var(--cn-cyan)">–</div><div class="l">Appointment Conv.</div></div>
-        </div>
-        <div class="row" style="gap:10px;margin-top:14px"><a class="btn ghost sm" href="/admin/wall.html" style="text-decoration:none">Open wall</a><a class="btn ghost sm" href="https://ai.carnimbus.com" style="text-decoration:none">Open Nimbus</a></div>
-        <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin:18px 0 6px">DEALER ACCESS REQUESTS</div>
-        <div id="leads"></div>
-      </div>
-    </div>
-  </div>
-</div></div>
-</main>
-<script src="/assets/js/admin.js" defer></script>
-</body>
-</html>
+<script>location.replace("https://ai.carnimbus.com/");</script>
+<noscript><a href="https://ai.carnimbus.com/">Open the NIMBUS console</a></noscript>
+</body></html>
