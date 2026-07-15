@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- REFERENCE ONLY. install.sh generates the real agent with the absolute $HOME path resolved and pointed at
+     the local launcher (~/Library/Application Support/CarNimbus/wake-launcher.sh). launchd cannot exec a script
+     that lives on the removable drive, so the entry point must be on the internal disk. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.carnimbus.wake</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/YOU/Library/Application Support/CarNimbus/wake-launcher.sh</string>
+  </array>
+  <key>StartOnMount</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/tmp/carnimbus-wake.out</string>
+  <key>StandardErrorPath</key><string>/tmp/carnimbus-wake.err</string>
+</dict>
+</plist>

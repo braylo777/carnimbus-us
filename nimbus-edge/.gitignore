@@ -11,6 +11,8 @@ tunnel
 shorty.db
 config.out
 *.log
+# wake protocol runtime (pids, logs) — never committed
+wake/run/
 # macOS AppleDouble sidecars the CNMB drive spawns
 ._*
 .DS_Store
