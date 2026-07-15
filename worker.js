@@ -56,7 +56,7 @@ const SEC = {
 export default {
   async fetch(request, env, ctx) {
     try { return await this.route(request, env, ctx); }
-    catch(e){ return sec(json({ok:false,error:"server_error"},500)); }   // e.g. SESSION_SECRET unset → never fall back to a forgeable session; keep sec() headers
+    catch(e){ console.error("route_error:", e&&e.stack||e); return sec(json({ok:false,error:"server_error"},500)); }   // e.g. SESSION_SECRET unset → never fall back to a forgeable session; keep sec() headers
   },
   async route(request, env, ctx) {
     let url = new URL(request.url);
@@ -1839,14 +1839,20 @@ async function aiAsk(request,env){
   const state=`STATE (live): scansToday=${p.scansToday} driveNowsToday=${p.driveNowsToday} convRate=${p.convRate}% liveInventory=${p.liveInventory} in=${p.inToday} out=${p.outToday}. `+
     `topTypes=${(t.byType||[]).map(x=>x.t+":"+x.c).join(", ")}. topCars=${(t.topCars||[]).slice(0,5).map(x=>x.t+":"+x.c).join(", ")}. topZips=${(t.byZip||[]).slice(0,5).map(x=>x.t+":"+x.c).join(", ")}.`;
   const sys="You are Nimbus, the operations intelligence for CarNimbus (a car-buying platform). Answer the operator "+
-    "concisely from the live STATE below. If they ask you to CHANGE something, do NOT do it — propose exactly one "+
-    "action on its own final line as `<ACTION name=NAME arg1=v1 arg2=v2>` and explain it in one sentence. "+
-    "Available actions: "+Object.entries(NIMBUS_ACTIONS).map(([k,v])=>k+" — "+v).join("; ")+". "+state;
+    "concisely from the live STATE below. Most questions are read-only — just answer them and output NOTHING else. "+
+    "ONLY when the operator explicitly asks you to CHANGE something (turn a dealer on/off, reindex, take a car in/out) "+
+    "do NOT perform it — instead append exactly one action as the final line, using real values, e.g. "+
+    "`<ACTION name=dealer_engine dealer_id=3 on=1>`. Never output an action line for a read-only question, and never "+
+    "emit placeholder tokens like NAME, arg1, or v1. Available actions: "+
+    Object.entries(NIMBUS_ACTIONS).map(([k,v])=>k+" — "+v).join("; ")+". "+state;
   const msgs=[{role:"system",content:sys},...((history||[]).slice(-8)),{role:"user",content:String(question).slice(0,600)}];
-  let text=await llm(env,msgs);
+  let text; try{ text=await llm(env,msgs); }catch(_){ try{ text=await llm(env,msgs); }catch(e){ return json({ok:false,error:"nimbus_unavailable"},503); } }  // one retry: Workers AI cold-start
   let proposed=null; const m=/<ACTION\s+name=(\w+)([^>]*)>/i.exec(text||"");
   if(m){ const args={}; (m[2]||"").trim().split(/\s+/).filter(Boolean).forEach(kv=>{ const [k,...rest]=kv.split("="); if(k) args[k]=rest.join("="); });
-    if(NIMBUS_ACTIONS[m[1]]) proposed={name:m[1],args}; text=String(text).replace(m[0],"").trim(); }
+    // Reject the model echoing the prompt's template (placeholder arg names/values) rather than a real action.
+    const placeholder=Object.keys(args).some(k=>/^arg\d+$/i.test(k)) || Object.values(args).some(v=>/^v\d+$/i.test(v)||v==="NAME");
+    if(NIMBUS_ACTIONS[m[1]] && !placeholder) proposed={name:m[1],args};
+    text=String(text).replace(m[0],"").trim(); }
   return json({ok:true, answer:text, proposed_action:proposed}); }
 async function aiAct(request,env){
   const {action,args,confirm}=await request.json().catch(()=>({}));
