@@ -109,7 +109,7 @@ export default {
       // AH2: ai.carnimbus.com is the ONLY console door — root serves the NIMBUS HUD (site/ai/index.html);
       // deeper ai paths (/pools,/events,/growth,/wall) serve the admin tool pages from site/admin/.
       url.pathname = sub==="ai" ? (url.pathname==="/" ? "/ai/" : "/admin"+url.pathname)
-                   : PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/pitch":"/") : url.pathname);
+                   : PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/signin":"/") : url.pathname);
       request = new Request(url, request);
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
@@ -165,6 +165,7 @@ export default {
     if (url.pathname === "/api/webleads" && request.method === "POST")     return sec(await webLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
     if (url.pathname === "/api/dealer/login" && request.method === "POST")   return sec(await dealerLogin(request, env));
+    if (url.pathname === "/api/dealer/signup" && request.method === "POST")   return sec(await dealerSignup(request, env));
     if (url.pathname === "/api/dealer/console")                           return sec(await withDealer(request, env, dealerConsole));
     if (url.pathname === "/api/dealer/roi")                               return sec(await withDealer(request, env, dealerRoi));
     if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
@@ -1778,6 +1779,19 @@ async function dealerLogin(request,env){
   const d=await env.DB.prepare("SELECT id,status,client_no FROM dealer_leads WHERE id=?").bind(dealerId).first();
   if(!d||d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
   const cookie="cn_dlr="+await makeDealerSession(env,d.id)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400);
+  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}}); }
+// T-102: self-serve dealer signup — email + password → creates their store + logs them in. Super simple, no marketing gate.
+async function dealerSignup(request,env){
+  const {email,password}=await request.json().catch(()=>({}));
+  const em=String(email||"").trim().toLowerCase().slice(0,120);
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)||String(password||"").length<8) return json({ok:false,error:"bad_request"},400);
+  if(await env.DB.prepare("SELECT 1 FROM dealer_logins WHERE email=?").bind(em).first().catch(()=>null)) return json({ok:false,error:"exists"},409);
+  const salt=newSalt(), hash=await hashPw(String(password),salt), now=new Date().toISOString();
+  const ins=await env.DB.prepare("INSERT INTO dealer_leads (name,dealership,email,status,client_no,created_at) VALUES (?,?,?,?,?,?)")
+    .bind(em.split("@")[0].slice(0,40),"",em,"active",genCode("CN"),now).run();
+  const did=ins.meta.last_row_id;
+  await env.DB.prepare("INSERT INTO dealer_logins (email,dealer_id,pw_hash,pw_salt,created_at) VALUES (?,?,?,?,?)").bind(em,did,hash,salt,now).run();
+  const cookie="cn_dlr="+await makeDealerSession(env,did)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400);
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}}); }
 // T-102: admin provisions a dealer staff email+password → dealer_logins (many emails per store). Behind adminOnly.
 async function adminDealerCred(request,env){

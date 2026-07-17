@@ -60,10 +60,18 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
 .card{background:rgba(0,0,0,.2);border:1px solid rgba(24,200,255,.14);border-radius:12px;padding:14px}
 .card h3{font:700 9px Manrope;letter-spacing:.18em;color:var(--mut);margin:0 0 10px}
 #netgraph{width:100%;height:60vh;display:block}
-#nimbus-lock{position:fixed;inset:0;z-index:50;background:rgba(4,13,36,.94);backdrop-filter:blur(10px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
-#nl-msg{font:600 12px Manrope;color:#fda4af;min-height:16px}
-.lk{font:700 22px 'Space Grotesk';letter-spacing:.4em;color:#fff}
-.lkm{font:700 11px 'IBM Plex Mono';letter-spacing:.24em;color:var(--mut)}
+#nimbus-web{position:fixed;inset:0;z-index:49;display:block;pointer-events:none;background:#040d24}
+#nimbus-lock{position:fixed;inset:0;z-index:50;background:radial-gradient(ellipse at 50% 42%,rgba(6,22,59,.35) 0%,rgba(4,13,36,.72) 60%,rgba(2,8,20,.9) 100%);backdrop-filter:blur(3px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
+#nimbus-lock>*{position:relative;z-index:1}
+#nl-msg{font:600 12px Manrope;color:#fda4af;min-height:16px;text-shadow:0 0 12px rgba(0,0,0,.6)}
+.lk{font:700 clamp(24px,7vw,40px) 'Space Grotesk';letter-spacing:.42em;color:#fff;text-shadow:0 0 28px rgba(24,200,255,.45),0 2px 20px rgba(0,0,0,.6);animation:lkglow 4.5s ease-in-out infinite}
+@keyframes lkglow{0%,100%{text-shadow:0 0 24px rgba(24,200,255,.35),0 2px 20px rgba(0,0,0,.6)}50%{text-shadow:0 0 40px rgba(24,200,255,.6),0 2px 20px rgba(0,0,0,.6)}}
+.lk-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(4,13,36,.55);border:1px solid rgba(253,164,175,.35);font:700 10px 'IBM Plex Mono';letter-spacing:.24em;color:#fda4af;backdrop-filter:blur(4px)}
+.lk-pill .pd{width:7px;height:7px;border-radius:50%;background:#fb7185;box-shadow:0 0 10px #fb7185;animation:pdpulse 1.6s ease-in-out infinite}
+@keyframes pdpulse{0%,100%{opacity:1;box-shadow:0 0 10px #fb7185}50%{opacity:.4;box-shadow:0 0 4px #fb7185}}
+#nl-file{padding:11px 24px;box-shadow:0 0 24px rgba(24,200,255,.35);transition:box-shadow .25s,transform .1s}
+#nl-file:hover{box-shadow:0 0 34px rgba(24,200,255,.6)}
+#nl-file:active{transform:translateY(1px)}
 </style>
 </head>
 <body>
@@ -140,13 +148,79 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
   </section>
 </div>
 
+<canvas id="nimbus-web" aria-hidden="true"></canvas>
 <div id="nimbus-lock">
   <div class="lk">N I M B U S</div>
-  <div class="lkm">LOCKED · INSERT FLASH</div>
-  <button id="nl-file" class="btn2" type="button" style="padding:11px 20px">Load key from flash</button>
+  <div class="lk-pill"><span class="pd"></span>LOCKED</div>
+  <button id="nl-file" class="btn2" type="button">Load Key</button>
   <input id="nl-fileinput" type="file" style="display:none">
   <div id="nl-msg"></div>
 </div>
+<script>
+(function(){
+  var cv=document.getElementById('nimbus-web');if(!cv)return;
+  var ctx=cv.getContext('2d'),W=0,H=0,dpr=Math.min(window.devicePixelRatio||1,2);
+  var nodes=[],pulses=[],raf=0,LINK=150;
+  function resize(){
+    W=cv.clientWidth=window.innerWidth;H=cv.clientHeight=window.innerHeight;
+    cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+    var target=Math.round(Math.min(90,Math.max(34,(W*H)/22000)));
+    while(nodes.length<target)nodes.push(mk());
+    nodes.length=target;
+  }
+  function mk(){return{x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.6+1.1,ph:Math.random()*6.28};}
+  function step(t){
+    ctx.clearRect(0,0,W,H);
+    for(var i=0;i<nodes.length;i++){var n=nodes[i];
+      n.x+=n.vx;n.y+=n.vy;
+      if(n.x<0||n.x>W)n.vx*=-1;if(n.y<0||n.y>H)n.vy*=-1;
+    }
+    // edges
+    for(var i=0;i<nodes.length;i++){var a=nodes[i];
+      for(var j=i+1;j<nodes.length;j++){var b=nodes[j];
+        var dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy);
+        if(d<LINK){var o=(1-d/LINK)*.5;
+          ctx.strokeStyle='rgba(24,200,255,'+(o*.55).toFixed(3)+')';
+          ctx.lineWidth=.7;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+          if(Math.random()<0.0009&&pulses.length<40)pulses.push({a:a,b:b,p:0});
+        }
+      }
+    }
+    // nodes
+    for(var i=0;i<nodes.length;i++){var n=nodes[i];
+      var pu=(Math.sin(t*0.0012+n.ph)+1)*.5;
+      ctx.beginPath();ctx.arc(n.x,n.y,n.r+pu*.9,0,6.283);
+      ctx.fillStyle='rgba(120,225,255,'+(0.4+pu*0.5).toFixed(3)+')';ctx.fill();
+      ctx.beginPath();ctx.arc(n.x,n.y,(n.r+pu*.9)*2.4,0,6.283);
+      ctx.fillStyle='rgba(24,200,255,'+(0.05+pu*0.06).toFixed(3)+')';ctx.fill();
+    }
+    // pulses traveling along edges
+    for(var k=pulses.length-1;k>=0;k--){var ps=pulses[k];ps.p+=0.02;
+      if(ps.p>=1){pulses.splice(k,1);continue;}
+      var x=ps.a.x+(ps.b.x-ps.a.x)*ps.p,y=ps.a.y+(ps.b.y-ps.a.y)*ps.p;
+      var g=ctx.createRadialGradient(x,y,0,x,y,6);
+      g.addColorStop(0,'rgba(180,240,255,'+(0.9*(1-ps.p)).toFixed(3)+')');
+      g.addColorStop(1,'rgba(24,200,255,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,6,0,6.283);ctx.fill();
+    }
+    raf=requestAnimationFrame(step);
+  }
+  function start(){if(!raf&&!document.hidden)raf=requestAnimationFrame(step);}
+  function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+  window.addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  // stop the animation once the console is unlocked (lock hidden)
+  var lock=document.getElementById('nimbus-lock');
+  if(lock&&'MutationObserver'in window){
+    new MutationObserver(function(){
+      var hidden=lock.style.display==='none'||getComputedStyle(lock).display==='none';
+      if(hidden){stop();cv.style.display='none';}
+      else{cv.style.display='block';resize();start();}
+    }).observe(lock,{attributes:true,attributeFilter:['style','class']});
+  }
+  resize();start();
+})();
+</script>
 <script src="/assets/js/nimbus.js" defer></script>
 </body>
 </html>

@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded",function(){
         out.push({value:d.toISOString().slice(0,10)+"T"+hm[0],label:lbl}); }); added++; } }
     return out; }
   function icsHref(c,slotValue){ var dt=slotValue.replace(/[-:]/g,"")+"00";   // 20260721T100000
-    var body=["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","SUMMARY:CarNimbus test drive — "+c.year+" "+c.make+" "+c.model,
+    var body=["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","SUMMARY:CarNimbus // Test Drive // "+c.year+" "+c.make+" "+c.model,
       "DTSTART:"+dt,"DURATION:PT45M","LOCATION:"+(c.dealer_address||c.dealer_name||"CarNimbus"),"END:VEVENT","END:VCALENDAR"].join("\r\n");
     return "data:text/calendar;charset=utf-8,"+encodeURIComponent(body); }
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
