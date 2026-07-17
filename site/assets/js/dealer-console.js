@@ -1,107 +1,213 @@
+// T-102: mobile-first dealer portal. Two tabs (Inventory / Leads). Session = HttpOnly cn_dlr cookie,
+// so every fetch uses credentials:"include". CSP forbids inline JS — everything lives here.
 document.addEventListener("DOMContentLoaded",function(){
-  var CUR=null;
-  function show(id){["gate401","gate403","console"].forEach(function(x){document.getElementById(x).style.display=(x===id?"":"none");});}
-  function pct(a,b){return b?Math.round(a/b*100):0;}
-  function aprFor(mo){return mo>=550?"6.1":mo>=520?"6.8":mo>=480?"6.4":"5.9";}
-  function ini(w){return (w||"R").split(" ").map(function(x){return x[0]||"";}).join("").slice(0,2).toUpperCase();}
-  function card(a){
-    var act=a.status==="sold"?'<span class="badge green" style="width:100%;justify-content:center">✓ Sold today</span>'
-      :a.status==="arrived"?'<a class="btn primary sm" href="/scan?sold=1" style="text-decoration:none;width:100%;justify-content:center">Scan QR · mark sold</a>'
-      :a.status==="confirmed"?'<a class="btn primary sm" href="/scan" style="text-decoration:none;width:100%;justify-content:center">Scan QR · check in</a>'
-      :'<span style="display:flex;justify-content:center;font:600 10px Manrope;color:#7f93b8;border:1px dashed rgba(24,200,255,.25);border-radius:10px;padding:8px">🔒 AI still chatting</span>';
-    var pill={confirmed:"#18C8FF",arrived:"#b18cff",sold:"#54d699",requested:"#8ca0c4"}[a.status]||"#8ca0c4";
-    return '<div class="glass" data-drive="'+a.id+'" style="border-radius:14px;padding:11px;cursor:pointer">'+
-      '<div class="row" style="align-items:center;gap:8px"><span class="avatar" style="width:26px;height:26px;font-size:9px">'+ini(a.who)+'</span>'+
-      '<span style="flex:1;min-width:0"><span style="display:block;font:700 11px Manrope;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.who+'</span>'+
-      '<span class="mono" style="font-size:8px;color:#18C8FF">CID# '+a.cid+'</span></span>'+
-      '<span class="mono" style="font-size:7px;color:'+pill+';border:1px solid '+pill+'55;border-radius:99px;padding:3px 7px">'+a.status.toUpperCase()+'</span></div>'+
-      '<div style="height:64px;border-radius:9px;overflow:hidden;margin:9px 0">'+(a.photos&&a.photos[0]?'<img src="'+a.photos[0]+'" style="width:100%;height:100%;object-fit:cover">':'')+'</div>'+
-      '<div style="font:700 11px Manrope">'+a.year+' '+a.make+' '+a.model+(a.trim?' '+a.trim:'')+'</div>'+
-      '<div class="row" style="justify-content:space-between;font:600 9px Manrope;color:#8ca0c4;margin:3px 0 8px"><span>$'+a.price_mo+'/mo · $0 down</span><span>'+aprFor(a.price_mo)+'% APR · 72 mo</span></div>'+
-      '<div class="row" style="justify-content:space-between;font:600 8px Manrope;color:#7f93b8;margin-bottom:8px"><span class="mono" style="color:#18C8FF">FICO 700-739</span><span>'+a.slot+'</span></div>'+act+'</div>';
+  var CATS=["$500/mo","$450/mo","$400/mo","$350/mo","Unplaced"];
+  var LISTINGS=[],PLACEMENTS=[],DEALER={};
+  function $(id){return document.getElementById(id);}
+  function e(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function show(id){["gate401","gate403","console"].forEach(function(x){$(x).style.display=(x===id?"":"none");});}
+  function opt(v){return '<option value="'+e(v)+'">'+e(v)+'</option>';}
+  var F=function(u,o){o=o||{};o.credentials="include";return fetch(u,o);};
+
+  // ---- TABS ----
+  function tab(which){
+    var inv=which==="inv";
+    $("tab-inv").classList.toggle("on",inv);$("tab-leads").classList.toggle("on",!inv);
+    $("pane-inv").style.display=inv?"":"none";$("pane-leads").style.display=inv?"none":"";
+    if(!inv)loadLeads();
   }
-  function load(){fetch("/api/dealer/console").then(function(r){
-    if(r.status===401){show("gate401");throw 0;} if(r.status===403){show("gate403");throw 0;} return r.json();
-  }).then(function(d){ show("console");
-    document.getElementById("dc-store").textContent=d.dealer.dealership;
-    document.getElementById("dc-name").textContent=d.dealer.name;
-    document.getElementById("dc-role").textContent=d.dealer.role||"";
-    document.getElementById("dc-av").textContent=ini(d.dealer.name);
-    document.getElementById("dc-today").textContent="TODAY · "+new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}).toUpperCase();
-    if(d.dealer.client_no)document.getElementById("dc-cn").textContent="CN · ••••-"+String(d.dealer.client_no).slice(-4);
-    var live=(d.appointments||[]).filter(function(a){return a.status!=="sold";});
-    var soon=document.getElementById("dc-soon");
-    soon.style.display=live.length?"":"none"; soon.textContent="● "+live.length+" arriving within the hour";
-    var next=live[0];
-    document.getElementById("do-now").style.display=next?"flex":"none";
-    if(next){var e=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
-      document.getElementById("dn-txt").innerHTML='Do now: <span class="cy">'+e(next.who)+'</span> arrives '+e(next.slot)+' — scan their QR to check them in.';}
-    CUR=d;   // S1: keep the payload so tapping an appointment can preview its Drive-Now pass
-    var rolling=(d.appointments||[]).slice().sort(function(a,b){return String(a.slot).localeCompare(String(b.slot));});
-    document.getElementById("appts").innerHTML=rolling.map(card).join('')||
-      '<div style="grid-column:1/-1;font:600 12px Manrope;color:#aebfdf;padding:20px;text-align:center">No routed buyers yet — they appear here the moment the AI books a drive.</div>';
-    // S1: rolling schedule — a 4-hour window from now glows so you can see what's coming at a glance.
-    // Slots are stored as LA wall-clock strings — the window must be computed in the same clock, never UTC.
-    var laFmt=function(d){return d.toLocaleString("sv-SE",{timeZone:"America/Los_Angeles"}).slice(0,16);};
-    var now=new Date(), lo=laFmt(now), hi=laFmt(new Date(now.getTime()+4*3600e3));
-    document.getElementById("sched").innerHTML=rolling.map(function(a){
-      var pill={confirmed:"#18C8FF",arrived:"#b18cff",sold:"#54d699",requested:"#8ca0c4"}[a.status]||"#8ca0c4";
-      var inWindow=String(a.slot)>=lo&&String(a.slot)<=hi;
-      return '<div class="row" data-drive="'+a.id+'" style="align-items:center;gap:10px;padding:7px 8px;border-bottom:1px solid rgba(24,200,255,.08);font:600 11px Manrope;cursor:pointer;border-radius:8px'+(inWindow?';background:rgba(24,200,255,.08)':'')+'">'+
-      '<span class="mono" style="font-size:9px;color:'+(inWindow?'#18C8FF':'#8ca0c4')+';min-width:74px">'+a.slot+'</span>'+
-      '<span class="avatar" style="width:20px;height:20px;font-size:8px">'+ini(a.who)+'</span>'+
-      '<span style="min-width:110px">'+a.who+'</span><span style="flex:1;color:#8ca0c4">'+a.year+' '+a.make+' '+a.model+(a.trim?' '+a.trim:'')+'</span>'+
-      '<span class="mono" style="font-size:7px;color:'+pill+';border:1px solid '+pill+'55;border-radius:99px;padding:3px 7px">'+a.status.toUpperCase()+'</span></div>';}).join('');
-    document.getElementById("lst").innerHTML=(d.listings||[]).map(function(l){
-      return '<div class="row" style="align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(24,200,255,.08);font:600 11px Manrope">'+
-      '<span style="flex:1">'+l.year+' '+l.make+' '+l.model+(l.trim?' '+l.trim:'')+'</span><span class="cy">$'+l.price_mo+'/mo</span>'+
-      (l.active?'<span class="badge green">Live</span>':'<span class="badge red">Off</span>')+'</div>';}).join('');
-  }).catch(function(){});}
-  load(); setInterval(load,30000);
-  // S1: tap any appointment (card or schedule row) → Drive-Now pass preview (who, params, what they'll drive).
-  document.addEventListener("click",function(e){
-    var el=e.target.closest("[data-drive]"); if(!el||e.target.closest("a,button"))return;
-    var a=((CUR&&CUR.appointments)||[]).filter(function(x){return String(x.id)===el.dataset.drive;})[0]; if(!a)return;
-    var esc2=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
-    document.getElementById("ap-body").innerHTML=
-      '<div class="row" style="align-items:center;gap:9px"><span class="avatar" style="width:30px;height:30px;font-size:11px">'+ini(a.who)+'</span>'+
-      '<span><span style="display:block;font:700 13px Manrope;color:#fff">'+esc2(a.who)+'</span><span class="mono" style="font-size:8px;color:#18C8FF">CID# '+esc2(a.cid)+'</span></span></div>'+
-      (a.photos&&a.photos[0]?'<div style="height:110px;border-radius:10px;overflow:hidden;margin:10px 0"><img src="'+esc2(a.photos[0])+'" style="width:100%;height:100%;object-fit:cover"></div>':'')+
-      '<div style="font:700 13px Manrope;color:#fff">'+esc2(a.year+" "+a.make+" "+a.model+(a.trim?" "+a.trim:""))+'</div>'+
-      '<div class="row" style="justify-content:space-between;font:600 10px Manrope;color:#8ca0c4;margin-top:4px"><span>$'+esc2(a.price_mo)+'/mo · soft-screened</span><span>'+esc2(a.slot)+'</span></div>'+
-      '<div class="mono" style="font-size:8px;color:#7f93b8;margin-top:8px">STATUS · '+esc2(String(a.status).toUpperCase())+' — scan their QR to advance</div>';
-    document.getElementById("ap-preview").style.display="flex";
+  $("tab-inv").addEventListener("click",function(){tab("inv");});
+  $("tab-leads").addEventListener("click",function(){tab("leads");});
+
+  // ---- SIGN OUT ----
+  $("dc-out").addEventListener("click",function(){
+    document.cookie="cn_dlr=; Max-Age=0; path=/; domain=.carnimbus.com";
+    document.cookie="cn_dlr=; Max-Age=0; path=/";
+    location.href="/signin";
   });
-  var apx=document.getElementById("ap-x"); if(apx)apx.onclick=function(){ document.getElementById("ap-preview").style.display="none"; };
-  document.addEventListener("keydown",function(e){ if(e.key==="Escape"){var p=document.getElementById("ap-preview"); if(p)p.style.display="none";} });
-  // N7: dealer voice feedback — record → POST → transcribe (Whisper) → store + list.
-  (function(){
-    var recBtn=document.getElementById("fb-rec"); if(!recBtn) return;
-    var statusEl=document.getElementById("fb-status"), listEl=document.getElementById("fb-list");
-    var mediaRec=null, chunks=[], recording=false;
-    function refresh(){ fetch("/api/dealer/feedback").then(function(r){return r.ok?r.json():{notes:[]};}).then(function(d){
-      listEl.innerHTML=((d&&d.notes)||[]).map(function(n){
-        return '<div class="glass" style="border-radius:10px;padding:9px 11px"><div style="font:500 12px/1.45 Manrope;color:#e2e9f2"></div>'+
-               '<div class="mono" style="font-size:8px;color:#7f93b8;margin-top:4px">'+(n.created_at||"").slice(0,16).replace("T"," ")+'</div></div>';
-      }).join('');
-      var bodies=listEl.querySelectorAll("div>div:first-child");((d&&d.notes)||[]).forEach(function(n,i){ if(bodies[i])bodies[i].textContent=n.transcript||"(no transcript)"; });
-    }).catch(function(){}); }
-    recBtn.addEventListener("click",function(){
-      if(recording){ mediaRec&&mediaRec.stop(); return; }
-      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-        chunks=[]; mediaRec=new MediaRecorder(stream); recording=true; recBtn.textContent="■ Stop"; statusEl.textContent="recording…";
-        mediaRec.ondataavailable=function(e){ if(e.data.size)chunks.push(e.data); };
-        mediaRec.onstop=function(){ recording=false; recBtn.textContent="🎙 Record"; statusEl.textContent="transcribing…";
-          stream.getTracks().forEach(function(t){t.stop();});
-          var blob=new Blob(chunks,{type:"audio/webm"}); var fr=new FileReader();
-          fr.onload=function(){ var b64=String(fr.result).split(",")[1];
-            fetch("/api/dealer/feedback",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({audio_b64:b64})})
-              .then(function(r){return r.json();}).then(function(x){ statusEl.textContent=x&&x.ok?"saved ✓":"couldn't save"; refresh(); })
-              .catch(function(){ statusEl.textContent="couldn't save"; }); };
-          fr.readAsDataURL(blob); };
-        mediaRec.start();
-      }).catch(function(){ statusEl.textContent="mic blocked — allow access to record"; });
+
+  // ---- CORE LOAD (auth + inventory) ----
+  function bandsFor(vdp){var s={};PLACEMENTS.forEach(function(p){if(String(p.vdp_id)===String(vdp)&&p.credit_band)s[p.credit_band]=1;});return Object.keys(s);}
+  function synopsis(o){
+    var bits=[o.engine,o.wheels,o.exterior_color||o.color,o.interior_color||o.interior].filter(Boolean);
+    if(!bits.length&&o.drivetrain)bits.push(o.drivetrain);
+    return bits.join(" · ");
+  }
+  function photo(o){var p=o.photos&&o.photos[0];return p?'<div class="ph"><img src="'+e(p)+'" alt=""></div>':'';}
+  function vcard(o,placement){
+    var pills=bandsFor(o.id||o.vdp_id).map(function(b){return '<span class="bandpill">'+e(b)+'</span>';}).join('');
+    var syn=synopsis(o);
+    return '<div class="vcard" draggable="true"'+
+      ' data-vdp="'+e(o.id||o.vdp_id)+'"'+
+      (placement?' data-pid="'+e(placement.id)+'" data-cat="'+e(placement.category)+'" data-band="'+e(placement.credit_band)+'" data-mo="'+e(placement.monthly)+'" data-down="'+e(placement.down)+'" data-rate="'+e(placement.rate_markup)+'"':'')+
+      ' data-mohint="'+e(o.price_mo||"")+'">'+
+      photo(o)+
+      '<div class="ttl">'+e(o.year+" "+o.make+" "+o.model+(o.trim?" "+o.trim:""))+'</div>'+
+      (syn?'<div class="syn">'+e(syn)+'</div>':'')+
+      (pills?'<div class="bandpills">'+pills+'</div>':'')+'</div>';
+  }
+  function listingById(id){for(var i=0;i<LISTINGS.length;i++)if(String(LISTINGS[i].id)===String(id))return LISTINGS[i];return null;}
+  function renderLanes(){
+    var placedIds={};PLACEMENTS.forEach(function(p){placedIds[String(p.vdp_id)]=1;});
+    var html=CATS.map(function(cat){
+      var cards="";
+      if(cat==="Unplaced"){
+        LISTINGS.forEach(function(l){if(!placedIds[String(l.id)])cards+=vcard(l,null);});
+      }else{
+        PLACEMENTS.filter(function(p){return p.category===cat;}).forEach(function(p){
+          var l=listingById(p.vdp_id)||{};
+          cards+=vcard(Object.assign({},l,p,{id:p.vdp_id}),p);
+        });
+      }
+      var n=(cards.match(/class="vcard"/g)||[]).length;
+      return '<div class="lane" data-cat="'+e(cat)+'"><h4>'+e(cat)+' <span class="ct">'+n+'</span></h4>'+
+        (cards||'<div style="font:600 10px Manrope;color:#7f93b8;padding:8px 2px">Empty</div>')+'</div>';
+    }).join('');
+    $("lanes").innerHTML=html;
+    wireLanes();
+  }
+  function loadConsole(){
+    F("/api/dealer/console").then(function(r){
+      if(r.status===401){show("gate401");throw 0;}
+      if(r.status===403){show("gate403");throw 0;}
+      return r.json();
+    }).then(function(d){
+      show("console");DEALER=d.dealer||{};LISTINGS=d.listings||[];
+      $("dc-store").textContent=DEALER.dealership||"Console";
+      return F("/api/dealer/placements").then(function(r){return r.ok?r.json():{};}).catch(function(){return{};});
+    }).then(function(p){
+      PLACEMENTS=Array.isArray(p)?p:(p.placements||p.items||[]);
+      renderLanes();
+    }).catch(function(){});
+  }
+
+  // ---- INGEST SHEET ----
+  var IG={year:"ig-year",mo:"ig-mo",make:"ig-make",model:"ig-model",trim:"ig-trim",miles:"ig-miles",engine:"ig-engine",dt:"ig-dt",ext:"ig-ext",int:"ig-int",wheels:"ig-wheels",price:"ig-price"};
+  function openIngest(){
+    ["ig-url","ig-year","ig-mo","ig-make","ig-model","ig-trim","ig-miles","ig-engine","ig-dt","ig-ext","ig-int","ig-wheels","ig-price","ig-desc","ig-photos"].forEach(function(id){$(id).value="";});
+    $("ig-thumbs").innerHTML="";$("ig-msg").textContent="";$("ig-fmsg").textContent="";
+    $("ingest-bg").style.display="flex";
+  }
+  function fillDraft(dr){
+    dr=dr||{};
+    $("ig-year").value=dr.year||"";$("ig-make").value=dr.make||"";$("ig-model").value=dr.model||"";
+    $("ig-trim").value=dr.trim||"";$("ig-miles").value=dr.miles||"";$("ig-engine").value=dr.engine||"";
+    $("ig-dt").value=dr.drivetrain||"";$("ig-ext").value=dr.exterior_color||"";$("ig-int").value=dr.interior_color||"";
+    $("ig-wheels").value=dr.wheels||"";$("ig-price").value=dr.price||"";$("ig-mo").value=dr.price_mo||"";
+    $("ig-desc").value=dr.description||"";
+    var ph=dr.photos||[];
+    $("ig-photos").value=ph.join("\n");
+    $("ig-thumbs").innerHTML=ph.slice(0,8).map(function(u){return '<img src="'+e(u)+'" alt="">';}).join('');
+  }
+  $("new-listing").addEventListener("click",openIngest);
+  $("ingest-x").addEventListener("click",function(){$("ingest-bg").style.display="none";});
+  $("ig-cancel").addEventListener("click",function(){$("ingest-bg").style.display="none";});
+  $("ig-fetch").addEventListener("click",function(){
+    var url=$("ig-url").value.trim();if(!url)return;
+    $("ig-fmsg").textContent="Fetching…";
+    F("/api/dealer/ingest-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:url})})
+      .then(function(r){return r.json();}).then(function(d){
+        var dr=d.draft||d;fillDraft(dr);$("ig-fmsg").textContent="Filled — check and edit below.";
+      }).catch(function(){$("ig-fmsg").textContent="Couldn't read that link — enter it by hand.";});
+  });
+  $("ig-pub").addEventListener("click",function(){
+    var num=function(id){return $(id).value.replace(/\D/g,"");};
+    var photos=$("ig-photos").value.split("\n").map(function(s){return s.trim();}).filter(Boolean);
+    var p={year:+num("ig-year"),make:$("ig-make").value.trim(),model:$("ig-model").value.trim(),
+      trim:$("ig-trim").value.trim(),price_mo:+num("ig-mo"),price:+num("ig-price"),miles:$("ig-miles").value.trim(),
+      engine:$("ig-engine").value.trim(),drivetrain:$("ig-dt").value.trim(),exterior_color:$("ig-ext").value.trim(),
+      interior_color:$("ig-int").value.trim(),wheels:$("ig-wheels").value.trim(),description:$("ig-desc").value.trim(),photos:photos};
+    if(!p.year||!p.make||!p.model||!p.price_mo)return($("ig-msg").textContent="Year, make, model and price/mo are required.");
+    $("ig-msg").textContent="Publishing…";
+    F("/api/dealer/listing",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(p)})
+      .then(function(r){return r.json().catch(function(){return{};});}).then(function(d){
+        if(!d.ok)return($("ig-msg").textContent="Couldn't publish — try again.");
+        $("ingest-bg").style.display="none";loadConsole();
+      }).catch(function(){$("ig-msg").textContent="Couldn't publish — try again.";});
+  });
+
+  // ---- PLACEMENT POPUP ----
+  $("pl-cat").innerHTML=CATS.filter(function(c){return c!=="Unplaced";}).map(opt).join('');
+  function openPlace(o){
+    // o: {vdp,title,pid,cat,band,mo,down,rate,mohint}
+    $("place-car").textContent=o.title||"";
+    $("pl-band").value=o.band||"800+";
+    $("pl-cat").value=o.cat&&o.cat!=="Unplaced"?o.cat:CATS[0];
+    $("pl-mo").value=o.mo||o.mohint||"";$("pl-down").value=o.down||"";$("pl-rate").value=o.rate||"";
+    $("pl-msg").textContent="";
+    $("pl-save").dataset.vdp=o.vdp;$("pl-save").dataset.pid=o.pid||"";
+    $("pl-del").style.display=o.pid?"":"none";$("pl-del").dataset.pid=o.pid||"";
+    $("place-bg").style.display="flex";
+  }
+  $("place-x").addEventListener("click",function(){$("place-bg").style.display="none";});
+  $("pl-save").addEventListener("click",function(){
+    var num=function(id){return $(id).value.replace(/[^\d.]/g,"");};
+    var body={vdp_id:$("pl-save").dataset.vdp,credit_band:$("pl-band").value,category:$("pl-cat").value,
+      monthly:+num("pl-mo"),down:+num("pl-down"),rate_markup:+num("pl-rate")};
+    var pid=$("pl-save").dataset.pid;if(pid)body.id=pid;
+    $("pl-msg").textContent="Saving…";
+    F("/api/dealer/placements",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)})
+      .then(function(r){return r.json().catch(function(){return{};});}).then(function(d){
+        if(d.ok===false)return($("pl-msg").textContent="Couldn't save — try again.");
+        $("place-bg").style.display="none";loadConsole();
+      }).catch(function(){$("pl-msg").textContent="Couldn't save — try again.";});
+  });
+  $("pl-del").addEventListener("click",function(){
+    var pid=$("pl-del").dataset.pid;if(!pid)return;
+    $("pl-msg").textContent="Removing…";
+    F("/api/dealer/placements?id="+encodeURIComponent(pid),{method:"DELETE"})
+      .then(function(){$("place-bg").style.display="none";loadConsole();})
+      .catch(function(){$("pl-msg").textContent="Couldn't remove — try again.";});
+  });
+
+  function cardToPlace(el,forceCat){
+    var vdp=el.dataset.vdp,l=listingById(vdp)||{};
+    openPlace({vdp:vdp,title:(l.year||"")+" "+(l.make||"")+" "+(l.model||"")+(l.trim?" "+l.trim:""),
+      pid:el.dataset.pid,cat:forceCat||el.dataset.cat,band:el.dataset.band,mo:el.dataset.mo,
+      down:el.dataset.down,rate:el.dataset.rate,mohint:el.dataset.mohint});
+  }
+
+  // ---- DRAG + TAP on lanes ----
+  var DRAG=null;
+  function wireLanes(){
+    $("lanes").querySelectorAll(".vcard").forEach(function(c){
+      c.addEventListener("click",function(){cardToPlace(c);});
+      c.addEventListener("dragstart",function(ev){DRAG=c;ev.dataTransfer.effectAllowed="move";try{ev.dataTransfer.setData("text/plain",c.dataset.vdp);}catch(x){}});
+      c.addEventListener("dragend",function(){DRAG=null;});
     });
-    refresh();
-  })();
+    $("lanes").querySelectorAll(".lane").forEach(function(ln){
+      ln.addEventListener("dragover",function(ev){ev.preventDefault();ln.classList.add("drag");});
+      ln.addEventListener("dragleave",function(){ln.classList.remove("drag");});
+      ln.addEventListener("drop",function(ev){ev.preventDefault();ln.classList.remove("drag");
+        if(!DRAG)return;var cat=ln.dataset.cat;cardToPlace(DRAG,cat==="Unplaced"?null:cat);});
+    });
+  }
+
+  // ---- LEADS ----
+  function loadLeads(){
+    F("/api/dealer/leads").then(function(r){return r.ok?r.json():{leads:[]};}).then(function(d){
+      var leads=(d.leads||[]).slice().sort(function(a,b){return String(b.created_at||"").localeCompare(String(a.created_at||""));});
+      if(!leads.length){$("leads").innerHTML='<div style="font:600 12px Manrope;color:#aebfdf;padding:24px;text-align:center">No leads yet — they\'ll roll in here.</div>';return;}
+      $("leads").innerHTML=leads.map(function(x){
+        var name=((x.first_name||"")+" "+(x.last_name||"")).trim()||"Buyer";
+        var car=x.matched_car||x.dream_car||"—";
+        var meta=[];
+        if(x.monthly)meta.push("$"+e(x.monthly)+"/mo");
+        if(x.down!=null&&x.down!=="")meta.push("$"+e(x.down)+" down");
+        if(x.deal_type)meta.push(e(x.deal_type));
+        var line2=[];
+        if(x.zip)line2.push("ZIP "+e(x.zip));
+        if(x.appt_slot)line2.push("Slot "+e(x.appt_slot));
+        var acts="";
+        if(x.phone)acts+='<a href="tel:'+e(x.phone)+'">Call</a><a href="sms:'+e(x.phone)+'">Text</a>';
+        if(x.email)acts+='<a href="mailto:'+e(x.email)+'">Email</a>';
+        return '<div class="lead"><div class="nm">'+e(name)+'</div><div class="car">'+e(car)+'</div>'+
+          '<div class="meta">'+meta.join(" · ")+(line2.length?'<br>'+line2.join(" · "):'')+'</div>'+
+          (acts?'<div class="acts">'+acts+'</div>':'')+'</div>';
+      }).join('');
+    }).catch(function(){});
+  }
+
+  loadConsole();
+  setInterval(function(){if($("console").style.display!=="none"&&$("pane-inv").style.display!=="none")loadConsole();},30000);
 });

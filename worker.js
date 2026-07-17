@@ -164,13 +164,18 @@ export default {
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     if (url.pathname === "/api/webleads" && request.method === "POST")     return sec(await webLead(request, env));
     if (url.pathname === "/api/logout" && request.method === "POST")      return sec(logout());
+    if (url.pathname === "/api/dealer/login" && request.method === "POST")   return sec(await dealerLogin(request, env));
     if (url.pathname === "/api/dealer/console")                           return sec(await withDealer(request, env, dealerConsole));
     if (url.pathname === "/api/dealer/roi")                               return sec(await withDealer(request, env, dealerRoi));
     if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
+    if (url.pathname === "/api/dealer/ingest-url" && request.method === "POST") return sec(await withDealer(request, env, dealerIngestUrl));
+    if (url.pathname === "/api/dealer/placements")                        return sec(await withDealer(request, env, dealerPlacements));
+    if (url.pathname === "/api/dealer/leads")                             return sec(await withDealer(request, env, dealerLeads));
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
     if (url.pathname === "/api/dealer/feedback")                             return sec(await withDealer(request, env, dealerFeedback));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
+    if (url.pathname === "/api/admin/dealer-cred" && request.method === "POST") return sec(await adminOnly(request, env, (req,e)=>adminDealerCred(req,e)));
     if (url.pathname === "/api/admin/reindex" && request.method === "POST") return sec(await adminOnly(request, env, reindexAll));
     if (url.pathname === "/api/admin/profiles/ingest" && request.method === "POST") return sec(await adminOnly(request, env, profilesIngest));
     if (url.pathname === "/api/admin/export")                             return sec(await adminOnly(request, env, poolExport));
@@ -225,6 +230,19 @@ async function readSession(env,request){ const m=(request.headers.get("Cookie")|
   const parts=m[1].split("."); if(parts.length!==3) return null; const [uid,exp,sig]=parts;
   if(!uid||!exp||!sig||Date.now()>+exp) return null;
   return ctEq(await hmac(env,uid+"."+exp),sig) ? +uid : null; }
+// T-102: dealer email+password auth (PBKDF2 via WebCrypto) + a dealer session cookie (cn_dlr), mirroring cn_sess.
+function newSalt(){ return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))); }
+async function hashPw(pw,saltB64){
+  const salt=Uint8Array.from(atob(saltB64),c=>c.charCodeAt(0));
+  const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(String(pw)),{name:"PBKDF2"},false,["deriveBits"]);
+  const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:100000,hash:"SHA-256"},k,256);
+  return btoa(String.fromCharCode(...new Uint8Array(bits))); }
+async function verifyPw(pw,saltB64,hashB64){ if(!saltB64||!hashB64) return false; return ctEq(await hashPw(pw,saltB64),hashB64); }
+async function makeDealerSession(env,dealerId){ const exp=Date.now()+30*864e5, p="d"+dealerId+"."+exp; return p+"."+await hmac(env,p); }
+async function readDealerSession(env,request){ const m=(request.headers.get("Cookie")||"").match(/cn_dlr=([^;]+)/); if(!m) return null;
+  const parts=m[1].split("."); if(parts.length!==3) return null; const [id,exp,sig]=parts;
+  if(!/^d\d+$/.test(id)||Date.now()>+exp) return null;
+  return (await ctEq(await hmac(env,id+"."+exp),sig)) ? +id.slice(1) : null; }
 async function getCryptoKey(secret) {
   const msgUint8 = new TextEncoder().encode(secret || "nimbus-pii-fallback-key");
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
@@ -280,6 +298,13 @@ async function sendSMS(env,to,body){ if(!env.TWILIO_ACCOUNT_SID) return {ok:fals
   return {ok:r.ok,sid:d.sid}; }
 async function smsSendRoute(request,env){ const {to,body}=await request.json().catch(()=>({}));
   if(!to||!body) return json({ok:false,error:"bad_request"},400); return json(await sendSMS(env,to,body)); }
+// T-102: reusable transactional email via Resend (dark-safe: no-ops without RESEND_API_KEY). Modeled on sendDealerOutreach.
+async function sendEmail(env,{to,subject,text}){
+  if(!env.RESEND_API_KEY||!to) return {ok:false,dark:true};
+  const r=await fetch("https://api.resend.com/emails",{method:"POST",
+    headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"content-type":"application/json"},
+    body:JSON.stringify({from:"CarNimbus <hello@carnimbus.com>",to:[to],subject,text})}).catch(()=>null);
+  return {ok:!!(r&&r.ok)}; }
 async function smsNumbers(request,env){ if(!env.TWILIO_ACCOUNT_SID) return json({ok:false,error:"twilio_dark"});
   const r=await fetch(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers.json?PageSize=10`,
     {headers:{Authorization:"Basic "+btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN)}});
@@ -294,6 +319,10 @@ async function twilioValid(request,env,form){
   const b64=btoa(String.fromCharCode(...new Uint8Array(mac)));
   return b64===sig;
 }
+// T-102: the matched car's SMS voice — reused when a buyer texts back after booking.
+function carVoicePrompt(car){ return "You ARE the "+car+", a used car texting a buyer who just scheduled a test drive with you. "+
+  "First person, warm, concise, a little charming. Answer about yourself (condition, feel, the drive). Keep replies under 300 characters for SMS. "+
+  "Never invent specs you don't know — say the dealer confirms at the drive. Never discuss pricing markups."; }
 async function smsInbound(request,env){ const form=await request.formData().catch(()=>null);
   if(!form || !(await twilioValid(request,env,form))) return new Response('<?xml version="1.0"?><Response/>',{status:403,headers:{"content-type":"text/xml"}});
   const from=form?String(form.get("From")||""):"", rawText=form?String(form.get("Body")||"").trim():"", text=rawText.toUpperCase();
@@ -303,6 +332,19 @@ async function smsInbound(request,env){ const form=await request.formData().catc
     reply="You're unsubscribed from CarNimbus texts. No more messages. Reply START to rejoin."; }
   else if(/^(HELP|INFO)$/.test(text)) reply="CarNimbus: AI car buying, LA. Up to 4 msgs/mo. Msg&data rates may apply. Reply STOP to cancel. hello@carnimbus.com";
   else if(text==="START"){ await env.DB.prepare("UPDATE waitlist SET sms_consent=1 WHERE phone=?").bind(from).run().catch(()=>{}); reply="Welcome back to CarNimbus. Reply STOP anytime."; }
+  else if(rawText && from && from!==env.TWILIO_FROM && env.SMS_MATCH_LIVE &&
+          (await env.DB.prepare("SELECT 1 FROM web_leads WHERE phone=? AND matched_car<>''").bind(from).first().catch(()=>null))){
+    // T-102: a buyer with a live Drive-Now lead texting the car → reply in the car's own voice (AI).
+    try{
+      const wl=await env.DB.prepare("SELECT matched_car FROM web_leads WHERE phone=? AND matched_car<>'' ORDER BY id DESC LIMIT 1").bind(from).first();
+      const h=(await env.DB.prepare("SELECT direction,body FROM sms_log WHERE phone=? ORDER BY id DESC LIMIT 6").bind(from).all().catch(()=>({results:[]}))).results||[];
+      const msgs=[{role:"system",content:carVoicePrompt(wl.matched_car)}];
+      h.reverse().forEach(m=>msgs.push({role:m.direction==="in"?"user":"assistant",content:String(m.body||"")}));
+      msgs.push({role:"user",content:rawText.slice(0,400)});
+      const ans=await chatLLM(env,msgs).catch(()=>null);
+      if(ans) await sendSMS(env,from,String(ans).slice(0,480));   // sendSMS logs the outbound row
+    }catch(_){/* AI reply must never break the TwiML ack */}
+  }
   else if(rawText && from && from!==env.TWILIO_FROM){                       // relay: dealer↔buyer via our number
     try{
       const dl=await env.DB.prepare("SELECT id,name,phone FROM dealer_leads WHERE phone=? AND status='active'").bind(from).first();
@@ -1099,6 +1141,13 @@ async function search(request,env,ctx){ try{
   // AI: the type signal is soft (never filters `out`), so a buyer can click Truck and get sedans with no
   // explanation. Disclose it the same way widen_radius/over_budget already do.
   if(carType && out.length && !out.some(c=>typeOf(c)===carType)) reason="no_type_match";
+  // T-102: a dealer-set price for the buyer's FICO band overrides the computed monthly. rate_markup is NEVER selected → never exposed.
+  if(!isCash && out.length){
+    const ids=out.map(c=>c.id), ph=ids.map(()=>"?").join(",");
+    const pr=await env.DB.prepare("SELECT vdp_id,monthly,down FROM listing_placements WHERE credit_band=? AND vdp_id IN ("+ph+")").bind(fico,...ids).all().catch(()=>({results:[]}));
+    const pm={}; for(const r of (pr.results||[])) if(r.monthly) pm[r.vdp_id]={mo:r.monthly,dn:r.down};
+    out.forEach(c=>{ const p=pm[c.id]; if(p){ c.price_mo=p.mo; c.dealer_set=1; } });
+  }
   const anon=readAnon(request);
   // Z2: telemetry off the critical path — the response doesn't wait on two D1 INSERTs.
   const jobs=[
@@ -1655,6 +1704,11 @@ async function eventsTail(request,env){ const n=Math.min(200,parseInt(new URL(re
   const rows=await env.DB.prepare("SELECT id,ts,cid,anon_id,action,vehicle_id,source FROM events ORDER BY id DESC LIMIT ?").bind(n).all();
   return json({ok:true,events:rows.results||[]}); }
 async function withDealer(request,env,fn){
+  // T-102: email+password dealer session (cn_dlr) takes precedence; phone-OTP stays as fallback.
+  const did=await readDealerSession(env,request);
+  if(did){ const dd=await env.DB.prepare("SELECT id,name,dealership,client_no,status FROM dealer_leads WHERE id=?").bind(did).first();
+    if(dd&&dd.status==="active"&&dd.client_no) return fn(request,env,did,dd);
+    return json({ok:false,error:"pending"},403); }
   const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
   const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
   const digits=String(u&&u.phone||"").replace(/\D/g,"").slice(-10);
@@ -1678,25 +1732,109 @@ async function dealerConsole(request,env,uid,dealer){
   const today=new Date().toISOString().slice(0,10), yd=new Date(Date.now()-864e5).toISOString().slice(0,10);
   const rt=await env.DB.prepare("SELECT SUM(CASE WHEN substr(td.created_at,1,10)=? THEN 1 ELSE 0 END) t, SUM(CASE WHEN substr(td.created_at,1,10)=? THEN 1 ELSE 0 END) y "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE).bind(today,yd,dealer.id).first();
-  const ls=await env.DB.prepare("SELECT id,year,make,model,trim,price_mo,active FROM vdps v WHERE "+DSCOPE+" ORDER BY id DESC LIMIT 20").bind(dealer.id).all();
+  const ls=await env.DB.prepare("SELECT v.id,v.year,v.make,v.model,v.trim,v.price_mo,v.active,v.photos,v.drivetrain, s.engine,s.exterior_color,s.interior_color FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE "+DSCOPE+" ORDER BY v.id DESC LIMIT 40").bind(dealer.id).all();
   return json({ok:true,dealer:dealer,kpis:k,deltas:{today:rt.t||0,yesterday:rt.y||0},
     appointments:(tds.results||[]).map(t=>({...t,who:t.handle||("Rider •••-"+String(t.phone).slice(-4)),cid:cidFor(t.id),phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),
-    listings:ls.results||[]});
+    listings:(ls.results||[]).map(v=>({...v,photos:JSON.parse(v.photos||"[]")}))});
 }
 async function dealerListing(request,env,uid,dealer){
   const c=await request.json().catch(()=>({}));
   const pm=parseInt(c.price_mo,10);
   if(!c.year||!c.make||!c.model||!Number.isFinite(pm)) return json({ok:false,error:"bad_request"},400);
   if(pm<50||pm>5000) return json({ok:false,error:"price_out_of_range"},422);   // server-authoritative price bounds
-  const vin=c.vin||("DLR-"+dealer.id+"-"+Date.now());
-  await env.DB.prepare(
-    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)")
-    .bind(vin,+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),pm,
-      String(c.miles||"").slice(0,20),String(c.drivetrain||"").slice(0,20),String(c.body||"").slice(0,20),
-      JSON.stringify(c.features||[]),String(c.description||"").slice(0,500),JSON.stringify(c.photos||[]),dealer.id,new Date().toISOString()).run();
-  return json({ok:true});
+  const now=new Date().toISOString();
+  const F=[+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),pm,
+    String(c.miles||"").slice(0,20),String(c.drivetrain||"").slice(0,20),String(c.body||"").slice(0,20),
+    JSON.stringify(c.features||[]),String(c.description||"").slice(0,1000),JSON.stringify(c.photos||[])];
+  const editId=parseInt(c.id,10)||0; let vin;
+  if(editId){   // T-102: edit path (was INSERT-only) — scoped to the dealer's own cars
+    const own=await env.DB.prepare("SELECT vin FROM vdps WHERE id=? AND dealer_id=?").bind(editId,dealer.id).first();
+    if(!own) return json({ok:false,error:"not_yours"},403);
+    vin=own.vin;
+    await env.DB.prepare("UPDATE vdps SET year=?,make=?,model=?,trim=?,price_mo=?,miles=?,drivetrain=?,body=?,features=?,description=?,photos=?,active=1,embedding_synced=0,updated_at=? WHERE id=? AND dealer_id=?")
+      .bind(...F,now,editId,dealer.id).run();
+  } else {
+    vin=c.vin?String(c.vin).slice(0,17):("DLR-"+dealer.id+"-"+Date.now());
+    await env.DB.prepare("INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)")
+      .bind(vin,...F,dealer.id,now).run();
+  }
+  // T-102: brief-synopsis specs (engine · color · interior) — dealer card only; options/days-on-lot excluded.
+  const eng=String(c.engine||"").slice(0,60), exc=String(c.exterior_color||"").slice(0,40), inc=String(c.interior_color||"").slice(0,40);
+  if(eng||exc||inc) await env.DB.prepare("INSERT INTO vdp_specs (vin,engine,exterior_color,interior_color,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(vin) DO UPDATE SET engine=COALESCE(NULLIF(excluded.engine,''),engine), exterior_color=COALESCE(NULLIF(excluded.exterior_color,''),exterior_color), interior_color=COALESCE(NULLIF(excluded.interior_color,''),interior_color), updated_at=excluded.updated_at")
+    .bind(vin,eng,exc,inc,now).run().catch(()=>{});
+  return json({ok:true,vin});
 }
+// T-102: dealer email+password login → sets the cn_dlr cookie.
+async function dealerLogin(request,env){
+  const {email,password}=await request.json().catch(()=>({}));
+  const em=String(email||"").trim().toLowerCase().slice(0,120);
+  if(!em||!password) return json({ok:false,error:"bad_request"},400);
+  const d=await env.DB.prepare("SELECT id,pw_hash,pw_salt,status,client_no FROM dealer_leads WHERE lower(login_email)=? ORDER BY id DESC LIMIT 1").bind(em).first();
+  if(!d||!(await verifyPw(String(password),d.pw_salt,d.pw_hash))) return json({ok:false,error:"bad_credentials"},401);
+  if(d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
+  const cookie="cn_dlr="+await makeDealerSession(env,d.id)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400);
+  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}}); }
+// T-102: admin provisions a dealer's email+password (the 2 testers). Behind adminOnly.
+async function adminDealerCred(request,env){
+  const {dealer_id,email,password}=await request.json().catch(()=>({}));
+  const id=parseInt(dealer_id,10), em=String(email||"").trim().toLowerCase().slice(0,120);
+  if(!id||!em||String(password||"").length<8) return json({ok:false,error:"bad_request"},400);
+  const salt=newSalt(), hash=await hashPw(String(password),salt);
+  await env.DB.prepare("UPDATE dealer_leads SET login_email=?,pw_salt=?,pw_hash=?,status='active',client_no=COALESCE(client_no,?) WHERE id=?")
+    .bind(em,salt,hash,genCode("CN"),id).run();
+  return json({ok:true}); }
+// T-102: URL ingestion (Max's #1) — fetch a listing URL, adopt photos + specs + description; AI fills gaps. Returns a draft.
+async function dealerIngestUrl(request,env,uid,dealer){
+  const {url}=await request.json().catch(()=>({}));
+  if(!/^https?:\/\//i.test(String(url||""))) return json({ok:false,error:"bad_url"},400);
+  // T-102: block SSRF to internal/metadata/private hosts (dealer-supplied URL).
+  let host=""; try{ host=new URL(url).hostname.toLowerCase(); }catch(_){ return json({ok:false,error:"bad_url"},400); }
+  if(host==="localhost"||/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host)||/^172\.(1[6-9]|2\d|3[01])\./.test(host)||/\.(internal|local)$/.test(host))
+    return json({ok:false,error:"blocked_host"},400);
+  let html=""; try{ const r=await fetch(url,{headers:{"user-agent":"Mozilla/5.0 CarNimbusBot"},redirect:"follow"}); html=(await r.text()).slice(0,600000); }catch(_){ return json({ok:false,error:"fetch_failed"},502); }
+  const draft={photos:[]};
+  for(const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)){
+    try{ for(const o of [].concat(JSON.parse(m[1].trim()))){ if(!o||!/Vehicle|Car|Product/i.test(String(o["@type"]))) continue;
+      if(o.image) draft.photos.push(...[].concat(o.image).map(x=>(x&&x.url)||x));
+      draft.description=draft.description||o.description; draft.make=draft.make||(o.brand&&o.brand.name)||o.manufacturer;
+      draft.model=draft.model||o.model; draft.year=draft.year||o.vehicleModelDate||o.modelDate;
+      draft.miles=draft.miles||(o.mileageFromOdometer&&o.mileageFromOdometer.value);
+      draft.exterior_color=draft.exterior_color||o.color; draft.engine=draft.engine||(o.vehicleEngine&&o.vehicleEngine.name);
+      const off=[].concat(o.offers||[])[0]; if(off) draft.price=draft.price||off.price; } }catch(_){}
+  }
+  for(const m of html.matchAll(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/gi)) draft.photos.push(m[1]);
+  const md=html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i); if(md) draft.description=draft.description||md[1];
+  draft.photos=[...new Set(draft.photos.filter(Boolean))].slice(0,12);
+  if(!draft.year||!draft.make||!draft.model){
+    const text=html.replace(/<script[\s\S]*?<\/script>/gi,"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").slice(0,6000);
+    const j=await llm(env,[{role:"system",content:"Extract car listing fields as strict JSON {year,make,model,trim,price,miles,engine,exterior_color,interior_color,wheels,drivetrain,description}. Use null if unknown. Output ONLY JSON."},{role:"user",content:text}]).catch(()=>null);
+    try{ const o=JSON.parse(String(j).replace(/```json|```/g,"").trim()); for(const k in o){ if(o[k]!=null&&draft[k]==null) draft[k]=o[k]; } }catch(_){}
+  }
+  return json({ok:true,draft});
+}
+// T-102: drag-drop credit/price placements. One car → many bands (credit-tier pre-staging). rate_markup is dealer-facing only.
+async function dealerPlacements(request,env,uid,dealer){
+  if(request.method==="GET"){
+    const r=await env.DB.prepare("SELECT p.id,p.vdp_id,p.credit_band,p.category,p.monthly,p.down,p.rate_markup, v.year,v.make,v.model,v.trim,v.photos FROM listing_placements p JOIN vdps v ON v.id=p.vdp_id WHERE p.dealer_id=? ORDER BY p.category,p.credit_band").bind(dealer.id).all().catch(()=>({results:[]}));
+    return json({ok:true,placements:(r.results||[]).map(x=>({...x,photos:JSON.parse(x.photos||"[]")}))}); }
+  if(request.method==="POST"){
+    const b=await request.json().catch(()=>({}));
+    const vid=parseInt(b.vdp_id,10), band=String(b.credit_band||"").slice(0,12), cat=String(b.category||"").slice(0,20);
+    const mo=parseInt(b.monthly,10)||0, dn=parseInt(b.down,10)||0, mk=parseFloat(b.rate_markup)||0;
+    if(!vid||!band) return json({ok:false,error:"bad_request"},400);
+    if(!(await env.DB.prepare("SELECT 1 FROM vdps WHERE id=? AND dealer_id=?").bind(vid,dealer.id).first())) return json({ok:false,error:"not_yours"},403);
+    const now=new Date().toISOString();
+    const ex=await env.DB.prepare("SELECT id FROM listing_placements WHERE dealer_id=? AND vdp_id=? AND credit_band=?").bind(dealer.id,vid,band).first();
+    if(ex) await env.DB.prepare("UPDATE listing_placements SET category=?,monthly=?,down=?,rate_markup=?,updated_at=? WHERE id=?").bind(cat,mo,dn,mk,now,ex.id).run();
+    else await env.DB.prepare("INSERT INTO listing_placements (dealer_id,vdp_id,credit_band,category,monthly,down,rate_markup,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(dealer.id,vid,band,cat,mo,dn,mk,now,now).run();
+    return json({ok:true}); }
+  if(request.method==="DELETE"){ const id=parseInt(new URL(request.url).searchParams.get("id"),10)||0;
+    await env.DB.prepare("DELETE FROM listing_placements WHERE id=? AND dealer_id=?").bind(id,dealer.id).run(); return json({ok:true}); }
+  return json({ok:false,error:"method"},405); }
+// T-102: inbound leads for this dealer's cars.
+async function dealerLeads(request,env,uid,dealer){
+  const r=await env.DB.prepare("SELECT created_at,first_name,last_name,dream_car,deal_type,monthly,down,zip,appt_slot,matched_car,phone,email FROM web_leads WHERE dealer_id=? ORDER BY id DESC LIMIT 100").bind(dealer.id).all().catch(()=>({results:[]}));
+  return json({ok:true,leads:r.results||[]}); }
 // N7: dealer post-test-drive voice feedback — transcribe with Workers AI whisper, store, list.
 async function dealerFeedback(request,env,uid,dealer){
   if(request.method==="GET"){ const rows=await env.DB.prepare("SELECT id,drive_id,transcript,created_at FROM dealer_feedback WHERE dealer_id=? ORDER BY id DESC LIMIT 20").bind(dealer.id).all().catch(()=>({results:[]}));
@@ -2058,8 +2196,11 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   const rc=await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE ip=? AND created_at>?").bind(ip,since).first().catch(()=>({c:0}));
   if(rc&&rc.c>=5){ await logEvent(env,{action:"intent.web_lead_ratelimited",location:zip,source:"drive-now"}); return json({ok:true}); }   // per-IP cap: silent to the client, visible internally
   const mo=String(b.monthly||"").replace(/\D/g,"").slice(0,6), dn=String(b.down||"").replace(/\D/g,"").slice(0,6), rad=String(b.radius||"").replace(/\D/g,"").slice(0,3)||"25";
-  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,new Date().toISOString(),first,last,email,addr,slot,consent).run();
+  // T-102: route the lead to the matched car's dealer so it renders in their portal.
+  let dealerId=null; { const vid=parseInt(b.vdp_id,10)||0;
+    if(vid){ const vr=await env.DB.prepare("SELECT dealer_id FROM vdps WHERE id=?").bind(vid).first().catch(()=>null); dealerId=(vr&&vr.dealer_id)||null; } }
+  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent,dealer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,new Date().toISOString(),first,last,email,addr,slot,consent,dealerId).run();
   // AI/TASK-006: drop-in CRM seam. No-op ("unrouted") until CRM_ENDPOINT exists, so this changes nothing today.
   const routed=await routeLead(env,{matched_car:mc,vin:String(b.vin||"").slice(0,17),phone:"+1"+ph,
     dream_car:car,deal_type:deal,monthly:mo,down:dn,budget:String(b.budget||"").replace(/\D/g,"").slice(0,7),zip,radius:rad});
@@ -2074,6 +2215,10 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
     const carMsg=`Hi ${first}! I'm your ${mc} 🚗 — you just scheduled a CarNimbus test drive${whenTxt}. Got any questions about me before you come in? Reply here anytime. Txt STOP to opt out.`;
     await sendSMS(env,"+1"+ph,carMsg).catch(()=>{});
   }
+  // T-102: buyer confirmation email (Resend). Dark-safe: no-ops without RESEND_API_KEY. No A2P gate — always try when present.
+  if(email) await sendEmail(env,{to:email,subject:"Your CarNimbus test drive — "+(mc||car),
+    text:`Hi ${first},\n\nYou're scheduled to drive the ${mc||car}${slot?` on ${slot.replace("T"," at ")}`:""}.\n`+
+      `We'll confirm the exact dealership address by text. Reply to that text with any questions — the car answers.\n\nThe power's in your hands,\nCarNimbus`}).catch(()=>{});
   await logEvent(env,{action:"intent.web_lead",location:zip,source:"drive-now"});
   return json({ok:true}); }
 async function dealerLead(request,env){

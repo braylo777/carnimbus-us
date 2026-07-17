@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded",function(){
         out.push({value:d.toISOString().slice(0,10)+"T"+hm[0],label:lbl}); }); added++; } }
     return out; }
   function icsHref(c,slotValue){ var dt=slotValue.replace(/[-:]/g,"")+"00";   // 20260721T100000
-    var body=["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","SUMMARY:Test drive — "+c.year+" "+c.make+" "+c.model,
+    var body=["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","SUMMARY:CarNimbus test drive — "+c.year+" "+c.make+" "+c.model,
       "DTSTART:"+dt,"DURATION:PT45M","LOCATION:"+(c.dealer_address||c.dealer_name||"CarNimbus"),"END:VEVENT","END:VCALENDAR"].join("\r\n");
     return "data:text/calendar;charset=utf-8,"+encodeURIComponent(body); }
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
@@ -102,12 +102,12 @@ document.addEventListener("DOMContentLoaded",function(){
     fetch("/api/events",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({events:[{action:"intent.match_click",vehicle_id:c.id,confidence:(+b.dataset.i)+1,source:"scanner"}]})}).catch(function(){});
     var sel=$("dn-slot"); sel.innerHTML=driveSlots().map(function(s){return '<option value="'+s.value+'">'+esc(s.label)+'</option>';}).join('');
-    $("dn-msg").textContent=""; if(!$("dn-zip").value) $("dn-zip").value=terms().zip;
+    $("dn-msg").textContent="";
     $("dn-panel").style.display="block"; $("dn-panel").scrollIntoView({behavior:"smooth",block:"nearest"}); });
   var dnSubmit=$("dn-submit"); if(dnSubmit) dnSubmit.addEventListener("click",function(){
     var t=terms(), c=driveCar; if(!c) return; var msg=$("dn-msg");
     var fn=$("dn-first").value.trim(), ln=$("dn-last").value.trim(), em=$("dn-email").value.trim(),
-        ph=$("dn-phone").value.replace(/\D/g,""), ad=$("dn-addr").value.trim(), zp=($("dn-zip").value||t.zip).replace(/\D/g,"");
+        ph=$("dn-phone").value.replace(/\D/g,""), ad=$("dn-addr").value.trim(), zp=String(t.zip||"").replace(/\D/g,"");
     if(!fn||!ln){ msg.textContent=es()?"Escribe tu nombre.":"Enter your name."; return; }
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ msg.textContent=es()?"Correo inválido.":"Enter a valid email."; return; }
     if(!/^[2-9]\d{9}$/.test(ph)){ msg.textContent=es()?"Teléfono inválido.":"Enter a valid US mobile."; return; }
@@ -120,13 +120,14 @@ document.addEventListener("DOMContentLoaded",function(){
         vin:c.vin||"",vdp_id:c.id,budget:t.budget,matched_car:c.year+" "+c.make+" "+c.model,
         cf_token:cfToken(),website:$("lead-hp").value})})
       .then(function(r){return r.json();}).then(function(d){ dnSubmit.disabled=false;
-        if(d&&d.ok){ msg.textContent="";
-          $("dnm-msg").textContent=(es()?"Tu cita para el "+slotText+" está agendada. Te confirmamos por texto.":"Your appointment for "+slotText+" is scheduled. We'll confirm by text.");
+        if(d&&d.ok){ msg.textContent=""; var carName=c.year+" "+c.make+" "+c.model;
+          $("dnm-msg").textContent=(es()?("Tu "+carName+" — prueba de manejo agendada para "+slotText+". Te enviaremos los detalles por texto y correo.")
+            :("Your "+carName+" test drive is set for "+slotText+". We'll text + email you the details."));
           var a=$("dnm-ics"); a.href=icsHref(c,slot); a.download="carnimbus-drive.ics";
           $("dn-modal").style.display="flex"; }
         else { msg.textContent=es()?"Revisa tus datos e inténtalo de nuevo.":"Please check your details and try again."; } })
       .catch(function(){ dnSubmit.disabled=false; msg.textContent=es()?"No se pudo enviar.":"Couldn't submit — try again."; }); });
   // Confirmation pop-up: close on "Done" or on backdrop click.
-  var dnClose=$("dnm-close"); if(dnClose) dnClose.addEventListener("click",function(){ $("dn-modal").style.display="none"; });
+  var dnClose=$("dnm-close"); if(dnClose) dnClose.addEventListener("click",function(){ $("dn-modal").style.display="none"; location.reload(); });
   var dnModal=$("dn-modal"); if(dnModal) dnModal.addEventListener("click",function(e){ if(e.target===dnModal) dnModal.style.display="none"; });
 });
