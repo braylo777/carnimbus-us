@@ -89,7 +89,7 @@ document.addEventListener("DOMContentLoaded",function(){
   function driveSlots(){ var out=[], d=new Date(), added=0;
     while(added<8){ d.setDate(d.getDate()+1); var wd=d.getDay();          // ~2 weeks of Mon–Thu (8 days × 4 times = 32 options). 1=Mon … 4=Thu
       if(wd>=1&&wd<=4){ [["10:00","10am"],["12:00","12pm"],["14:00","2pm"],["16:00","4pm"]].forEach(function(hm){
-        var lbl=d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})+" · "+hm[1];
+        var lbl=d.toLocaleDateString(es()?"es-ES":undefined,{weekday:"short",month:"short",day:"numeric"})+" · "+hm[1];
         out.push({value:d.toISOString().slice(0,10)+"T"+hm[0],label:lbl}); }); added++; } }
     return out; }
   function icsHref(c,slotValue){ var dt=slotValue.replace(/[-:]/g,"")+"00";   // 20260721T100000
@@ -102,7 +102,7 @@ document.addEventListener("DOMContentLoaded",function(){
     fetch("/api/events",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({events:[{action:"intent.match_click",vehicle_id:c.id,confidence:(+b.dataset.i)+1,source:"scanner"}]})}).catch(function(){});
     var sel=$("dn-slot"); sel.innerHTML=driveSlots().map(function(s){return '<option value="'+s.value+'">'+esc(s.label)+'</option>';}).join('');
-    $("dn-ics").style.display="none"; $("dn-msg").textContent=""; if(!$("dn-zip").value) $("dn-zip").value=terms().zip;
+    $("dn-msg").textContent=""; if(!$("dn-zip").value) $("dn-zip").value=terms().zip;
     $("dn-panel").style.display="block"; $("dn-panel").scrollIntoView({behavior:"smooth",block:"nearest"}); });
   var dnSubmit=$("dn-submit"); if(dnSubmit) dnSubmit.addEventListener("click",function(){
     var t=terms(), c=driveCar; if(!c) return; var msg=$("dn-msg");
