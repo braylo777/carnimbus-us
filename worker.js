@@ -1064,7 +1064,7 @@ async function search(request,env,ctx){ try{
   const carType=TYPE_OK.has(tRaw)?tRaw:null;   // AI: unknown value ⇒ no type signal, never a crash
   const cen=await zipCentroids(env), home=cen[zip]||null;     // buyer ZIP centroid (null if outside our SoCal table)
   // Join vdp_specs for dealer coords (T3); fall back to vdps.location_zip → centroid.
-  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.title_status, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 AND (v.dealer_id IS NULL OR v.dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
+  const all=await env.DB.prepare("SELECT v.*, s.dealer_lat, s.dealer_lng, s.dealer_zip, s.dealer_name, s.dealer_address, s.located_at, s.exterior_color, s.fuel_type, s.body_style, s.drivetrain_detail, s.mileage_exact, s.condition_grade, s.certified, s.title_status, s.market_price_avg, s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE v.active=1 AND (v.dealer_id IS NULL OR v.dealer_id IN (SELECT id FROM dealer_leads WHERE engine_on=1)) ORDER BY v.updated_at DESC LIMIT 200").all().catch(()=>({results:[]}));
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
@@ -1081,6 +1081,7 @@ async function search(request,env,ctx){ try{
       car.apr_est=isCash?null:(isLease?LEASE_APR_EQ:carApr);      // cash has no APR; lease shows the MF equivalent
       if(cd){ car.dlat=cd.lat; car.dlng=cd.lng; }        // S3: real car location → the website map popup
       car.dealer_name=v.dealer_name||null;   // AB3: rooftop name on the card + in the lead email
+      car.dealer_address=v.dealer_address||v.located_at||null;   // T-101: exact rooftop address for the calendar .ics (falls back to located_at, then name)
       r.push(car);
     } return r; };
   let out=scan(isCash?budget:monthly,radius), reason=null;             // strict: their exact budget + radius
@@ -2064,6 +2065,15 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
     dream_car:car,deal_type:deal,monthly:mo,down:dn,budget:String(b.budget||"").replace(/\D/g,"").slice(0,7),zip,radius:rad});
   await logEvent(env,{action:"intent.web_lead_routed",location:zip,source:routed}).catch(()=>{});
   if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus drive: ${first} ${last} · ${car}${mc?` → ${mc}`:``} · ${deal} · $${mo}/mo · $${dn} down · ${zip} · slot ${slot||"—"} · +1${ph}`).catch(()=>{});
+  // T-101/T-103 seam: greet the buyer in the matched car's own voice, opening the SMS thread.
+  // Dark-safe: sendSMS no-ops without Twilio creds, and the block is gated on SMS_MATCH_LIVE + the buyer's consent.
+  if(consent && env.SMS_MATCH_LIVE && mc){
+    await env.DB.prepare("INSERT INTO waitlist (phone,lang,created_at,user_agent,ip,sms_consent) VALUES (?,?,?,?,?,1) ON CONFLICT(phone) DO UPDATE SET sms_consent=1")
+      .bind("+1"+ph,"en",new Date().toISOString(),"",ip).run().catch(()=>{});   // so STOP/START opt-out governs this number
+    const whenTxt=slot?` for ${slot.replace("T"," at ")}`:"";
+    const carMsg=`Hi ${first}! I'm your ${mc} 🚗 — you just scheduled a CarNimbus test drive${whenTxt}. Got any questions about me before you come in? Reply here anytime. Txt STOP to opt out.`;
+    await sendSMS(env,"+1"+ph,carMsg).catch(()=>{});
+  }
   await logEvent(env,{action:"intent.web_lead",location:zip,source:"drive-now"});
   return json({ok:true}); }
 async function dealerLead(request,env){

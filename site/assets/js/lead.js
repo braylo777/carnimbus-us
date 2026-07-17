@@ -94,7 +94,7 @@ document.addEventListener("DOMContentLoaded",function(){
     return out; }
   function icsHref(c,slotValue){ var dt=slotValue.replace(/[-:]/g,"")+"00";   // 20260721T100000
     var body=["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","SUMMARY:Test drive — "+c.year+" "+c.make+" "+c.model,
-      "DTSTART:"+dt,"DURATION:PT45M","LOCATION:"+(c.dealer_name||"CarNimbus"),"END:VEVENT","END:VCALENDAR"].join("\r\n");
+      "DTSTART:"+dt,"DURATION:PT45M","LOCATION:"+(c.dealer_address||c.dealer_name||"CarNimbus"),"END:VEVENT","END:VCALENDAR"].join("\r\n");
     return "data:text/calendar;charset=utf-8,"+encodeURIComponent(body); }
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
     var c=CARS[+b.dataset.i]; if(!c)return; driveCar=c;
@@ -113,15 +113,20 @@ document.addEventListener("DOMContentLoaded",function(){
     if(!/^[2-9]\d{9}$/.test(ph)){ msg.textContent=es()?"Teléfono inválido.":"Enter a valid US mobile."; return; }
     if(!ad){ msg.textContent=es()?"Escribe tu dirección.":"Enter your address (for the tax estimate)."; return; }
     if(!$("dn-consent").checked){ msg.textContent=es()?"Acepta ser contactado.":"Please agree to be contacted."; return; }
-    var slot=$("dn-slot").value; dnSubmit.disabled=true; msg.textContent=es()?"Reservando…":"Locking in…";
+    var slot=$("dn-slot").value, slotText=$("dn-slot").selectedOptions[0].text; dnSubmit.disabled=true; msg.textContent=es()?"Agendando…":"Scheduling…";
     fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({first_name:fn,last_name:ln,email:em,phone:ph,address:ad,zip:zp,appt_slot:slot,consent:true,
         dream_car:t.type,deal_type:t.deal,monthly:t.mo,down:t.dn,radius:t.rad,fico:t.fico,
         vin:c.vin||"",vdp_id:c.id,budget:t.budget,matched_car:c.year+" "+c.make+" "+c.model,
         cf_token:cfToken(),website:$("lead-hp").value})})
       .then(function(r){return r.json();}).then(function(d){ dnSubmit.disabled=false;
-        if(d&&d.ok){ msg.textContent=(es()?"¡Listo! ":"You're set — ")+$("dn-slot").selectedOptions[0].text+(es()?". Te confirmamos por texto.":". We'll confirm by text.");
-          var a=$("dn-ics"); a.href=icsHref(c,slot); a.download="carnimbus-drive.ics"; a.style.display="inline-block"; }
+        if(d&&d.ok){ msg.textContent="";
+          $("dnm-msg").textContent=(es()?"Tu cita para el "+slotText+" está agendada. Te confirmamos por texto.":"Your appointment for "+slotText+" is scheduled. We'll confirm by text.");
+          var a=$("dnm-ics"); a.href=icsHref(c,slot); a.download="carnimbus-drive.ics";
+          $("dn-modal").style.display="flex"; }
         else { msg.textContent=es()?"Revisa tus datos e inténtalo de nuevo.":"Please check your details and try again."; } })
       .catch(function(){ dnSubmit.disabled=false; msg.textContent=es()?"No se pudo enviar.":"Couldn't submit — try again."; }); });
+  // Confirmation pop-up: close on "Done" or on backdrop click.
+  var dnClose=$("dnm-close"); if(dnClose) dnClose.addEventListener("click",function(){ $("dn-modal").style.display="none"; });
+  var dnModal=$("dn-modal"); if(dnModal) dnModal.addEventListener("click",function(e){ if(e.target===dnModal) dnModal.style.display="none"; });
 });
