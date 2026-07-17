@@ -68,23 +68,54 @@
             <div id="lead-cash-row" style="display:none">
               <select id="lead-budget" class="pill" style="width:100%;height:44px;font-size:13px;border-radius:12px"><option value="10000">Up to $10k</option><option value="20000">$10k–$20k</option><option value="30000" selected>$20k–$30k</option><option value="50000">$30k–$50k</option><option value="75000">$50k–$75k</option><option value="250000">$75k+</option></select>
             </div></div>
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · ZIP &amp; RADIUS</div>
+          <div id="lead-fico-step"><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 3 · YOUR CREDIT RANGE</div>
+            <div style="display:flex;gap:6px" id="lead-fico">
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:11px" data-fico="800+" type="button">800+</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:11px" data-fico="740-799" type="button">740–799</button>
+              <button class="btn sm primary on" style="flex:1;height:36px;font-size:11px" data-fico="670-739" type="button">670–739</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:11px" data-fico="580-669" type="button">580–669</button>
+              <button class="btn sm ghost" style="flex:1;height:36px;font-size:11px" data-fico="under 580" type="button">Under 580</button>
+            </div>
+            <div style="font:500 10px Manrope;color:#7f93b8;margin-top:5px">Soft check — sets <em>your</em> rate, never a credit pull. Prices subject to credit approval.</div>
+          </div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 4 · ZIP &amp; RADIUS</div>
             <div style="display:flex;gap:8px">
               <input id="lead-zip" class="pill" inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="ZIP code" style="flex:1;height:44px;font-size:13px;border-radius:12px">
               <select id="lead-radius" class="pill" style="flex:1;height:44px;font-size:13px;border-radius:12px"><option value="5">5 miles</option><option value="10">10 miles</option><option value="15" selected>15 miles</option><option value="30">30 miles</option><option value="50">50 miles</option></select>
             </div></div>
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 4 · WHAT'S YOUR TYPE?</div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 5 · WHAT'S YOUR TYPE?</div>
             <div style="display:flex;gap:6px" id="lead-type">
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="sedan" type="button">Sedan</button>
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="suv" type="button">SUV</button>
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="truck" type="button">Truck</button>
               <button class="btn sm ghost" style="flex:1;height:36px;font-size:12px" data-type="sport" type="button">Sport</button>
             </div></div>
-          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 5 · CHOOSE YOUR CAR</div>
+          <div><div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-bottom:6px">STEP 6 · CHOOSE YOUR CAR</div>
             <input type="text" tabindex="-1" autocomplete="off" class="vh" aria-hidden="true" id="lead-hp">
             <button id="lead-go" class="btn primary md" type="submit" style="width:100%;height:46px">Show My Matches</button>
             <div id="lead-msg" style="font:600 12px Manrope;color:#8ca0c4;margin-top:6px"></div>
-            <div id="lead-cars" style="display:none;gap:12px;overflow-x:auto;padding:6px 0;margin-top:6px"></div></div>
+            <div id="lead-cars" style="display:none;gap:12px;overflow-x:auto;padding:6px 0;margin-top:6px"></div>
+            <div id="dn-panel" class="col" style="display:none;gap:8px;margin-top:12px;padding:14px;background:#0a1f4d;border:1px solid rgba(24,200,255,.3);border-radius:14px">
+              <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em">STEP 7 · LOCK IN YOUR DRIVE</div>
+              <div style="display:flex;gap:8px">
+                <input id="dn-first" class="pill" placeholder="First name" autocomplete="given-name" style="flex:1;height:44px;font-size:13px;border-radius:12px">
+                <input id="dn-last"  class="pill" placeholder="Last name"  autocomplete="family-name" style="flex:1;height:44px;font-size:13px;border-radius:12px">
+              </div>
+              <input id="dn-email" class="pill" type="email" placeholder="Email" autocomplete="email" style="height:44px;font-size:13px;border-radius:12px">
+              <input id="dn-phone" class="pill" type="tel" inputmode="tel" placeholder="Mobile phone" autocomplete="tel" style="height:44px;font-size:13px;border-radius:12px">
+              <input id="dn-addr"  class="pill" placeholder="Street address (for tax &amp; registration estimate)" autocomplete="street-address" style="height:44px;font-size:13px;border-radius:12px">
+              <input id="dn-zip"   class="pill" inputmode="numeric" maxlength="5" placeholder="ZIP" autocomplete="postal-code" style="height:44px;font-size:13px;border-radius:12px">
+              <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-top:4px">STEP 8 · PICK A TIME (MON–THU)</div>
+              <select id="dn-slot" class="pill" style="height:44px;font-size:13px;border-radius:12px"></select>
+              <label style="display:flex;gap:8px;align-items:flex-start;font:500 11px/1.4 Manrope;color:#cbd5e1;margin-top:4px">
+                <input type="checkbox" id="dn-consent" style="margin-top:2px">
+                <span>I agree to be contacted by call/text about this test drive (msg &amp; data rates may apply). Prices subject to credit approval.</span>
+              </label>
+              <button id="dn-submit" class="btn primary md" type="button" style="width:100%;height:46px">Lock in my drive</button>
+              <div id="dn-msg" style="font:600 12px Manrope;color:#8ca0c4"></div>
+              <a id="dn-ics" class="btn ghost sm" style="display:none;text-decoration:none;justify-content:center">＋ Add to calendar</a>
+              <span id="dn-sms" style="font:500 11px Manrope;color:#5f7099">Any questions before your drive? — texting coming soon</span>
+            </div></div>
         </form>
       </div>
       <!-- trust band -->

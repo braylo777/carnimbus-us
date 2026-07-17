@@ -1025,8 +1025,8 @@ function monthlyFor(price,down,aprPct,term){ term=term||72; const P=Math.max(0,(
 // NOT inputs, on purpose: "demand" (days_on_lot is NULL on 100/100 rows — no demand signal exists in the schema)
 // and the buyer's monthly (a payment is the OUTPUT of a rate; deriving term from monthly while monthly derives
 // from APR is circular — down payment carries that intent instead).
-function aprEst(price,down,year,miles){
-  const base=aprFor("670-739");
+function aprEst(price,down,year,miles,fico){
+  const base=aprFor(fico||"670-739");   // T-101: was hardcoded aprFor("670-739"); now the buyer's band
   const age=Math.max(0,(new Date().getFullYear())-(+year||0));
   const ageAdj = age<=1?-0.6 : age<=3?-0.3 : age<=6?0 : age<=9?0.8 : 1.6;
   const miAdj  = (+miles>100000)?0.7 : 0;
@@ -1053,7 +1053,8 @@ async function search(request,env,ctx){ try{
   { const ipx=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
     const rl=await env.DB.prepare("SELECT COUNT(*) c FROM scans WHERE ip=? AND last_ts> datetime('now','-60 seconds')").bind(ipx).first().catch(()=>({c:0}));
     if(rl&&rl.c>40) return json({ok:true,count:0,cars:[],reason:"slow_down"}); }   // D: silent per-IP scrape ceiling (~40/min); CF rate-limit is the real wall
-  const apr=aprFor("670-739");                       // neutral default band for anon (no FICO on file); AJ: per-car aprEst() now prices each car in scan()
+  const ficoRaw=String(u.searchParams.get("fico")||"").trim();
+  const fico=(APR_FICO[ficoRaw]!=null)?ficoRaw:"670-739";   // T-101: validated band (APR_FICO allow-list); unknown/absent → neutral
   const LEASE_APR_EQ=+(0.00275*2400).toFixed(1);     // AJ: MF→APR-equiv (standard ×2400). Constant: leaseMoFor's money factor is fixed.
   const leaseMoFor=(price,dn)=>{ const resid=price*0.55, mf=0.00275; return Math.max(99,Math.round((price-dn-resid)/36+(price+resid)*mf)); };   // AD3: 36-mo, 55% residual — honest ballpark like the APR default
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
@@ -1067,7 +1068,7 @@ async function search(request,env,ctx){ try{
   const scan=function(budgetCap,radCap){ const r=[];
     for(const v of (all.results||[])){
       if(!v.price){ continue; }                        // never fabricate a price — skip unpriced
-      const carApr=aprEst(v.price,down,v.year,v.mileage_exact);   // AJ: per-car rate — NOTE this moves price_mo, which the budget filter below tests
+      const carApr=aprEst(v.price,down,v.year,v.mileage_exact,fico);   // AJ: per-car rate — NOTE this moves price_mo, which the budget filter below tests. T-101: priced by the buyer's FICO band
       const mo=isLease?leaseMoFor(v.price,down):monthlyFor(v.price,down,carApr,72);
       if(budgetCap && (isCash?v.price>budgetCap:mo>budgetCap)) continue;   // budgetCap=0 → ignore budget (fallback pass); cash caps total price
       let cd=(v.dealer_lat!=null&&v.dealer_lng!=null)?{lat:v.dealer_lat,lng:v.dealer_lng}:(cen[v.dealer_zip||v.location_zip||""]||null);
@@ -1110,9 +1111,9 @@ async function search(request,env,ctx){ try{
     const ip=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
     const top=out[0]?[out[0].year,out[0].make,out[0].model].filter(Boolean).join(" "):null;
     jobs.push(env.DB.prepare(
-      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,budget,zip,radius,ua,results,top_match) VALUES (?,?,?,?,?,?,?,?,?,?,?) "+
-      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,budget,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match")
-      .bind(ip,q||carType,deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top).run().catch(()=>{}));
+      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,budget,zip,radius,ua,results,top_match,fico) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "+
+      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,budget,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match, fico=excluded.fico")
+      .bind(ip,q||carType,deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top,isCash?"":fico).run().catch(()=>{}));
   }
   const logs=Promise.all(jobs);
   if(ctx&&ctx.waitUntil) ctx.waitUntil(logs); else await logs;
@@ -2042,21 +2043,28 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   const deal=["cash","finance","lease"].includes(b.deal_type)?b.deal_type:"finance";
   const zip=String(b.zip||"").replace(/\D/g,"").slice(0,5);
   let ph=String(b.phone||"").replace(/\D/g,""); if(ph.length===11&&ph[0]==="1")ph=ph.slice(1);
-  if(!car||!/^\d{5}$/.test(zip)||(ph&&!/^[2-9]\d{9}$/.test(ph))) return json({ok:false,error:"bad_request"},400);   // Y4: phone optional — email is the contact channel now
+  // T-101: Drive Now capture — first/last/email/phone/address + TCPA consent, ALL required (phone re-added per spec).
+  const first=String(b.first_name||"").trim().slice(0,40), last=String(b.last_name||"").trim().slice(0,40);
+  const email=String(b.email||"").trim().slice(0,120), addr=String(b.address||"").trim().slice(0,200);
+  const slot=String(b.appt_slot||"").trim().slice(0,60);
+  const consent=(b.consent===true||b.consent===1||b.consent==="1")?1:0;
+  const emailOk=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  if(!car||!/^\d{5}$/.test(zip)||!/^[2-9]\d{9}$/.test(ph)||!emailOk||!consent||!first||!last)
+    return json({ok:false,error:"bad_request"},400);   // T-101: phone + email + consent now required at Drive Now
   const mc=String(b.matched_car||"").trim().slice(0,120);
   const ip=request.headers.get("CF-Connecting-IP")||"";
   const since=new Date(Date.now()-3600e3).toISOString();
   const rc=await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE ip=? AND created_at>?").bind(ip,since).first().catch(()=>({c:0}));
-  if(rc&&rc.c>=5){ await logEvent(env,{action:"intent.web_lead_ratelimited",location:zip,source:"sid-form"}); return json({ok:true}); }   // per-IP cap: silent to the client, visible internally
+  if(rc&&rc.c>=5){ await logEvent(env,{action:"intent.web_lead_ratelimited",location:zip,source:"drive-now"}); return json({ok:true}); }   // per-IP cap: silent to the client, visible internally
   const mo=String(b.monthly||"").replace(/\D/g,"").slice(0,6), dn=String(b.down||"").replace(/\D/g,"").slice(0,6), rad=String(b.radius||"").replace(/\D/g,"").slice(0,3)||"25";
-  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-    .bind(car,deal,mo,dn,zip,rad,ph?("+1"+ph):"",ip,mc,new Date().toISOString()).run();
+  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,new Date().toISOString(),first,last,email,addr,slot,consent).run();
   // AI/TASK-006: drop-in CRM seam. No-op ("unrouted") until CRM_ENDPOINT exists, so this changes nothing today.
-  const routed=await routeLead(env,{matched_car:mc,vin:String(b.vin||"").slice(0,17),phone:ph?("+1"+ph):"",
+  const routed=await routeLead(env,{matched_car:mc,vin:String(b.vin||"").slice(0,17),phone:"+1"+ph,
     dream_car:car,deal_type:deal,monthly:mo,down:dn,budget:String(b.budget||"").replace(/\D/g,"").slice(0,7),zip,radius:rad});
   await logEvent(env,{action:"intent.web_lead_routed",location:zip,source:routed}).catch(()=>{});
-  if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus web lead: ${car}${mc?` → matched ${mc}`:``} · ${deal} · $${mo}/mo · $${dn} down · ${zip} ±${rad}mi${ph?` · +1${ph}`:``} (emailing Cid)`).catch(()=>{});
-  await logEvent(env,{action:"intent.web_lead",location:zip,source:"sid-form"});
+  if(env.ADMIN_PHONE) await sendSMS(env,env.ADMIN_PHONE,`CarNimbus drive: ${first} ${last} · ${car}${mc?` → ${mc}`:``} · ${deal} · $${mo}/mo · $${dn} down · ${zip} · slot ${slot||"—"} · +1${ph}`).catch(()=>{});
+  await logEvent(env,{action:"intent.web_lead",location:zip,source:"drive-now"});
   return json({ok:true}); }
 async function dealerLead(request,env){
   const {name,dealership,role,phone,email}=await request.json().catch(()=>({}));

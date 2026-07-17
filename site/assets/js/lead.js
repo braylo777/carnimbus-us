@@ -19,11 +19,10 @@ document.addEventListener("DOMContentLoaded",function(){
     else if(c.certified) p.push(es()?"Certificado":"Certified");
     else if(/clean|carfax/i.test(String(c.title_status||""))) p.push(es()?"Título limpio":"Clean title");
     return p.slice(0,3); }
-  var DEALER_EMAIL="cidsanchez@lacarguy.com";   // Y2: swap for Cid's CDK/calendar link when credentials exist
-  var DEALER_CC="maxberger@lacarguy.com";   // Z: Max Berger CC'd on every auto-drafted lead email to Cid
   var dealButtons=document.querySelectorAll("#lead-deal button");
   function syncTerms(){ var on=document.querySelector("#lead-deal button.on"); var d=on?on.getAttribute("data-deal"):"finance";
     $("lead-finance-row").style.display=d==="cash"?"none":"flex"; $("lead-cash-row").style.display=d==="cash"?"block":"none";
+    var fs=document.getElementById("lead-fico-step"); if(fs) fs.style.display=d==="cash"?"none":"block";   // T-101: cash skips FICO
     $("lead-terms-label").textContent=d==="cash"?(es()?"PASO 2 · ¿CUÁL ES TU PRESUPUESTO EN EFECTIVO?":"STEP 2 · WHAT'S YOUR CASH BUDGET?")
       :d==="lease"?(es()?"PASO 2 · MENSUALIDAD Y PAGO INICIAL":"STEP 2 · MONTHLY & DUE AT SIGNING")
       :(es()?"PASO 2 · MENSUALIDAD Y ENGANCHE":"STEP 2 · MONTHLY & DOWN PAYMENT"); }
@@ -34,22 +33,17 @@ document.addEventListener("DOMContentLoaded",function(){
   typeButtons.forEach(function(btn){ btn.addEventListener("click",function(){
     typeButtons.forEach(function(b){ b.classList.remove("on"); b.classList.remove("primary"); b.classList.add("ghost"); });
     btn.classList.add("on"); btn.classList.remove("ghost"); btn.classList.add("primary"); flagType(false); }); });
-  function terms(){ var on=document.querySelector("#lead-deal button.on"), ty=document.querySelector("#lead-type button.on");
+  var ficoButtons=document.querySelectorAll("#lead-fico button");   // T-101: STEP 4 credit band (finance/lease only)
+  ficoButtons.forEach(function(btn){ btn.addEventListener("click",function(){
+    ficoButtons.forEach(function(b){ b.classList.remove("on"); b.classList.remove("primary"); b.classList.add("ghost"); });
+    btn.classList.add("on"); btn.classList.remove("ghost"); btn.classList.add("primary"); }); });
+  function terms(){ var on=document.querySelector("#lead-deal button.on"), ty=document.querySelector("#lead-type button.on"),
+      fc=document.querySelector("#lead-fico button.on");
     return { type:ty?ty.getAttribute("data-type"):"", deal:on?on.getAttribute("data-deal"):"finance",
+      fico:fc?fc.getAttribute("data-fico"):"670-739",
       mo:$("lead-monthly").value, dn:$("lead-down").value,
       zip:($("lead-zip").value||"").replace(/\D/g,""), rad:($("lead-radius").value||"").replace(/\D/g,"")||"25",
       budget:$("lead-budget").value }; }
-  // AI/TASK-005: one ask, no back-and-forth. 71 → 44 words; the ask gets its own line and the buyer pre-commits
-  // to the first slot so Cid's reply ends the thread.
-  function mailtoFor(c,t){ var name=c.year+" "+c.make+" "+c.model;
-    var sub=name+" — test drive this week (via CarNimbus)";
-    var where=c.dealer_name?(" at "+c.dealer_name):"";
-    var priceBit=t.deal==="cash"?(c.price?("$"+Number(c.price).toLocaleString()+" cash"):"my cash budget")
-      :t.deal==="lease"?("$"+c.price_mo+"/mo lease, $"+t.dn+" at signing")
-      :("$"+c.price_mo+"/mo, $"+t.dn+" down");
-    var body="Hi Cid,\n\nCarNimbus matched me with the "+name+where+" and the numbers already work for me: "+priceBit+
-      ". I'm near "+t.zip+" and I'm ready to drive it this week.\n\nWhat day and time works? I'll take the first slot you have.\n\nThanks,";
-    return "mailto:"+DEALER_EMAIL+"?cc="+encodeURIComponent(DEALER_CC)+"&subject="+encodeURIComponent(sub)+"&body="+encodeURIComponent(body); }
   var ZIPSET=null;   // AC2: all valid US 5-digit ZIPs (GeoNames), lazy-loaded on first submit
   async function zipOk(z){ if(!/^\d{5}$/.test(z)) return false;
     if(!ZIPSET){ try{ var r=await fetch("/assets/data/us-zips.json"); var s=await r.json(); ZIPSET=new Set(s.match(/.{5}/g)); }catch(_){ return true; } }
@@ -59,7 +53,7 @@ document.addEventListener("DOMContentLoaded",function(){
   async function runMatch(t,quiet){
     var msg=$("lead-msg"), go=$("lead-go");
     if(!quiet){ go.disabled=true; go.textContent=es()?"Buscando…":"Matching…"; msg.textContent=""; }
-    try{ var r=await fetch("/api/search?src=scan&monthly="+t.mo+"&down="+t.dn+(t.deal==="cash"?"&budget="+t.budget:"")+"&zip="+t.zip+"&radius="+t.rad+"&deal_type="+t.deal+"&type="+encodeURIComponent(t.type));
+    try{ var r=await fetch("/api/search?src=scan&monthly="+t.mo+"&down="+t.dn+(t.deal==="cash"?"&budget="+t.budget:"&fico="+encodeURIComponent(t.fico))+"&zip="+t.zip+"&radius="+t.rad+"&deal_type="+t.deal+"&type="+encodeURIComponent(t.type));
       var d=await r.json().catch(function(){return{};}); CARS=(d&&d.cars)||[];
       if(!quiet){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches"; }
       if(!CARS.length){ if(!quiet){ msg.textContent=es()?"No encontramos autos con esos términos — prueba un radio o presupuesto mayor.":"No matches with those terms — try a wider radius or higher monthly."; } $("lead-cars").innerHTML=""; $("lead-cars").style.display="none"; return; }
@@ -73,7 +67,7 @@ document.addEventListener("DOMContentLoaded",function(){
           '<div style="padding:10px"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><div style="font:700 11px Manrope;color:#fff;min-width:0">'+esc(c.year+" "+c.make+" "+c.model)+'</div><div style="font:700 12px Manrope;color:#18C8FF;flex:none">'+(t.deal==="cash"?"$"+esc(Number(c.price).toLocaleString()):"$"+esc(c.price_mo)+"/mo")+'</div></div>'+
           '<div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px"><div style="font:600 9px Manrope;color:#8ca0c4;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.dealer_name||"LA Car Guy")+'</div>'+(c.dist!=null?'<div style="font:600 9px Manrope;color:#8ca0c4;flex:none">'+distLabel(c.dist)+'</div>':'')+'</div>'+
           (function(pz){ return pz.length?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+pz.map(function(rz){return '<span style="font:600 8px Manrope;color:#18C8FF;background:rgba(24,200,255,.12);border-radius:8px;padding:2px 6px">'+esc(rz)+'</span>';}).join('')+'</div>':''; })(pillsFor(c))+
-          '<a class="btn primary sm lead-book" data-i="'+i+'" href="'+mailtoFor(c,t).replace(/"/g,"&quot;")+'" style="width:100%;margin-top:8px;text-decoration:none;justify-content:center">'+(es()?"Conducir ya":"Drive Now")+'</a></div></div>';
+          '<button class="btn primary sm lead-book" data-i="'+i+'" type="button" style="width:100%;margin-top:8px;justify-content:center">'+(es()?"Conducir ya":"Drive Now")+'</button></div></div>';
       }).join('');
     }catch(_){ if(!quiet){ go.disabled=false; go.textContent=es()?"Ver mis matches":"Show My Matches";
       msg.textContent=es()?"No se pudo buscar — inténtalo de nuevo.":"Couldn't search — try again."; } }
@@ -90,13 +84,44 @@ document.addEventListener("DOMContentLoaded",function(){
       if(!ok){ flag($("lead-zip"),true); msg.textContent=es()?"Ingresa un código postal real de EE. UU.":"Enter a real US ZIP code."; return; }
       msg.textContent=""; runMatch(t,false); }); });
   function cfToken(){ try{ return (window.turnstile&&document.querySelector(".cf-turnstile"))?(window.turnstile.getResponse()||""):""; }catch(_){ return ""; } }
+  // T-101 steps 9–12: Drive Now opens the inline capture panel; its own submit does the enriched, persisted POST.
+  var driveCar=null;
+  function driveSlots(){ var out=[], d=new Date(), added=0;
+    while(added<8){ d.setDate(d.getDate()+1); var wd=d.getDay();          // ~2 weeks of Mon–Thu (8 days × 4 times = 32 options). 1=Mon … 4=Thu
+      if(wd>=1&&wd<=4){ [["10:00","10am"],["12:00","12pm"],["14:00","2pm"],["16:00","4pm"]].forEach(function(hm){
+        var lbl=d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})+" · "+hm[1];
+        out.push({value:d.toISOString().slice(0,10)+"T"+hm[0],label:lbl}); }); added++; } }
+    return out; }
+  function icsHref(c,slotValue){ var dt=slotValue.replace(/[-:]/g,"")+"00";   // 20260721T100000
+    var body=["BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT","SUMMARY:Test drive — "+c.year+" "+c.make+" "+c.model,
+      "DTSTART:"+dt,"DURATION:PT45M","LOCATION:"+(c.dealer_name||"CarNimbus"),"END:VEVENT","END:VCALENDAR"].join("\r\n");
+    return "data:text/calendar;charset=utf-8,"+encodeURIComponent(body); }
   document.addEventListener("click",function(e){ var b=e.target.closest(".lead-book"); if(!b)return;
-    var c=CARS[+b.dataset.i]; if(!c)return; var t=terms();
-    fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({dream_car:t.type,deal_type:t.deal,monthly:t.mo,down:t.dn,zip:t.zip,radius:t.rad,
-        vin:c.vin||"",vdp_id:c.id,budget:t.budget,matched_car:c.year+" "+c.make+" "+c.model,cf_token:cfToken(),website:$("lead-hp").value})}).catch(function(){});
+    var c=CARS[+b.dataset.i]; if(!c)return; driveCar=c;
     // AE4: real-signal groundwork — which ranked card the buyer actually clicked (rank = confidence).
     fetch("/api/events",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({events:[{action:"intent.match_click",vehicle_id:c.id,confidence:(+b.dataset.i)+1,source:"scanner"}]})}).catch(function(){});
-  });
+    var sel=$("dn-slot"); sel.innerHTML=driveSlots().map(function(s){return '<option value="'+s.value+'">'+esc(s.label)+'</option>';}).join('');
+    $("dn-ics").style.display="none"; $("dn-msg").textContent=""; if(!$("dn-zip").value) $("dn-zip").value=terms().zip;
+    $("dn-panel").style.display="block"; $("dn-panel").scrollIntoView({behavior:"smooth",block:"nearest"}); });
+  var dnSubmit=$("dn-submit"); if(dnSubmit) dnSubmit.addEventListener("click",function(){
+    var t=terms(), c=driveCar; if(!c) return; var msg=$("dn-msg");
+    var fn=$("dn-first").value.trim(), ln=$("dn-last").value.trim(), em=$("dn-email").value.trim(),
+        ph=$("dn-phone").value.replace(/\D/g,""), ad=$("dn-addr").value.trim(), zp=($("dn-zip").value||t.zip).replace(/\D/g,"");
+    if(!fn||!ln){ msg.textContent=es()?"Escribe tu nombre.":"Enter your name."; return; }
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ msg.textContent=es()?"Correo inválido.":"Enter a valid email."; return; }
+    if(!/^[2-9]\d{9}$/.test(ph)){ msg.textContent=es()?"Teléfono inválido.":"Enter a valid US mobile."; return; }
+    if(!ad){ msg.textContent=es()?"Escribe tu dirección.":"Enter your address (for the tax estimate)."; return; }
+    if(!$("dn-consent").checked){ msg.textContent=es()?"Acepta ser contactado.":"Please agree to be contacted."; return; }
+    var slot=$("dn-slot").value; dnSubmit.disabled=true; msg.textContent=es()?"Reservando…":"Locking in…";
+    fetch("/api/webleads",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({first_name:fn,last_name:ln,email:em,phone:ph,address:ad,zip:zp,appt_slot:slot,consent:true,
+        dream_car:t.type,deal_type:t.deal,monthly:t.mo,down:t.dn,radius:t.rad,fico:t.fico,
+        vin:c.vin||"",vdp_id:c.id,budget:t.budget,matched_car:c.year+" "+c.make+" "+c.model,
+        cf_token:cfToken(),website:$("lead-hp").value})})
+      .then(function(r){return r.json();}).then(function(d){ dnSubmit.disabled=false;
+        if(d&&d.ok){ msg.textContent=(es()?"¡Listo! ":"You're set — ")+$("dn-slot").selectedOptions[0].text+(es()?". Te confirmamos por texto.":". We'll confirm by text.");
+          var a=$("dn-ics"); a.href=icsHref(c,slot); a.download="carnimbus-drive.ics"; a.style.display="inline-block"; }
+        else { msg.textContent=es()?"Revisa tus datos e inténtalo de nuevo.":"Please check your details and try again."; } })
+      .catch(function(){ dnSubmit.disabled=false; msg.textContent=es()?"No se pudo enviar.":"Couldn't submit — try again."; }); });
 });
