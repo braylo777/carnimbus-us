@@ -1764,24 +1764,30 @@ async function dealerListing(request,env,uid,dealer){
     .bind(vin,eng,exc,inc,now).run().catch(()=>{});
   return json({ok:true,vin});
 }
-// T-102: dealer email+password login → sets the cn_dlr cookie.
+// T-102: dealer email+password login → sets the cn_dlr cookie. Checks dealer_logins (multi-staff), then the legacy dealer_leads.login_email.
 async function dealerLogin(request,env){
   const {email,password}=await request.json().catch(()=>({}));
   const em=String(email||"").trim().toLowerCase().slice(0,120);
   if(!em||!password) return json({ok:false,error:"bad_request"},400);
-  const d=await env.DB.prepare("SELECT id,pw_hash,pw_salt,status,client_no FROM dealer_leads WHERE lower(login_email)=? ORDER BY id DESC LIMIT 1").bind(em).first();
-  if(!d||!(await verifyPw(String(password),d.pw_salt,d.pw_hash))) return json({ok:false,error:"bad_credentials"},401);
-  if(d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
+  let dealerId=null;
+  const L=await env.DB.prepare("SELECT dealer_id,pw_hash,pw_salt FROM dealer_logins WHERE email=?").bind(em).first().catch(()=>null);
+  if(L && await verifyPw(String(password),L.pw_salt,L.pw_hash)) dealerId=L.dealer_id;
+  else { const d0=await env.DB.prepare("SELECT id,pw_hash,pw_salt FROM dealer_leads WHERE lower(login_email)=? ORDER BY id DESC LIMIT 1").bind(em).first();
+    if(d0 && await verifyPw(String(password),d0.pw_salt,d0.pw_hash)) dealerId=d0.id; }
+  if(!dealerId) return json({ok:false,error:"bad_credentials"},401);
+  const d=await env.DB.prepare("SELECT id,status,client_no FROM dealer_leads WHERE id=?").bind(dealerId).first();
+  if(!d||d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
   const cookie="cn_dlr="+await makeDealerSession(env,d.id)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400);
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}}); }
-// T-102: admin provisions a dealer's email+password (the 2 testers). Behind adminOnly.
+// T-102: admin provisions a dealer staff email+password → dealer_logins (many emails per store). Behind adminOnly.
 async function adminDealerCred(request,env){
   const {dealer_id,email,password}=await request.json().catch(()=>({}));
   const id=parseInt(dealer_id,10), em=String(email||"").trim().toLowerCase().slice(0,120);
   if(!id||!em||String(password||"").length<8) return json({ok:false,error:"bad_request"},400);
   const salt=newSalt(), hash=await hashPw(String(password),salt);
-  await env.DB.prepare("UPDATE dealer_leads SET login_email=?,pw_salt=?,pw_hash=?,status='active',client_no=COALESCE(client_no,?) WHERE id=?")
-    .bind(em,salt,hash,genCode("CN"),id).run();
+  await env.DB.prepare("INSERT INTO dealer_logins (email,dealer_id,pw_hash,pw_salt,created_at) VALUES (?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET dealer_id=excluded.dealer_id,pw_hash=excluded.pw_hash,pw_salt=excluded.pw_salt")
+    .bind(em,id,hash,salt,new Date().toISOString()).run();
+  await env.DB.prepare("UPDATE dealer_leads SET status='active', client_no=COALESCE(client_no,?) WHERE id=?").bind(genCode("CN"),id).run();
   return json({ok:true}); }
 // T-102: URL ingestion (Max's #1) — fetch a listing URL, adopt photos + specs + description; AI fills gaps. Returns a draft.
 async function dealerIngestUrl(request,env,uid,dealer){
