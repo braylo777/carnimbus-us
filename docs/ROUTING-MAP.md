@@ -1,4 +1,4 @@
-# Routing Map (ROUTE-01 + INFRA-02) — one Worker, four doors
+# Routing Map (ROUTE-01 + INFRA-02) — one Worker, three doors
 
 ## Host → path-prefix → file resolution
 The Worker rewrites by hostname at the top of `route()` (worker.js, `PREFIX` map), then Cloudflare
@@ -8,13 +8,19 @@ SEO car pages (`/used/*`) and creator tracked links (`/c/*`) are host-agnostic �
 | Host | Prefix | `/` resolves to | Surface |
 |---|---|---|---|
 | carnimbus.us | — | site/index.html | Marketing + public car pages (`/used/*`, `/browse`) |
-| dealer.carnimbus.us | /dealer | site/dealer/signin.html | Dealer console — upload a VIN, work leads |
-| creator.carnimbus.us | /creator | site/creator/index.html | **Creator Network** — one page, two tabs, claim drops, post, get paid |
-| ai.carnimbus.us | /ai | site/ai/index.html | NIMBUS — the control tower over all three |
+| app.carnimbus.us | /app | site/app/clear.html | **Dealer wApp** — clear, board, scan, offer, title, deals, `/creators` |
+| ai.carnimbus.us | /ai | site/ai/index.html | NIMBUS — the admin-gated control tower |
 
-**Four hosts, as of 2026-07-28.** `app.` (the buyer app) and `admin.` (folded into `ai.`) were detached
-from the Worker in `wrangler.jsonc`. Their in-Worker 301s at worker.js:69/72 remain as bookmark safety
-nets, and legacy `/app/*` paths on the apex 301 to `/browse`.
+**Three serving hosts, as of 2026-08-03.** This table said "four doors — `dealer.` / `creator.` /
+`ai.` / apex" until 2026-08-12; that was the pre-08-03 map and had been wrong for nine days.
+
+- `app.` is THE dealer surface (2026-08-03 decision record). Root resolves to `/app/clear`.
+- `dealer.` and `creator.` are **retired but still bound**, and 301/308 to `app.` and the apex.
+  They must stay in `wrangler.jsonc` — a detached host cannot redirect, and console links and
+  `/c/<token>` links printed in video descriptions are already in the world.
+- `admin.` was folded into `ai.` on 2026-07-14. ⚠ The `/admin` **PATH** prefix is NOT retired —
+  `ai.` deep paths serve `site/admin/*`. Do not conflate the host with the path.
+- The four `carnimbus.com` hosts redirect 1:1 to their `.us` equivalents, ahead of this map.
 
 ⚠ **The `/admin` PATH prefix is NOT retired** — only the `admin.` HOST is. `ai.carnimbus.us/<page>`
 still resolves to `site/admin/<page>` (worker.js). Don't conflate the two.

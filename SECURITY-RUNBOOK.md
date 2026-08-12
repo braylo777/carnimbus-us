@@ -33,8 +33,13 @@ Zone: **`carnimbus.us`** (as of the 2026-08-01 cutover).
 
 DNS is proxied through Cloudflare (orange cloud) — required for everything below.
 
-**Live hosts (4):** `carnimbus.us` · `dealer.` · `creator.` · `ai.` — `app.` and `admin.` were
-detached 2026-07-28. Their in-Worker 301s remain as bookmark safety nets.
+**Live hosts (3):** `carnimbus.us` · `app.` · `ai.` — as of the 2026-08-03 consolidation. `app.` is
+THE dealer wApp; `dealer.` and `creator.` are retired but stay bound so they can redirect, as do the
+four `carnimbus.com` hosts. `admin.` folded into `ai.` on 2026-07-14.
+
+*(This line read "Live hosts (4): carnimbus.us · dealer. · creator. · ai." until 2026-08-12 — the
+pre-08-03 map. Corrected, but note that the zone-level protections described below were configured
+against `carnimbus.com` and still have not been applied to `.us`.)*
 
 ## 1. Turnstile (anti-bot on the lead form)
 > **⚠ These boxes were checked but the work was never finished.** Verified 2026-08-01:

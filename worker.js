@@ -2443,7 +2443,14 @@ async function dealerLeadThread(request,env,uid,dealer){
   // Covers: "[verify] code", "Drive Now pass: …/pass/…", "CarNimbus code: 524366. Expires in 10 min."
   // Deliberately anchored to OUR sender wording — a bare /code \d+/ would swallow real buyer texts like
   // "my zip code 90210". Hiding a genuine customer message is worse than showing a system one.
-  const SYSTEM_MSG=/^\[verify\]|Drive Now pass:|carnimbus\.com\/pass\/|carnimbus code:?\s*\d{3,8}/i;
+  // .(com|us) — NOT a replacement of .com. The .com branch still matches historical sms_log rows
+  // written before the 2026-08-01 cutover; those rows are in D1 and cannot be rewritten, so dropping
+  // it would expose old pass links to dealers. The .us branch was never added at cutover, which left
+  // today's templates (~1809, ~1958) caught only by the literal phrase "Drive Now pass:" — reword a
+  // template, or let the AI compose a reply containing a pass link, and the token leaks into the
+  // dealer-visible thread. Note this line is invisible to a `carnimbus.com` grep: it is an escaped
+  // regex, so any sweep driven by that pattern skips it.
+  const SYSTEM_MSG=/^\[verify\]|Drive Now pass:|carnimbus\.(com|us)\/pass\/|carnimbus code:?\s*\d{3,8}/i;
   const rr=await env.DB.prepare("SELECT direction,body,created_at FROM sms_log WHERE phone=? ORDER BY id ASC LIMIT 200").bind(L.phone).all().catch(()=>({results:[]}));
   const all=rr.results||[];
   const thread=all.filter(function(m){ return !SYSTEM_MSG.test(String(m.body||"")); });
@@ -3693,7 +3700,13 @@ async function creatorClaim(request,env,cid,me){
   if(!d||d.status!=="open") return json({ok:false,error:"drop_closed"},409);
   const ex=await env.DB.prepare("SELECT token FROM creator_claims WHERE drop_id=? AND creator_id=?").bind(id,cid).first().catch(()=>null);
   if(ex) return json({ok:true,token:ex.token,link:SEO_ORIGIN+"/c/"+ex.token});
-  const token=genCode("CR").replace(/[^A-Za-z0-9]/g,"");
+  // .toLowerCase() to match mintRefToken(). Without it this minted MIXED-CASE tokens while the
+  // canonicalizer (route(), ~line 226) lowercases every /c/ path — /c/ is not on its exemption list,
+  // only /pass/ and /api/ are. So the link we handed a creator was 301'd to a lowercase path that
+  // no longer matched the stored token, creatorRedirect() fell through, and the visitor landed on
+  // /browse with the click credited to nobody. These links are printed in @nimbusbros video
+  // descriptions and cannot be reissued — hence the case-insensitive lookup there as well.
+  const token=genCode("CR").replace(/[^A-Za-z0-9]/g,"").toLowerCase();
   await env.DB.prepare("INSERT INTO creator_claims (drop_id,creator_id,token,clicks,status,created_at) VALUES (?,?,?,0,'claimed',?)")
     .bind(id,cid,token,new Date().toISOString()).run();
   await logEvent(env,{action:"social.claimed",source:"creator-network",confidence:1}).catch(()=>{});
@@ -3850,7 +3863,11 @@ async function creatorRedirect(request,env,token){
   const t=String(token||"").slice(0,40);
   const cl=await env.DB.prepare(
     "SELECT cc.id, cc.creator_id, v.id vid, v.year, v.make, v.model FROM creator_claims cc "+
-    "JOIN creator_drops d ON d.id=cc.drop_id JOIN vdps v ON v.id=d.vdp_id WHERE cc.token=?").bind(t).first().catch(()=>null);
+    // LOWER() on both sides, not a plain =. creator_claims.token is declared TEXT UNIQUE with no
+    // COLLATE NOCASE (migrations/0064_creator_drops.sql:14), and tokens minted before this fix are
+    // stored mixed-case while the path arrives lowercased by the canonicalizer. A plain match misses
+    // every one of them. The table is small, so the lost index on this column costs nothing.
+    "JOIN creator_drops d ON d.id=cc.drop_id JOIN vdps v ON v.id=d.vdp_id WHERE LOWER(cc.token)=LOWER(?)").bind(t).first().catch(()=>null);
   if(!cl){
     // Personal affiliate link.
     const cr=await env.DB.prepare("SELECT id,ref_token FROM creators WHERE ref_token=?").bind(t).first().catch(()=>null);

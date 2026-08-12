@@ -59,8 +59,12 @@
 - **Integration Details:** 
   - Execute directives within `docs/HTML-TO-JS-MIGRATION.md`.
   - Push UI layouts, client onboarding features, and updated matching dashboards to the live Worker
-    (`carnimbus-com`, repo `braylo777/carnimbus-com`). **The old `carnimbus-us.vercel.app` target is dead** —
-    the `.us` era was archived 2026-07-28; we build only on carnimbus-com.
+    (script name `carnimbus-com` — a misnomer kept deliberately; renaming it orphans 13 secrets).
+    **`carnimbus.us` is the product as of the 2026-08-01 cutover.** `carnimbus.com` is archived and
+    serves nothing but a 301. This paragraph previously said the opposite — that "the `.us` era was
+    archived… we build only on carnimbus-com" — which was true for three days in late July and has
+    been wrong since. The dead Vercel target it referred to (`carnimbus-us.vercel.app`) is unrelated
+    to the current `.us` zone.
 - **Assignee Node:** Frontend / UI Swarm
 
 ### [CNMB-004] Phase 1 & 2 Infrastructure Orchestration
