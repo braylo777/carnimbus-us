@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Settlement</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh;display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+
+    <div class="z row" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12)">
+      <a href="/deals" class="btn ghost sm" style="text-decoration:none">‹ Deals</a>
+      <div class="disp" style="font-size:15px;margin-left:auto">CarNimbus <span class="cy">for Dealers</span></div>
+    </div>
+
+    <div class="z" style="flex:1;width:100%;max-width:440px;margin:0 auto;padding:18px 20px 32px;color:#e2e9f2">
+
+      <div id="loading" class="mono" style="font-size:11px;color:#8ca0c4;letter-spacing:.18em;padding:40px 0;text-align:center">LOADING…</div>
+      <div class="wl-msg" id="d-msg" style="display:none"></div>
+
+      <div id="body" style="display:none">
+        <div id="rail" class="row" style="gap:4px;margin-bottom:16px"></div>
+
+        <div class="disp" id="car-name" style="font-size:20px;font-weight:700">—</div>
+        <div class="row" style="align-items:baseline;margin-top:2px">
+          <div id="car-vin" class="mono" style="font-size:11px;color:#8ca0c4;letter-spacing:.10em"></div>
+          <div id="car-offer" class="disp cy" style="font-size:18px;font-weight:700;margin-left:auto"></div>
+        </div>
+        <div id="car-fee" style="font:500 11px Manrope;color:#8ca0c4;text-align:right;margin-top:2px"></div>
+
+        <!-- STAKE -->
+        <div class="glass pd" id="stake-card" style="display:none;margin-top:16px;border-radius:18px">
+          <div class="row" style="align-items:center">
+            <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">BUYER CAPITAL</div>
+            <div id="stake-amt" class="disp" style="font-size:18px;font-weight:700;margin-left:auto"></div>
+          </div>
+          <div id="stake-copy" style="font:500 12px/1.6 Manrope;color:#e2e9f2;margin-top:8px"></div>
+          <div id="stake-times" class="mono" style="font-size:10px;color:#5c6f92;letter-spacing:.10em;margin-top:8px"></div>
+        </div>
+
+        <!-- ADJUDICATION -->
+        <div class="glass pd" id="adj-card" style="margin-top:12px;border-radius:18px">
+          <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">ADJUDICATION</div>
+          <button id="adj-run" class="btn primary md" type="button" style="display:none;width:100%;margin-top:10px">Run adjudication</button>
+          <div id="adj-wait" style="display:none;font:500 12px/1.6 Manrope;color:#aebfdf;margin-top:8px">Upload the title first.</div>
+
+          <div id="adj-out" style="display:none;margin-top:10px">
+            <div class="row" style="align-items:baseline">
+              <div id="adj-decision" class="disp" style="font-size:18px;font-weight:800"></div>
+              <div id="adj-conf" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-left:auto"></div>
+            </div>
+            <div id="adj-rationale" style="font:500 12px/1.7 Manrope;color:#e2e9f2;margin-top:8px"></div>
+          </div>
+
+          <!-- THE L1 GATE. AUTONOMY-POLICY.md:20 — a fund release never reaches L3. -->
+          <div id="gate" style="display:none;margin-top:14px;padding:14px;border-radius:14px;border:1px solid rgba(245,166,35,.5);background:rgba(245,166,35,.06)">
+            <div style="font:800 12px Manrope;color:#f5a623">A person has to approve this</div>
+            <div style="font:500 12px/1.7 Manrope;color:#e2e9f2;margin-top:6px">
+              An agent recommended this release. Autonomy level <b>L1 — act-with-approval</b>.
+              Releasing funds cannot be undone from inside CarNimbus; a mistake becomes a collections
+              problem, not a correction.
+            </div>
+            <button id="approve" class="btn primary md" type="button" style="width:100%;margin-top:12px">Approve and release</button>
+            <button id="dispute-open" class="btn ghost md" type="button" style="width:100%;margin-top:8px">Dispute instead</button>
+            <div id="dispute-box" style="display:none;margin-top:10px">
+              <label class="vh" for="dispute-why">Reason for the dispute</label>
+              <textarea id="dispute-why" class="field" rows="3" placeholder="What's wrong with this deal?" style="width:100%"></textarea>
+              <button id="dispute-go" class="btn ghost md" type="button" style="width:100%;margin-top:8px">Submit dispute</button>
+            </div>
+          </div>
+
+          <div id="approved" style="display:none;margin-top:12px;font:700 12px Manrope;color:#18C8FF"></div>
+        </div>
+
+        <!-- LEDGER -->
+        <div class="glass pd" style="margin-top:12px;border-radius:18px">
+          <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">APPEND-ONLY LEDGER</div>
+          <div id="events" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/app-rail.js" defer></script>
+<script src="/assets/js/app-deal.js" defer></script>
+</body>
+</html>

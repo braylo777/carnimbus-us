@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Dealer console</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+/* T-102 mobile-first dealer portal — dense, thumb-reachable */
+.seg{display:flex;gap:4px;background:rgba(255,255,255,.05);border:1px solid rgba(24,200,255,.18);border-radius:12px;padding:4px}
+.seg button{flex:1;border:none;background:transparent;color:#8ca0c4;font:700 12px Manrope;letter-spacing:.06em;padding:10px 6px;border-radius:9px;cursor:pointer;min-height:44px}
+.seg button.on{background:rgba(24,200,255,.16);color:#18C8FF}
+.sections{display:flex;flex-direction:column;gap:14px}
+.bandsec{background:rgba(255,255,255,.03);border:1px solid rgba(24,200,255,.14);border-radius:14px;padding:12px}
+.bandsec.drag{border-color:#18C8FF;background:rgba(24,200,255,.08)}
+.bandsec h4{font:800 17px 'Space Grotesk';letter-spacing:.02em;color:#fff;margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+.bandsec h4 .ct{font:700 11px 'IBM Plex Mono';color:#18C8FF;border:1px solid rgba(24,200,255,.35);border-radius:8px;padding:3px 8px;margin-left:8px}
+.sfilter{width:100%;background:rgba(0,0,0,.25);border:1px solid rgba(24,200,255,.22);border-radius:10px;color:#fff;font:500 12px Manrope;padding:9px 12px;margin-bottom:10px;outline:none;box-sizing:border-box}
+.sfilter:focus{border-color:#18C8FF}
+.vrow{display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.16);border-radius:12px;padding:8px;margin-bottom:8px;cursor:pointer}
+.vrow:active{transform:scale(.995)}
+.vrow .th{flex:0 0 62px;height:46px;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center}
+.vrow .th img{width:100%;height:100%;object-fit:cover;display:block}
+.vrow .th .ph-ph{font:700 7px 'IBM Plex Mono';color:#5b6f97;letter-spacing:.08em;text-align:center;line-height:1.4}
+.vrow .info{flex:1;min-width:0}
+.vrow .ttl{font:700 12px Manrope;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vrow .mo{font:700 11px Manrope;color:#18C8FF;margin-top:2px}
+.movesel{flex:0 0 auto;background:rgba(0,0,0,.3);border:1px solid rgba(24,200,255,.28);border-radius:9px;color:#cfe0f5;font:700 10px Manrope;padding:7px 6px;max-width:96px}
+.bandsec .empty{font:600 10px Manrope;color:#7f93b8;padding:4px 2px}
+.toppick{font:700 8px 'IBM Plex Mono';letter-spacing:.1em;color:#18C8FF;background:rgba(24,200,255,.12);border-radius:6px;padding:2px 6px;margin-left:6px;white-space:nowrap}
+.vrow.arch{opacity:.75}
+.ighero{height:170px;border-radius:14px;overflow:hidden;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;margin-top:12px}
+.ighero img{width:100%;height:100%;object-fit:cover;display:block}
+.ighero .ph-ph{font:700 10px 'IBM Plex Mono';color:#5b6f97;letter-spacing:.12em}
+.igtl{font:800 20px 'Space Grotesk';color:#fff;margin:12px 0 8px;min-height:24px}
+.iggrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.iggrid .field{height:44px}
+#ig-more summary{font:700 11px Manrope;color:#18C8FF;cursor:pointer;padding:12px 0 4px;list-style:none}
+#ig-more summary::before{content:"▸ "}
+#ig-more[open] summary::before{content:"▾ "}
+.archlink{display:block;width:100%;background:none;border:none;color:#fda4af;font:700 12px Manrope;cursor:pointer;padding:12px 0 2px;text-align:center}
+.lp-kv{display:flex;justify-content:space-between;gap:12px;font:600 12px Manrope;color:#cdd8ee;padding:7px 0;border-bottom:1px solid rgba(24,200,255,.08)}
+.lp-kv b{color:#8ca0c4;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.msg{max-width:80%;padding:9px 12px;border-radius:12px;font:500 12px Manrope;color:#e2e9f2;margin:6px 0}
+.msg.in{background:rgba(255,255,255,.06)}
+.msg.out{background:rgba(24,200,255,.14);margin-left:auto}
+.msg .t{font:600 8px 'IBM Plex Mono';color:#7f93b8;margin-top:3px}
+.restore{background:none;border:1px solid rgba(94,230,168,.5);color:#5ee6a8;border-radius:9px;font:700 10px Manrope;padding:7px 10px;cursor:pointer}
+.morewrap{display:none}
+.bandsec.open .morewrap{display:block}
+.seeall{background:none;border:none;color:#18C8FF;font:700 11px Manrope;cursor:pointer;padding:7px 0 2px;display:block}
+.sheet-bg{position:fixed;inset:0;z-index:80;background:rgba(3,8,20,.92);display:none;align-items:flex-end;justify-content:center}
+.sheet{background:#0a1f4d;border:1px solid rgba(24,200,255,.22);border-radius:18px 18px 0 0;width:100%;max-width:520px;max-height:92dvh;overflow-y:auto;padding:18px 18px 28px;position:relative}
+@media(min-width:640px){.sheet-bg{align-items:center}.sheet{border-radius:18px}}
+.sheet-x{position:absolute;top:10px;right:14px;background:none;border:none;color:#8ca0c4;font:700 18px Manrope;cursor:pointer;padding:4px}
+/* R13: the lead panel is a FULL-SCREEN vertical page — one scroll, no side motion, big always-visible close. */
+#lead-bg{align-items:stretch}
+#lead-bg .sheet{border:none;border-radius:0;max-width:none;max-height:100dvh;padding:0 16px 32px}
+@media(min-width:640px){#lead-bg{align-items:stretch}#lead-bg .sheet{border-radius:0}}
+#lead-bg .sheet-x{position:sticky;top:0;right:auto;margin:0 -4px 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;background:rgba(255,255,255,.14);border:1px solid rgba(24,200,255,.55);border-radius:50%;color:#fff;font:700 20px/1 Manrope;padding:0;z-index:2}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.thumbs img{width:64px;height:48px;object-fit:cover;border-radius:7px;border:1px solid rgba(24,200,255,.25)}
+.lbl{font:700 9px 'IBM Plex Mono';color:#8ca0c4;letter-spacing:.1em;margin:12px 0 5px;display:block}
+.lead{display:flex;gap:11px;align-items:flex-start;background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.16);border-radius:13px;padding:11px;margin-bottom:10px;cursor:pointer}
+.lead.demo{border:1.5px dashed rgba(24,200,255,.55);background:rgba(24,200,255,.04)}
+.lphoto{flex:0 0 72px;height:56px;border-radius:9px;overflow:hidden;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center}
+.lphoto img{width:100%;height:100%;object-fit:cover;display:block}
+.lphoto .ph-ph{font:700 7px 'IBM Plex Mono';color:#5b6f97;letter-spacing:.08em}
+.linfo{flex:1;min-width:0}
+.lead .nm{font:700 13px Manrope;color:#fff}
+.lead .car{font:600 12px Manrope;color:#18C8FF;margin-top:2px}
+.lead .meta{font:600 10px Manrope;color:#8ca0c4;margin-top:4px;line-height:1.5}
+.lead .slot{font:700 10px Manrope;color:#cdd8ee;margin-top:4px}
+.lead .cid{font:700 9px 'IBM Plex Mono';letter-spacing:.08em;color:#7f93b8;margin-top:6px}
+.statuschip{flex:0 0 auto;align-self:center;border-radius:10px;padding:9px 10px;font:700 9px 'IBM Plex Mono';letter-spacing:.08em;cursor:pointer;white-space:nowrap;border:1px solid}
+.statuschip.confirmed{background:rgba(24,200,255,.12);border-color:rgba(24,200,255,.5);color:#18C8FF}
+.statuschip.sold{background:rgba(94,230,168,.12);border-color:rgba(94,230,168,.5);color:#5ee6a8}
+.statuschip.no_show{background:rgba(255,206,84,.12);border-color:rgba(255,206,84,.5);color:#ffce54}
+.sampletag{font:700 8px 'IBM Plex Mono';letter-spacing:.12em;color:#18C8FF;border:1px dashed rgba(24,200,255,.5);border-radius:6px;padding:2px 6px;margin-left:8px;vertical-align:middle}
+/* R13: the Close Card — everything a salesman needs to close, one vertical screen. */
+.lp-head{font:800 21px 'Space Grotesk';color:#fff;margin-top:4px}
+.lp-sub{font:600 13px Manrope;color:#18C8FF;margin-top:3px}
+.lp-when{font:700 11px 'IBM Plex Mono';color:#8ca0c4;margin-top:5px;letter-spacing:.04em}
+.deal{background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.18);border-radius:13px;padding:12px;margin-top:14px}
+.deal .dr{display:flex;justify-content:space-between;gap:10px;font:600 12.5px Manrope;color:#e2e9f2;padding:5px 0}
+.deal .dr b{color:#8ca0c4;font:700 10px Manrope;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.deal .ok{color:#5ee6a8;font-weight:700}
+.deal .warn{color:#ffce54;font-weight:700}
+.move{background:rgba(24,200,255,.08);border-left:3px solid #18C8FF;border-radius:0 10px 10px 0;padding:11px 12px;margin-top:14px}
+.move h5{font:800 11px 'Space Grotesk';letter-spacing:.1em;color:#18C8FF;margin:0 0 6px}
+.move p{font:500 13.5px/1.6 Manrope;color:#fff;margin:0}
+.move .opener{font:500 12.5px/1.55 Manrope;color:#aebfdf;margin-top:8px;font-style:italic}
+.fact{display:flex;gap:10px;font:600 12.5px Manrope;color:#e2e9f2;padding:7px 0;border-bottom:1px solid rgba(24,200,255,.08)}
+.fact b{flex:0 0 70px;color:#8ca0c4;font:700 10px Manrope;letter-spacing:.06em;text-transform:uppercase}
+.msgtoggle{width:100%;background:none;border:none;color:#18C8FF;font:700 12px Manrope;text-align:left;padding:14px 0 6px;cursor:pointer}
+.whybox{background:rgba(255,255,255,.03);border:1px solid rgba(24,200,255,.14);border-radius:11px;padding:9px 11px;margin-top:10px}
+.wrow{display:flex;justify-content:space-between;gap:10px;font:600 11.5px Manrope;color:#cdd8ee;padding:3px 0}
+.wrow b{font:800 11px 'IBM Plex Mono';min-width:38px}
+.wrow .up{color:#5ee6a8}.wrow .dn{color:#ffce54}
+.behav{margin-top:9px;padding-top:9px;border-top:1px solid rgba(24,200,255,.14)}
+.behav li{font:500 12.5px/1.55 Manrope;color:#e2e9f2;margin-bottom:5px}
+.behav ul{margin:0;padding-left:16px}
+.behav h6{font:800 10px 'Space Grotesk';letter-spacing:.1em;color:#18C8FF;margin:0 0 6px}
+.verdict{font:700 12px Manrope;color:#5ee6a8;margin-top:4px}
+.brief{margin-top:14px}
+.brief h5{font:800 10px 'Space Grotesk';letter-spacing:.14em;color:#18C8FF;margin:0 0 7px}
+.brief ol{margin:0;padding-left:20px}
+.brief ol li{font:600 14px/1.5 Manrope;color:#fff;margin-bottom:8px}
+.brief.say{background:rgba(24,200,255,.08);border-left:3px solid #18C8FF;border-radius:0 10px 10px 0;padding:10px 12px}
+.brief.say p{font:500 14px/1.55 Manrope;color:#fff;margin:0;font-style:italic}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips span{font:700 10px 'IBM Plex Mono';letter-spacing:.04em;color:#cdd8ee;background:rgba(255,255,255,.06);border:1px solid rgba(24,200,255,.2);border-radius:8px;padding:5px 8px}
+.statussel{background:rgba(24,200,255,.12);border:1px solid rgba(24,200,255,.5);color:#18C8FF;font:700 10px 'IBM Plex Mono';letter-spacing:.06em;border-radius:10px;padding:8px 9px;cursor:pointer;min-height:38px}
+.statussel.sold{background:rgba(94,230,168,.12);border-color:rgba(94,230,168,.5);color:#5ee6a8}
+.statussel.no_show{background:rgba(255,206,84,.12);border-color:rgba(255,206,84,.5);color:#ffce54}
+.rstack{display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 126px;background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.18);border-radius:12px;padding:9px 8px}
+.cbband{font:700 9px 'IBM Plex Mono';letter-spacing:.06em;color:#8ca0c4;white-space:nowrap}
+.rstack .statussel{width:100%;text-align:center;padding:7px 4px}
+.lead{align-items:center;gap:10px;padding:10px}
+.linfo{flex:1 1 auto;min-width:0}
+.lead .nm{font:700 14px Manrope;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lead .car{font:600 12.5px Manrope;color:#18C8FF;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.matchtag{font:800 19px 'Space Grotesk';color:#5ee6a8;line-height:1;text-align:center}
+.matchtag small{display:block;font:700 8px 'IBM Plex Mono';letter-spacing:.12em;color:#8ca0c4;margin-top:2px}
+.cornerpct{font:800 22px 'Space Grotesk';color:#5ee6a8;line-height:1;margin-bottom:6px}
+.cornerpct:after{content:' MATCH';font:700 8px 'IBM Plex Mono';letter-spacing:.12em;color:#8ca0c4}
+.ptxt{font:500 13px/1.6 Manrope;color:#cdd8ee;margin:8px 0 0}
+.brief.say div{font:500 13.5px/1.6 Manrope;color:#fff}
+.brief.say p{margin:0 0 8px}
+.msgnone{font:600 11px Manrope;color:#7f93b8;font-style:italic;padding:2px 0 8px}
+/* R14: TODAY calendar + buckets + hero probability */
+/* R22e: buckets locked to the bottom of the SCREEN — leads scroll behind, never under, them */
+.buckets{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;gap:8px;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));margin:0 auto;max-width:720px;
+  background:linear-gradient(transparent,#06163b 26%)}
+#pane-leads #leads{padding-bottom:96px}
+.bkt{flex:1;border-radius:11px;padding:10px 6px;font:700 9px 'IBM Plex Mono';letter-spacing:.06em;cursor:pointer;border:1px solid rgba(24,200,255,.25);background:rgba(255,255,255,.04);color:#8ca0c4}
+.bkt b{display:block;font-size:15px;margin-top:2px;color:#fff}
+.bkt.on[data-bkt=confirmed]{border-color:rgba(24,200,255,.6);color:#18C8FF}
+.bkt.on[data-bkt=sold]{border-color:rgba(94,230,168,.6);color:#5ee6a8}
+.bkt.on[data-bkt=no_show]{border-color:rgba(255,206,84,.6);color:#ffce54}
+.bkt.on[data-bkt=no_show] b{color:#ffce54}
+.bkt.on[data-bkt=cancelled]{border-color:rgba(248,113,113,.6);color:#f87171}
+.bkt.on[data-bkt=cancelled] b{color:#f87171}
+.stpill.cancelled{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.55);color:#f87171}
+.stmenu button.cancelled{color:#f87171}
+.tspast{font-style:normal;font-size:7px;letter-spacing:.08em;color:#8ca0c4}
+.bkt.on[data-bkt=confirmed] b{color:#18C8FF}
+.bkt.on[data-bkt=sold] b{color:#5ee6a8}
+.trow{display:flex;gap:8px;align-items:stretch;margin-bottom:10px}
+.tslot{flex:0 0 46px;font:700 10px 'IBM Plex Mono';color:#8ca0c4;text-align:left;line-height:1.5;padding-top:14px;letter-spacing:-.02em}
+.dayhead{font:800 12px 'Space Grotesk';letter-spacing:.08em;color:#8ca0c4;text-transform:uppercase;margin:14px 0 8px}
+.closetag{font:700 9px 'IBM Plex Mono';letter-spacing:.06em;color:#5ee6a8;margin-top:5px}
+.bignum-wrap{text-align:center;margin-top:16px}
+.bignum-lbl{font:700 10px 'IBM Plex Mono';letter-spacing:.14em;color:#8ca0c4}
+.bignum{font:800 56px 'Space Grotesk';color:#18C8FF;line-height:1.1}
+.kpirow{display:flex;gap:8px;margin-top:10px}
+.kpi{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.18);border-radius:11px;padding:10px;text-align:center}
+.kpi b{display:block;font:800 17px 'Space Grotesk';color:#fff}
+.kpi span{font:700 8px 'IBM Plex Mono';letter-spacing:.1em;color:#8ca0c4}
+
+/* R20 — match card: time rail · 2/3 content (name cyan, car white, image) · slim box. Overrides prior rules. */
+.trow{display:flex;gap:8px;align-items:stretch;margin-bottom:10px}
+.tslot{flex:0 0 48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:700 11px 'IBM Plex Mono';color:#8ca0c4;text-align:center;padding-top:0}
+.tslot i{width:1px;flex:0 0 14px;background:rgba(24,200,255,.3);display:block}
+.lead{flex:1;display:flex;gap:10px;align-items:stretch;background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.16);border-radius:13px;padding:11px;cursor:pointer;margin-bottom:0}
+.lead.demo{border:1.5px dashed rgba(24,200,255,.55);background:rgba(24,200,255,.04)}
+.linfo{flex:1 1 auto;min-width:0}
+.lead .nm{font:700 15px Manrope;color:#18C8FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lead .car{font:700 13px Manrope;color:#fff;margin:2px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lcarimg{width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center}
+.lcarimg img{width:100%;height:100%;object-fit:cover;display:block}
+.lcarimg.np{font:700 8px 'IBM Plex Mono';color:#5b6f97;letter-spacing:.1em}
+.rstack{flex:0 0 92px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.04);border:1px solid rgba(24,200,255,.18);border-radius:12px;padding:9px 6px}
+.cbband{font:700 9px 'IBM Plex Mono';color:#8ca0c4;white-space:nowrap}
+.matchtag{font:800 18px 'Space Grotesk';color:#5ee6a8;line-height:1;text-align:center}
+.matchtag small{display:block;font:700 7px 'IBM Plex Mono';letter-spacing:.1em;color:#8ca0c4;margin-top:2px}
+.rstack .statussel{width:100%;text-align:center;padding:6px 2px;font-size:8px}
+.asknimbus{flex:1;display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.25);border:1px solid rgba(24,200,255,.3);border-radius:12px;padding:4px 6px 4px 12px}
+.asknimbus input{flex:1;background:none;border:none;color:#fff;font:500 13px Manrope;outline:none}
+.asknimbus button{background:rgba(24,200,255,.14);border:none;border-radius:9px;padding:7px 9px;cursor:pointer;font-size:14px}
+.vspec{font:600 10px Manrope;color:#8ca0c4;margin-top:3px;line-height:1.5}
+#dc-set{font-size:16px;padding:6px 10px}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:12px 0}
+.setrow label{font:600 13px Manrope;color:#cdd8ee}
+.setrow input{width:110px;background:rgba(0,0,0,.25);border:1px solid rgba(24,200,255,.3);border-radius:10px;color:#fff;font:600 14px Manrope;padding:9px 11px;text-align:right}
+/* R21 — authoritative right-stack: three cemented blocks + owned status menu (no OS select) */
+.rstack{flex:0 0 96px;display:flex;flex-direction:column;gap:6px;background:none;border:none;padding:0;justify-content:stretch}
+.rblk{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(24,200,255,.22);border-radius:11px;padding:7px 4px;min-height:44px}
+.rblk b{font:800 15px 'Space Grotesk';color:#fff;line-height:1;white-space:nowrap}
+.rblk.mt b{color:#5ee6a8}
+.rblk small{font:700 7.5px 'IBM Plex Mono';letter-spacing:.12em;color:#8ca0c4}
+.stwrap{position:relative;width:100%}
+.stpill{width:100%;display:flex;align-items:center;justify-content:center;gap:5px;border-radius:11px;min-height:38px;
+  font:700 9.5px 'IBM Plex Mono';letter-spacing:.06em;cursor:pointer;padding:8px 4px;
+  background:rgba(24,200,255,.14);border:1px solid rgba(24,200,255,.55);color:#18C8FF}
+.stpill i{font-style:normal;font-size:8px;opacity:.7}
+.stpill.sold{background:rgba(94,230,168,.14);border-color:rgba(94,230,168,.55);color:#5ee6a8}
+.stpill.no_show{background:rgba(255,206,84,.14);border-color:rgba(255,206,84,.55);color:#ffce54}
+.stmenu{display:none;position:absolute;right:0;bottom:calc(100% + 5px);z-index:60;min-width:128px;
+  background:#0a1a3d;border:1px solid rgba(24,200,255,.3);border-radius:12px;padding:5px;
+  box-shadow:0 14px 34px rgba(0,0,0,.55)}
+.stwrap.open .stmenu{display:block}
+.stmenu button{display:block;width:100%;text-align:left;background:transparent;border:none;border-radius:8px;
+  font:700 10px 'IBM Plex Mono';letter-spacing:.06em;color:#cdd8ee;padding:9px 10px;cursor:pointer}
+.stmenu button:hover{background:rgba(24,200,255,.12)}
+.stmenu button.cur{color:#18C8FF}
+.stmenu button.confirmed{color:#18C8FF}.stmenu button.sold{color:#5ee6a8}.stmenu button.no_show{color:#ffce54}
+/* R22 — even card: name big, car small (both full-width of the image); right stack = 3 identical blocks */
+.lead .nm{font:800 17px Manrope;color:#18C8FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lead .car{font:700 12px Manrope;color:#fff;margin:2px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rstack{flex:0 0 104px;display:flex;flex-direction:column;gap:6px;align-self:stretch}
+.rstack .rblk,.rstack .stwrap{flex:1 1 0;min-height:0}
+.rblk{min-height:0}
+.stwrap{display:flex}
+.stpill{height:100%;min-height:0}
+/* R22d: credit + match blocks match the CarNimbus blue — same as the name and Confirmed */
+.rblk.cb,.rblk.cb-r,.rblk.cb-y,.rblk.cb-l,.rblk.cb-g,.rblk.mt{background:rgba(24,200,255,.14);border-color:rgba(24,200,255,.55)}
+.rblk.cb b,.rblk.cb-r b,.rblk.cb-y b,.rblk.cb-l b,.rblk.cb-g b,.rblk.mt b{color:#18C8FF}
+/* R22 — voice-first Ask-NIMBUS: prominent mic, pulsing while listening */
+.asknimbus button{font-size:18px;padding:10px 13px;border:1px solid rgba(24,200,255,.35)}
+.asknimbus button.listening{background:rgba(253,164,175,.2);border-color:rgba(253,164,175,.7);animation:micpulse 1.1s ease-in-out infinite}
+@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(253,164,175,.45)}50%{box-shadow:0 0 0 8px rgba(253,164,175,0)}}
+/* R22c — fluidity: instant taps, springy presses, entrance motion, cheap offscreen paint */
+*{-webkit-tap-highlight-color:transparent}
+button,.lead,.vrow,.bkt,.seg button,.stpill,.stmenu button{touch-action:manipulation}
+.lead,.vrow,.bkt,.seg button,.stpill,.rblk,.btn{transition:transform .14s cubic-bezier(.2,.9,.3,1.4),background .18s ease,border-color .18s ease,box-shadow .18s ease}
+.lead:active,.vrow:active{transform:scale(.985)}
+.bkt:active,.seg button:active,.stpill:active,.btn:active{transform:scale(.95)}
+.lead:hover{border-color:rgba(24,200,255,.4);box-shadow:0 6px 22px rgba(3,10,26,.45)}
+.trow{animation:rowin .32s cubic-bezier(.2,.8,.3,1) both}
+.vrow{animation:rowin .28s cubic-bezier(.2,.8,.3,1) both}
+@keyframes rowin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.trow:nth-child(2){animation-delay:.03s}.trow:nth-child(3){animation-delay:.06s}.trow:nth-child(4){animation-delay:.09s}
+.trow:nth-child(5){animation-delay:.12s}.trow:nth-child(6){animation-delay:.15s}
+.vrow{content-visibility:auto;contain-intrinsic-size:78px}
+.sheet{animation:sheetup .30s cubic-bezier(.2,.8,.25,1) both}
+@keyframes sheetup{from{opacity:.4;transform:translateY(26px)}to{opacity:1;transform:none}}
+.stmenu{animation:menupop .16s cubic-bezier(.2,.9,.3,1.3) both;transform-origin:bottom right}
+@keyframes menupop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.trow,.vrow,.sheet,.stmenu{animation:none}}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 14px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:420px;height:420px;background:rgba(24,200,255,.1);top:-80px;right:-60px"></div><div class="cine-vig"></div></div>
+    <div class="z row" style="align-items:center;gap:12px;padding:16px;min-height:64px;border-bottom:1px solid rgba(24,200,255,.12);flex-wrap:wrap">
+      <a href="/clear" style="display:inline-flex;align-items:center;gap:8px"><img src="/assets/logo-96.png" alt="" style="width:24px;height:24px"><b style="font:700 13px 'Space Grotesk';color:#fff">CarNimbus</b></a>
+      <img id="dc-logo" alt="" style="display:none;height:40px;width:auto;max-width:96px;border-radius:7px;object-fit:contain;margin-left:2px">
+      <span id="dc-store" style="font:600 14px Manrope;color:#8ca0c4;border-left:1px solid rgba(24,200,255,.18);padding-left:12px">Console</span>
+      <span id="dc-demo" style="display:none;font:700 9px 'IBM Plex Mono';letter-spacing:.14em;color:#ffce54;border:1px solid rgba(255,206,84,.5);border-radius:7px;padding:3px 7px">DEMO</span>
+      <button id="dc-out" type="button" class="btn ghost sm" style="margin-left:auto">Sign out</button>
+    </div>
+    <div class="z" style="padding:16px">
+      <div id="gate401" style="display:none;text-align:center;padding:60px 20px"><div class="disp" style="font-size:20px">Sign in with your dealer account.</div><a class="btn primary md" href="/signin" style="text-decoration:none;margin-top:14px;display:inline-flex">Sign in</a></div>
+      <div id="gate403" style="display:none;text-align:center;padding:60px 20px"><div class="disp" style="font-size:20px">Your access is pending.</div><div style="font:500 13px Manrope;color:#aebfdf;margin-top:6px">We'll email you the moment your partnership is active.</div><a class="btn primary md" href="/signin" style="text-decoration:none;margin-top:14px;display:inline-flex">Request access</a></div>
+
+      <div id="console" style="display:none">
+        <div class="seg" style="margin-bottom:14px">
+          <button id="tab-leads" class="on" type="button">MATCHES</button>
+          <button id="tab-inv" type="button">INVENTORY</button>
+        </div>
+
+        <!-- TODAY — the salesman's day: calendar rows + outcome buckets -->
+        <section id="pane-leads">
+          <div id="leads"></div>
+          <div id="buckets" class="buckets">
+            <button class="bkt on" data-bkt="confirmed" type="button">CONFIRMED <b id="bk-confirmed">0</b></button>
+            <button class="bkt" data-bkt="sold" type="button">SOLD <b id="bk-sold">0</b></button>
+            <button class="bkt" data-bkt="no_show" type="button">NO SHOW <b id="bk-no_show">0</b></button>
+            <button class="bkt" data-bkt="cancelled" type="button">CANCELLED <b id="bk-cancelled">0</b></button>
+          </div>
+        </section>
+
+        <!-- INVENTORY -->
+        <section id="pane-inv" style="display:none">
+          <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="asknimbus"><input id="inv-ask" placeholder="Ask NIMBUS — search your lot…" autocomplete="off"><button id="inv-mic" type="button" aria-label="Voice">🎙</button></div>
+            <button id="new-listing" type="button" class="btn primary sm">+ New</button>
+          </div>
+          <!-- Creator payouts scale with days-on-lot, and lot_date is data only a dealer can supply. -->
+          <div id="lotnudge" style="display:none;border:1px solid rgba(255,206,84,.42);background:rgba(255,206,84,.09);border-radius:12px;padding:11px 12px;margin-bottom:10px;font:500 11px/1.6 Manrope;color:#ffce54"></div>
+          <div id="sections" class="sections"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+
+<!-- STORE SETTINGS -->
+<div id="set-bg" class="sheet-bg" role="dialog" aria-modal="true"><div class="sheet" style="max-width:440px">
+  <button id="set-x" class="sheet-x" type="button" aria-label="Close">✕</button>
+  <div class="disp" style="font-size:18px;font-weight:700">Store economics</div>
+  <p style="font:500 12px Manrope;color:#8ca0c4;margin:6px 0 4px">Your real numbers — commission and savings compute from these.</p>
+  <div class="setrow"><label>Commission %</label><input id="set-comm" type="number" min="0" max="100" placeholder="25"></div>
+  <div class="setrow"><label>Holding $/day</label><input id="set-hold" type="number" min="0" placeholder="32"></div>
+  <div class="setrow"><label>Pack fee $</label><input id="set-pack" type="number" min="0" placeholder="0"></div>
+  <button id="set-save" type="button" class="btn primary md" style="width:100%;margin-top:14px">Save</button>
+  <div id="set-msg" style="font:600 11px Manrope;color:#5ee6a8;margin-top:8px;text-align:center"></div>
+  <button id="set-out" type="button" class="btn ghost sm" style="width:100%;margin-top:14px;border-color:rgba(255,255,255,.18);color:#8ca0c4">Sign out</button>
+</div></div>
+
+<!-- INGEST / NEW-LISTING SHEET -->
+<div id="ingest-bg" class="sheet-bg" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <button id="ingest-x" class="sheet-x" type="button" aria-label="Close">✕</button>
+    <div class="disp" id="ig-title" style="font-size:18px;font-weight:700">New listing</div>
+    <div id="ig-paste">
+      <div class="row" style="gap:8px;margin-top:10px">
+        <input id="ig-url" class="field" type="url" placeholder="Paste a listing link — we fill everything" style="flex:1;height:44px" inputmode="url">
+        <button id="ig-fetch" type="button" class="btn primary sm">Fetch</button>
+      </div>
+      <div id="ig-fmsg" style="display:none;font:600 10px Manrope;color:#fda4af;margin-top:6px"></div>
+    </div>
+    <div id="ig-hero" class="ighero"><span class="ph-ph">NO PHOTO</span></div>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <button id="ig-addphoto" type="button" class="btn ghost sm" style="flex:1">＋ Add photo</button>
+      <input id="ig-file" type="file" accept="image/*" style="display:none">
+    </div>
+    <div id="ig-title-lg" class="igtl"></div>
+    <div class="iggrid">
+      <input id="ig-year" class="field" inputmode="numeric" placeholder="Year">
+      <input id="ig-make" class="field" placeholder="Make">
+      <input id="ig-model" class="field" placeholder="Model">
+      <input id="ig-trim" class="field" placeholder="Trim">
+      <input id="ig-miles" class="field" placeholder="Miles">
+      <input id="ig-price" class="field" inputmode="numeric" placeholder="$ Price">
+      <input id="ig-mo" class="field" inputmode="numeric" placeholder="$ / month">
+      <select id="ig-band" class="field">
+        <option value="800+">800+</option><option value="740-799">740-799</option>
+        <option value="670-739">670-739</option><option value="580-669">580-669</option>
+        <option value="under 580">under 580</option>
+      </select>
+      <input id="ig-cost" class="field" inputmode="numeric" placeholder="$ What you paid">
+      <input id="ig-lotdate" class="field" type="date" title="On lot since">
+    </div>
+    <details id="ig-more"><summary>More details</summary>
+      <div class="iggrid" style="margin-top:10px">
+        <input id="ig-engine" class="field" placeholder="Engine">
+        <input id="ig-dt" class="field" placeholder="Drivetrain">
+        <input id="ig-ext" class="field" placeholder="Exterior color">
+        <input id="ig-int" class="field" placeholder="Interior color">
+        <input id="ig-wheels" class="field" placeholder="Wheels">
+      </div>
+      <textarea id="ig-desc" class="field" placeholder="Description" style="margin-top:10px"></textarea>
+      <textarea id="ig-photos" class="field" placeholder="Photo URLs — one per line" style="margin-top:10px"></textarea>
+      <div id="ig-thumbs" class="thumbs"></div>
+    </details>
+    <button id="ig-pub" type="button" class="btn primary md" style="width:100%;margin-top:14px">Publish listing</button>
+    <button id="ig-arch" type="button" class="archlink" style="display:none">Archive — sold / removed</button>
+    <div id="ig-msg" style="font:600 11px Manrope;color:#8ca0c4;margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- LEAD PROFILE -->
+<div id="lead-bg" class="sheet-bg" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <button id="lp-x" class="sheet-x" type="button" aria-label="Close">✕</button>
+    <div class="row" style="align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div id="lp-name" class="lp-head">Lead</div>
+        <div id="lp-sub" class="lp-sub"></div>
+        <div id="lp-when" class="lp-when"></div>
+      </div>
+    </div>
+    <div class="brief"><h5>CUSTOMER PROFILE</h5><div id="lp-heis" class="chips"></div><p id="lp-profile" class="ptxt"></p></div>
+    <div class="brief"><h5>STEP BY STEP</h5><ol id="lp-do"></ol></div>
+    <div class="brief say"><h5>SAY THIS</h5><div id="lp-say"></div></div>
+    <div id="lp-kpis" class="kpirow"></div>
+    <button class="msgtoggle" data-tgl="lp-trade" type="button">▸ Trade-In</button>
+    <div id="lp-trade" style="display:none"></div>
+    <button class="msgtoggle" data-tgl="lp-deal" type="button">▸ View numbers</button>
+    <div id="lp-deal" class="deal" style="display:none;margin-top:6px"></div>
+    <button class="msgtoggle" data-tgl="lp-contact" type="button">▸ View contact</button>
+    <div id="lp-contact" style="display:none"></div>
+    <button id="lp-msgtoggle" class="msgtoggle" type="button">▸ View messages</button>
+    <div id="lp-thread" style="display:none"></div>
+    <button class="msgtoggle" data-tgl="lp-timeline" type="button">▸ View timeline</button>
+    <div id="lp-timeline" style="display:none"></div>
+    <div class="row" style="gap:8px;margin-top:16px">
+      <a id="lp-gcal" class="btn ghost sm" style="flex:1;text-decoration:none" target="_blank" rel="noopener">＋ Google Calendar</a>
+      <a id="lp-ics" class="btn ghost sm" style="flex:1;text-decoration:none">⤓ Add to calendar (.ics)</a>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/dealer-console.js?v=r23b" defer></script>
+</body>
+</html>

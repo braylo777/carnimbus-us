@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded",function(){
   // ---- SIGN OUT ---- (R23b: plain header button — store-economics gear removed per founder)
   // $s() not $() — cached-HTML/new-JS version skew must never kill the whole boot again.
   function signOut(){
-    document.cookie="cn_dlr=; Max-Age=0; path=/; domain=.carnimbus.com";
+    document.cookie="cn_dlr=; Max-Age=0; path=/; domain=.carnimbus.us";
     document.cookie="cn_dlr=; Max-Age=0; path=/";
     location.href="/signin";
   }
@@ -164,6 +164,12 @@ document.addEventListener("DOMContentLoaded",function(){
         $("dc-demo").style.display=DEALER.is_demo?"":"none";
         return null; }
       LISTINGS=d.listings||[];ARCHIVED=d.archived||[];
+      // Creators earn more for moving aged units, and that math needs a real lot date.
+      // Absent stays absent — we never guess one. This nudge is the only place that asks.
+      if(d.no_lot_date>0){ var ln=$s("lotnudge");
+        ln.innerHTML="<b>"+d.no_lot_date+" car"+(d.no_lot_date===1?"":"s")+" have no lot date.</b> "+
+          "Creators earn more for moving older units — add dates so yours qualify. Tap a car → Lot date.";
+        ln.style.display=""; }
       $("dc-store").textContent=DEALER.dealership||"Console";
       if(DEALER.logo){ var lg=$("dc-logo"); lg.src=DEALER.logo; lg.style.display=""; }
       $("dc-demo").style.display=DEALER.is_demo?"":"none";   // R7-D: unambiguous DEMO chip on the test tenant

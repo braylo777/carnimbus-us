@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Your offer</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh;display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+
+    <div class="z row" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12)">
+      <a href="/scan" class="btn ghost sm" style="text-decoration:none">‹ Scan</a>
+      <div class="disp" style="font-size:15px;margin-left:auto">CarNimbus <span class="cy">for Dealers</span></div>
+    </div>
+
+    <div class="z" style="flex:1;width:100%;max-width:440px;margin:0 auto;padding:18px 20px 32px;color:#e2e9f2">
+
+      <div id="loading" class="mono" style="font-size:11px;color:#8ca0c4;letter-spacing:.18em;padding:40px 0;text-align:center">PRICING…</div>
+      <div class="wl-msg" id="offer-msg" style="display:none"></div>
+
+      <div id="body" style="display:none">
+        <!-- 1. Did I scan the right car. This comes first, always. -->
+        <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">THE UNIT</div>
+        <div class="disp" id="car-name" style="font-size:24px;font-weight:700;margin-top:4px">—</div>
+        <div id="car-vin" class="mono" style="font-size:11px;color:#8ca0c4;letter-spacing:.10em;margin-top:4px"></div>
+
+        <!-- 2. The offer. -->
+        <div class="glass pd" style="margin-top:18px;border-radius:20px;text-align:center">
+          <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">CARNIMBUS PAYS YOU</div>
+          <div id="offer-amt" class="disp cy" style="font-size:42px;font-weight:800;margin-top:6px;letter-spacing:-.02em">—</div>
+          <div id="offer-unpriced" style="display:none;font:500 12px/1.6 Manrope;color:#f5a623;margin-top:8px">
+            We don't have a wholesale market read on this VIN yet. Everything below is from the VIN decode only — no price is being quoted.
+          </div>
+        </div>
+
+        <!-- 3. The aging case. This is the product. -->
+        <div id="aging" class="glass pd" style="display:none;margin-top:12px;border-radius:18px">
+          <div class="row" style="align-items:baseline">
+            <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">AGING</div>
+            <div id="dol" class="disp" style="font-size:18px;font-weight:700;margin-left:auto">—</div>
+          </div>
+          <div id="aging-line" style="font:500 12px/1.6 Manrope;color:#e2e9f2;margin-top:8px"></div>
+          <div style="font:500 11px/1.5 Manrope;color:#8ca0c4;margin-top:6px">Benchmark: $4,954 average discount to clear a prior-model-year unit. S&amp;P Global Mobility, March 2026.</div>
+        </div>
+
+        <!-- 4. Market band. -->
+        <div id="band-wrap" class="glass pd" style="display:none;margin-top:12px;border-radius:18px">
+          <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em">WHOLESALE BAND</div>
+          <div class="meter" style="margin-top:12px;position:relative;height:6px;background:rgba(255,255,255,.10);border-radius:3px">
+            <div id="band-fill" style="position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgba(24,200,255,.35),rgba(24,200,255,.85));border-radius:3px;width:0"></div>
+            <div id="band-mark" style="position:absolute;top:-5px;width:2px;height:16px;background:#fff;left:0"></div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div id="band-low" class="mono" style="font-size:10px;color:#8ca0c4"></div>
+            <div id="band-high" class="mono" style="font-size:10px;color:#8ca0c4;margin-left:auto"></div>
+          </div>
+        </div>
+
+        <!-- 5. Condition. -->
+        <div id="cond" class="glass pd" style="display:none;margin-top:12px;border-radius:18px"></div>
+
+        <!-- 6. The fee, BEFORE the button. Never after. -->
+        <div style="margin-top:18px;padding:12px 14px;border-radius:14px;border:1px solid rgba(24,200,255,.22);background:rgba(24,200,255,.05)">
+          <div class="row" style="align-items:baseline">
+            <div style="font:600 12px Manrope;color:#aebfdf">CarNimbus fee</div>
+            <div id="fee-amt" class="disp" style="font-size:16px;font-weight:700;margin-left:auto">$895</div>
+          </div>
+          <div style="font:500 11px/1.5 Manrope;color:#8ca0c4;margin-top:4px">Deducted at settlement. Nothing is charged if the deal does not close.</div>
+        </div>
+
+        <button id="confirm" class="btn primary md" type="button" style="width:100%;margin-top:14px">Confirm this unit</button>
+        <a href="/scan" class="btn ghost md" style="width:100%;margin-top:10px;text-decoration:none;justify-content:center">Scan another</a>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/app-offer.js" defer></script>
+</body>
+</html>

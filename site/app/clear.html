@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Clear today</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh;display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+
+    <div class="z row" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12)">
+      <div class="disp" style="font-size:15px">CarNimbus <span class="cy">for Dealers</span></div>
+      <a href="/deals" class="btn ghost sm" style="margin-left:auto;text-decoration:none">Deals</a>
+      <a href="/console" class="btn ghost sm" style="margin-left:8px;text-decoration:none">Console</a>
+    </div>
+
+    <div class="z" style="flex:1;width:100%;max-width:440px;margin:0 auto;padding:18px 20px 100px;color:#e2e9f2">
+      <div class="row" style="align-items:baseline">
+        <div class="disp" style="font-size:22px;font-weight:700">Clear today</div>
+        <div id="count" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.18em;margin-left:auto"></div>
+      </div>
+      <div style="font:500 12px Manrope;color:#8ca0c4;margin-top:4px">Aged units that people are searching for and not finding.</div>
+
+      <div id="loading" class="mono" style="font-size:11px;color:#8ca0c4;letter-spacing:.18em;padding:40px 0;text-align:center">READING DEMAND…</div>
+      <div class="wl-msg" id="c-msg" style="display:none;margin-top:14px"></div>
+
+      <div id="list" style="margin-top:14px"></div>
+
+      <div id="empty" style="display:none;text-align:center;padding:44px 8px">
+        <div class="disp" style="font-size:17px">Nothing has enough signal yet.</div>
+        <div style="font:500 12px/1.6 Manrope;color:#8ca0c4;margin-top:8px">We'd rather say that than guess. Recommendations appear once enough people search your segment in your area.</div>
+      </div>
+    </div>
+
+    <div class="z" style="position:sticky;bottom:0;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(6,22,59,0),rgba(6,22,59,.94) 34%)">
+      <a href="/scan" class="btn primary md" style="width:100%;text-decoration:none;justify-content:center">Scan a VIN</a>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/app-rail.js" defer></script>
+<script src="/assets/js/app-clear.js" defer></script>
+</body>
+</html>

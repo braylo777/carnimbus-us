@@ -19,7 +19,13 @@ document.addEventListener("DOMContentLoaded",function(){
       if(r.status===409){done();return msg("That email already has an account — log in instead.");}
       if(r.status===400){done();return msg("Check your email and use an 8+ character password.");}
       var d=await r.json().catch(function(){return{};});
-      if(d&&d.ok) return location.href="https://dealer.carnimbus.com/console";
+      // Honor ?next=. worker.js:170 bounces a signed-out dealer here with the page they wanted, and
+      // every app-*.js builds one — this line used to throw it away, so a dealer who clicked a link
+      // to their clearance queue landed on the legacy console instead. The regex requires a single
+      // leading slash, which rejects "//evil.com" and "\\evil.com"; without it, next= is an open
+      // redirect. Default is /clear, the app root (worker.js:208), not /console.
+      if(d&&d.ok){ var n=new URLSearchParams(location.search).get("next");
+                   return location.href=(n&&/^\/[A-Za-z0-9/_-]*$/.test(n))?n:"/clear"; }
       done(); msg("Something went wrong — try again.");
     }catch(e){ done(); msg("Something went wrong — try again."); }
   }

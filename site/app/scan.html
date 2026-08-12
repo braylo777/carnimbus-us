@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Scan a VIN</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh;display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+
+    <div class="z row" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12)">
+      <div class="disp" style="font-size:15px">CarNimbus <span class="cy">for Dealers</span></div>
+      <a href="/deals" class="btn ghost sm" style="margin-left:auto;text-decoration:none">My deals</a>
+    </div>
+
+    <div class="z" style="flex:1;width:100%;max-width:440px;margin:0 auto;padding:18px 20px 32px;color:#e2e9f2">
+      <div class="disp" style="font-size:22px;font-weight:700">Scan the VIN</div>
+      <div style="font:500 13px Manrope;color:#aebfdf;margin-top:4px">Door jamb, dash plate, or the sticker in the frame.</div>
+
+      <!-- Tier 1/2: camera. Hidden entirely when getUserMedia is unavailable. -->
+      <div id="cam-wrap" style="display:none;margin-top:16px">
+        <div style="position:relative;border-radius:20px;overflow:hidden;border:1px solid rgba(24,200,255,.35);background:#04102a">
+          <video id="cam" playsinline muted style="width:100%;display:block;min-height:240px"></video>
+          <div style="position:absolute;left:8%;right:8%;top:34%;height:26%;border:2px solid rgba(24,200,255,.7);border-radius:12px;pointer-events:none"></div>
+        </div>
+        <canvas id="shot" style="display:none"></canvas>
+        <!-- Tier 2 (every iPhone: no BarcodeDetector). Deliberately a button, never a timer —
+             an auto-firing OCR loop bills Workers AI on every frame the dealer is just aiming. -->
+        <button id="read-btn" class="btn primary md" type="button" style="width:100%;margin-top:12px;display:none">Read the VIN</button>
+        <div id="cam-hint" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em;margin-top:8px;text-align:center"></div>
+      </div>
+
+      <!-- Tier 3: always visible. Never a fallback you have to discover. -->
+      <div class="glass pd" style="margin-top:16px;border-radius:18px">
+        <div style="font:700 12px Manrope;color:#e2e9f2">Or type it</div>
+        <label class="vh" for="vin-manual">Vehicle identification number</label>
+        <input id="vin-manual" class="pill" style="margin-top:8px;text-transform:uppercase;letter-spacing:.08em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace"
+               placeholder="17 characters" maxlength="17" autocomplete="off" autocorrect="off"
+               autocapitalize="characters" spellcheck="false" inputmode="text">
+        <div class="row" style="align-items:center;margin-top:8px">
+          <div id="vin-count" class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.14em">0 / 17</div>
+          <div class="mono" style="font-size:10px;color:#5c6f92;letter-spacing:.14em;margin-left:auto">NO I · O · Q</div>
+        </div>
+        <button id="vin-go" class="btn primary md" type="button" style="width:100%;margin-top:12px">Look up this VIN</button>
+      </div>
+
+      <div class="wl-msg" id="scan-msg" style="display:none;margin-top:14px"></div>
+
+      <!-- Check-digit failures render here, loudly. A transposed VIN is still a real VIN — it just
+           belongs to a different car — so this must never look like a soft validation hint. -->
+      <div id="vin-bad" class="glass pd" style="display:none;margin-top:14px;border-radius:16px;border:1px solid rgba(245,166,35,.45)">
+        <div style="font:800 13px Manrope;color:#f5a623">That VIN does not check out</div>
+        <div id="vin-bad-why" style="font:500 12px/1.6 Manrope;color:#e2e9f2;margin-top:6px"></div>
+        <div style="font:500 12px/1.6 Manrope;color:#aebfdf;margin-top:8px">A VIN with a bad check digit is usually two characters swapped — and the swapped version is a real car, just not this one. Check the plate again before continuing.</div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/app-scan.js" defer></script>
+</body>
+</html>

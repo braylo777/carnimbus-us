@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus for Creators</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+/* Page-local, mirroring site/dealer/console.html — the shared styles.css has no .seg override,
+   no .buckets and no .sheet. Same vocabulary as the dealer console so the two portals feel identical. */
+.seg{display:flex;gap:4px;background:rgba(255,255,255,.05);border:1px solid rgba(24,200,255,.18);border-radius:12px;padding:4px}
+.seg button{flex:1;border:none;background:transparent;color:#8ca0c4;font:700 12px Manrope;letter-spacing:.06em;padding:10px 6px;border-radius:9px;cursor:pointer;min-height:44px}
+.seg button.on{background:rgba(24,200,255,.16);color:#18C8FF}
+
+/* Sits IN FLOW at the top of DROPS, not pinned to the viewport. A fixed opaque bar covered the
+   bottom of the page and killed the see-through scroll under Safari's toolbar — the dealer
+   console's INVENTORY pane has no bottom chrome for exactly this reason. */
+.buckets{display:flex;gap:1px;background:rgba(24,200,255,.14);border:1px solid rgba(24,200,255,.18);
+  border-radius:12px;overflow:hidden;margin-bottom:14px}
+/* The bottom bar is a FILTER, not a scoreboard — same contract as the dealer console's bucket bar. */
+.bkt{flex:1;background:#08194a;border:none;color:#8ca0c4;font:700 9px 'IBM Plex Mono';letter-spacing:.1em;
+  padding:11px 4px;min-height:52px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.bkt b{font:700 15px Manrope;color:#e2e9f2;letter-spacing:0}
+.bkt.pay b{color:#3ddc84}
+.bkt.on{background:rgba(24,200,255,.16);color:#18C8FF}
+.bkt.on b{color:#18C8FF}
+.bkt.pay.on b{color:#3ddc84}
+
+/* Rooftop tile — square, sits left of the dealership name, mirroring the car thumbnails. */
+.bandsec h4 .lg{width:38px;height:38px;border-radius:9px;flex:0 0 auto;object-fit:cover;
+  background:rgba(24,200,255,.10);border:1px solid rgba(24,200,255,.20)}
+.bandsec h4 .lgt{width:38px;height:38px;border-radius:9px;flex:0 0 auto;display:flex;align-items:center;
+  justify-content:center;background:rgba(24,200,255,.12);border:1px solid rgba(24,200,255,.24);
+  color:#18C8FF;font:800 14px 'Space Grotesk';letter-spacing:.02em}
+.bandsec h4 .hd{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+
+.sheet-bg{position:fixed;inset:0;z-index:80;background:rgba(3,8,20,.92);display:none;align-items:stretch;justify-content:center}
+.sheet{background:#0a1f4d;border:none;border-radius:0;width:100%;max-width:none;max-height:100dvh;overflow-y:auto;padding:0 16px 40px;position:relative;
+  animation:sheetup .30s cubic-bezier(.2,.8,.25,1) both}
+@keyframes sheetup{from{opacity:.4;transform:translateY(26px)}to{opacity:1;transform:none}}
+.sheet-x{position:sticky;top:0;right:auto;margin:10px -4px 0 auto;display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;background:rgba(255,255,255,.14);border:1px solid rgba(24,200,255,.55);border-radius:50%;
+  color:#fff;font:700 20px/1 Manrope;padding:0;z-index:2;cursor:pointer}
+body.locked{overflow:hidden}
+
+.dcard{border:1px solid rgba(24,200,255,.16);background:rgba(255,255,255,.03);border-radius:14px;padding:11px;margin-bottom:9px;
+  display:flex;gap:11px;align-items:center;cursor:pointer;width:100%;text-align:left}
+.dcard.best{border-color:rgba(24,200,255,.42)}
+.dcard .th{width:78px;height:58px;border-radius:10px;flex:0 0 auto;background:rgba(24,200,255,.08);object-fit:cover}
+.dcard .ttl{font:600 13px/1.35 Manrope;color:#e2e9f2}
+.dcard .sub{font:500 10px/1.5 Manrope;color:#7b8fab;margin-top:2px}
+.dcard .why{font:400 10px/1.5 Manrope;color:#18C8FF;margin-top:3px}
+.dcard .amt{font:700 17px/1 Manrope;color:#18C8FF;text-align:right;flex:0 0 auto}
+.dcard .per{font:500 9px/1.4 Manrope;color:#7b8fab;text-align:right}
+/* Age is shown ONLY when a dealer supplied a real lot_date. Amber past 60 days — the visual
+   lesson that an older unit needs to move and therefore pays more. */
+.dcard .age{font:700 10px 'IBM Plex Mono';color:#7b8fab;margin-top:3px;display:inline-block}
+.dcard .age.hot{color:#ffce54}
+.dcard .crowd{font:500 10px Manrope;color:#7b8fab;margin-left:7px}
+
+/* Dealership sections — the creator decides where to shoot, so the rooftop is the bucket.
+   Lifted from site/dealer/console.html:18-21. */
+.sfilter{width:100%;background:rgba(0,0,0,.25);border:1px solid rgba(24,200,255,.22);border-radius:10px;
+  color:#fff;font:500 12px Manrope;padding:11px 12px;margin-bottom:10px;outline:none;box-sizing:border-box;min-height:44px}
+.sfilter:focus{border-color:#18C8FF}
+.bandsec{background:rgba(255,255,255,.03);border:1px solid rgba(24,200,255,.14);border-radius:14px;padding:12px;margin-bottom:10px}
+.bandsec h4{font:800 15px 'Space Grotesk';color:#fff;margin:0;display:flex;justify-content:space-between;
+  align-items:center;cursor:pointer;gap:8px;min-height:44px}
+.bandsec h4 .ct{font:700 11px 'IBM Plex Mono';color:#18C8FF;border:1px solid rgba(24,200,255,.35);
+  border-radius:8px;padding:3px 8px;flex:0 0 auto}
+.bandsec h4 small{font:500 10px Manrope;color:#7b8fab;display:block;margin-top:2px;font-weight:500}
+.bandsec .body{display:none;margin-top:10px}
+.bandsec.open .body{display:block}
+.bandsec .body .dcard:last-child{margin-bottom:0}
+
+.reflink{border:1px solid rgba(24,200,255,.28);background:rgba(24,200,255,.06);border-radius:14px;padding:12px;margin-bottom:14px}
+.reflink input{width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(24,200,255,.22);border-radius:10px;
+  padding:10px 11px;color:#fff;font:500 12px ui-monospace,monospace;margin-top:8px;min-height:44px}
+.kv{display:flex;justify-content:space-between;font:400 11px/1.9 Manrope;color:#b9c8dd}
+.pane{padding-bottom:24px}
+/* Signed out there is one card and nothing else, so it sits in the optical centre of the
+   screen instead of hugging the header. Signed in the console flows from the top as normal. */
+#cr-main.centered{display:flex;flex-direction:column;justify-content:center;min-height:0}
+#cr-main.centered #gate-auth{width:100%;padding-bottom:8vh}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:100dvh;display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.10);top:-90px;right:-50px"></div><div class="cine-vig"></div></div>
+
+    <!-- HEADER — mirrors site/dealer/console.html:254-260 -->
+    <div class="z row" style="align-items:center;gap:12px;padding:16px;min-height:64px;border-bottom:1px solid rgba(24,200,255,.12);flex-wrap:wrap">
+      <!-- Absolute, to the public site. On creator.carnimbus.us "/" was the marketing page; on app.
+           it is the dealer queue, which redirects a creator straight to a dealer login they cannot
+           pass. The wordmark must never be a trap door. -->
+      <a href="https://carnimbus.us/" style="display:inline-flex;align-items:center;gap:8px"><img src="/assets/logo-96.png" alt="" style="width:24px;height:24px"><b style="font:700 13px 'Space Grotesk';color:#fff">CarNimbus</b></a>
+      <span id="cr-tag" style="font:600 14px Manrope;color:#8ca0c4;border-left:1px solid rgba(24,200,255,.18);padding-left:12px">for Creators</span>
+      <button id="cr-av" type="button" title="Change photo" aria-label="Change photo" style="display:none;width:34px;height:34px;min-height:34px;border-radius:50%;border:1px solid rgba(24,200,255,.45);background:#0a1f4d center/cover no-repeat;padding:0;cursor:pointer;flex:0 0 auto"></button>
+      <span id="cr-name" style="font:600 13px Manrope;color:#e2e9f2"></span>
+      <button id="cr-out" type="button" class="btn ghost sm" style="margin-left:auto;display:none">Sign out</button>
+      <input id="cr-avfile" type="file" accept="image/*" class="vh">
+    </div>
+
+    <div id="cr-main" class="z" style="flex:1;width:100%;max-width:560px;margin:0 auto;padding:16px 18px;color:#e2e9f2">
+
+      <!-- GATE: signed out -->
+      <div id="gate-auth" style="display:none">
+        <div style="font:700 19px/1.35 Manrope;text-align:center;margin:8px 0 4px">Get paid to post cars.</div>
+        <div class="glass pd" id="au-login" style="margin-top:16px;border-radius:18px">
+          <input id="au-email" type="email" class="pill" placeholder="you@email.com" autocomplete="username" inputmode="email">
+          <input id="au-pass" type="password" class="pill" placeholder="Password" autocomplete="current-password" style="margin-top:12px">
+          <button id="au-go" class="btn primary md" style="width:100%;margin-top:14px">Log In</button>
+          <button id="au-toggle" class="btn ghost md" style="width:100%;margin-top:10px">Create Account</button>
+          <div class="wl-msg" id="au-msg" style="display:none;margin-top:12px"></div>
+        </div>
+        <div class="glass pd" id="au-signup" style="margin-top:16px;border-radius:18px;display:none">
+          <input id="su-email" type="email" class="pill" placeholder="you@email.com" autocomplete="username" inputmode="email">
+          <input id="su-pass" type="password" class="pill" placeholder="Password (8+ characters)" autocomplete="new-password" style="margin-top:12px">
+          <select id="su-platform" class="pill" style="margin-top:12px">
+            <option value="tiktok">TikTok</option><option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option><option value="x">X</option>
+          </select>
+          <input id="su-handle" type="text" class="pill" placeholder="@yourhandle" autocomplete="off" style="margin-top:12px">
+          <input id="su-followers" type="text" class="pill" placeholder="Followers" inputmode="numeric" style="margin-top:12px">
+          <button id="su-go" class="btn primary md" style="width:100%;margin-top:14px">Create Account</button>
+          <button id="su-back" class="btn ghost md" style="width:100%;margin-top:10px">Back to sign in</button>
+          <div class="wl-msg" id="su-msg" style="display:none;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- GATE: pending -->
+      <div id="gate-pending" style="display:none;text-align:center;padding:56px 20px">
+        <div class="disp" style="font-size:20px">You&rsquo;re in the queue.</div>
+        <div style="font:500 13px Manrope;color:#aebfdf;margin-top:8px">We review accounts by hand. We&rsquo;ll email you the moment you&rsquo;re in.</div>
+      </div>
+
+      <!-- CONSOLE -->
+      <div id="console" style="display:none">
+        <div class="seg" style="margin-bottom:14px">
+          <button id="tab-drops" class="on" type="button">DROPS</button>
+          <button id="tab-earn" type="button">EARNINGS</button>
+        </div>
+
+        <section id="pane-drops" class="pane">
+          <!-- Deck v13 S-04 screen 1. Read-only counters, deliberately NOT the bucket bar below —
+               those are filters (data-bkt drives BUCKET in creator-app.js), and turning a control
+               into a statistic would have silently broken the OPEN/CLAIMED toggle. -->
+          <div class="row" id="cr-kpi" style="gap:10px;margin-bottom:12px">
+            <div class="glass" style="flex:1;border-radius:12px;padding:10px 12px;text-align:center">
+              <div style="font:700 9px 'IBM Plex Mono';letter-spacing:.14em;color:#7b8fab">LIVE</div>
+              <div id="kpi-live" style="font:700 20px Manrope;color:#fff;margin-top:2px">0</div>
+            </div>
+            <div class="glass" style="flex:1;border-radius:12px;padding:10px 12px;text-align:center">
+              <div style="font:700 9px 'IBM Plex Mono';letter-spacing:.14em;color:#7b8fab">CLICKS</div>
+              <div id="kpi-clicks" style="font:700 20px Manrope;color:#18C8FF;margin-top:2px">0</div>
+            </div>
+            <div class="glass" style="flex:1;border-radius:12px;padding:10px 12px;text-align:center">
+              <div style="font:700 9px 'IBM Plex Mono';letter-spacing:.14em;color:#7b8fab">SALES</div>
+              <div id="kpi-sales" style="font:700 20px Manrope;color:#fff;margin-top:2px">0</div>
+            </div>
+          </div>
+          <div class="buckets" id="buckets">
+            <button class="bkt on" type="button" data-bkt="open">OPEN <b id="bk-open">0</b></button>
+            <button class="bkt" type="button" data-bkt="claimed">CLAIMED <b id="bk-claimed">0</b></button>
+            <button class="bkt pay" type="button" data-bkt="paid">PAID <b id="bk-paid">$0</b></button>
+          </div>
+          <div class="reflink">
+            <div class="row" style="justify-content:space-between;align-items:baseline">
+              <div style="font:700 11px 'IBM Plex Mono';letter-spacing:.1em;color:#18C8FF">YOUR AFFILIATE LINK</div>
+              <div id="rf-stats" style="font:500 10px Manrope;color:#7b8fab"></div>
+            </div>
+            <input id="rf-url" readonly>
+            <button id="rf-copy" class="btn ghost md" style="width:100%;margin-top:9px">Copy link</button>
+          </div>
+          <input id="cr-q" class="sfilter" placeholder="Search ZIP, dealership, make, model" autocomplete="off">
+          <div id="cr-list"></div>
+          <div class="wl-msg" id="cr-msg" style="display:none;margin-top:12px"></div>
+        </section>
+
+        <section id="pane-earn" class="pane" style="display:none">
+          <div class="row" style="gap:9px">
+            <div class="glass pd" style="border-radius:14px;flex:1;text-align:center">
+              <div id="e-pending" class="disp" style="font-size:18px">&ndash;</div>
+              <div style="font:500 9px/1.4 Manrope;color:#7b8fab;margin-top:3px">IN REVIEW</div></div>
+            <div class="glass pd" style="border-radius:14px;flex:1;text-align:center">
+              <div id="e-approved" class="disp" style="font-size:18px;color:#18C8FF">&ndash;</div>
+              <div style="font:500 9px/1.4 Manrope;color:#7b8fab;margin-top:3px">APPROVED</div></div>
+            <div class="glass pd" style="border-radius:14px;flex:1;text-align:center">
+              <div id="e-paid" class="disp" style="font-size:18px;color:#3ddc84">&ndash;</div>
+              <div style="font:500 9px/1.4 Manrope;color:#7b8fab;margin-top:3px">PAID</div></div>
+          </div>
+          <div class="glass pd" id="e-connect" style="border-radius:16px;margin-top:12px;display:none">
+            <div style="font:600 13px Manrope">Set up payouts</div>
+            <div id="e-connect-body" style="font:400 11px/1.6 Manrope;color:#8fa3bf;margin-top:6px"></div>
+            <button id="e-connect-go" class="btn primary md" style="width:100%;margin-top:11px">Connect payouts</button>
+            <div class="wl-msg" id="e-msg" style="display:none;margin-top:10px"></div>
+          </div>
+          <div class="glass pd" style="border-radius:16px;margin-top:12px">
+            <div class="row" style="justify-content:space-between;align-items:baseline">
+              <div style="font:600 13px Manrope">Your NIMBUS score</div>
+              <div id="e-score-n" class="disp" style="font-size:17px;color:#18C8FF">&ndash;</div>
+            </div>
+            <div id="e-score-why" style="margin-top:8px"></div>
+          </div>
+          <div style="font:600 12px Manrope;margin:16px 0 8px">History</div>
+          <div id="e-rows"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+
+<!-- DROP SHEET — full-screen, mirrors #lead-bg (console.html:60-64) -->
+<div id="drop-bg" class="sheet-bg" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="sheet">
+    <button id="dp-x" class="sheet-x" type="button" aria-label="Close">&#10005;</button>
+    <div id="dp-body"></div>
+  </div>
+</div>
+
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js" defer></script>
+<script src="/assets/js/creator-app.js?v=1" defer></script>
+</body>
+</html>
