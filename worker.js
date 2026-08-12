@@ -9,19 +9,41 @@
 //    after fonts are self-hosted (P1) and inventory images are localized.
 
 import { scoreCar, segOf, typeOf, condOf } from "./site/assets/match.js";   // AE: single-source matching scorer (shared with eval harness)
+import { validateVin } from "./site/assets/vin.js";                        // ISO 3779 — copy of the NF broker validator; see that file's header
 
 const ALLOWED_ORIGINS = [
-  "https://carnimbus.com",
-  "https://www.carnimbus.com",
+  "https://carnimbus.us",
+  "https://www.carnimbus.us",
 ];
+
+// 2026-08-01: the ONLY hosts this Worker serves the application on. Anything else 404s at the top of
+// route(). carnimbus.com and its subdomains are NOT here on purpose — they are caught by the archive
+// redirect above this check and never reach it. Keep this in sync with `routes` in wrangler.jsonc.
+const SERVED_HOSTS = new Set([
+  "carnimbus.us",
+  "www.carnimbus.us",          // pending: not yet bound as a custom domain
+  "dealer.carnimbus.us",       // RETIRED 2026-08-03 — 301s to app.; MUST stay bound in order to redirect
+  "creator.carnimbus.us",      // RETIRED 2026-08-03 — portal archived; 301s to the apex. MUST stay bound.
+  "ai.carnimbus.us",
+  "app.carnimbus.us",          // THE DEALER wAPP — scan → offer → title → settle (deck v13 S-04)
+]);
+
+// 2026-08-03: app.carnimbus.us is now THE DEALER SURFACE. It was held blank from 08-01 (a dangling
+// CNAME to a deleted Netlify site made it a subdomain-takeover vector, so the Worker answered on it
+// with nothing rather than release the name). It now serves site/app/* via the PREFIX map, and
+// dealer.carnimbus.us 301s here. The nine retired buyer-app pages moved to archive/site-app-buyer-v9/.
 // H-CSRF: same-origin gate for state-changing POSTs. Empty Origin allowed (same-origin nav + server-to-server);
-// browsers always attach Origin on cross-site POST — the actual CSRF vector we reject. Any carnimbus.com subdomain
+// browsers always attach Origin on cross-site POST — the actual CSRF vector we reject. Any carnimbus.us subdomain
 // (dealer./creator./ai.) is first-party — they POST same-origin to /api/* — so accept the whole domain family,
 // not just the ALLOWED_ORIGINS apex list (which is for the marketing waitlist only).
-// 2026-07-28: carnimbus.us removed. It was trusted as first-party here while pointing at a retired Netlify
-// site we no longer control the surface of — a strict tightening, not cosmetic cleanup.
+// 2026-07-28: carnimbus.us was REMOVED here. It had been trusted as first-party while pointing at a retired
+// Netlify site we no longer controlled the surface of — a strict tightening, not cosmetic cleanup.
+// 2026-08-01: carnimbus.us is trusted again, and carnimbus.com is dropped, as part of the full domain cutover.
+// ⚠ THE 2026-07-28 REASON IS THE DEPLOY GATE, NOT A FOOTNOTE. This file must not ship until the Netlify
+// deploy on carnimbus.us is decommissioned — verify `curl -sI https://www.carnimbus.us/ | grep -i x-nf-request-id`
+// returns NOTHING. Shipping earlier re-opens exactly the hole 07-28 closed.
 function sameOrigin(request){ const o=request.headers.get("Origin")||""; if(!o) return true;
-  try{ const h=new URL(o).hostname; return h==="carnimbus.com"||h.endsWith(".carnimbus.com"); }
+  try{ const h=new URL(o).hostname; return h==="carnimbus.us"||h.endsWith(".carnimbus.us"); }
   catch(_){ return false; } }
 
 const SEC = {
@@ -60,48 +82,115 @@ export default {
   },
   async route(request, env, ctx) {
     let url = new URL(request.url);
+    // 2026-08-01: carnimbus.com is ARCHIVED. carnimbus.us is the product; .com serves no content and
+    // exists only to redirect. Path, query and case are preserved because site/assets/js/pass.js and
+    // profile-account.js encode the pass URL into a PRINTABLE QR, and SMS already delivered carries
+    // carnimbus.com/pass/<token>. Neither can be recalled — the 301 is what keeps them resolving.
+    // Subdomains map 1:1 — dealer.→dealer., creator.→creator., ai.→ai.
+    // 308 for non-GET so method and body survive (a 301 lets clients downgrade POST to GET and drop
+    // the body); 301 for GET/HEAD so ranking consolidates onto .us.
+    // NO X-Robots-Tag: noindex — on a redirecting URL that is a migration anti-pattern; Google can
+    // drop the URL WITHOUT transferring signals. The bare 301 is what passes them.
+    // MUST stay above the `sub`/PREFIX block: the admin. and app. redirects below already target
+    // .us, so a .com request reaching them would take two hops instead of one.
+    if (url.hostname === "carnimbus.com" || url.hostname.endsWith(".carnimbus.com")) {
+      const dest = new URL(url);
+      dest.hostname = url.hostname.slice(0, -"carnimbus.com".length) + "carnimbus.us";
+      const code = (request.method === "GET" || request.method === "HEAD") ? 301 : 308;
+      return sec(new Response(null, { status: code, headers: {
+        "Location": dest.toString(),
+        "Cache-Control": "public, max-age=3600"   // deliberately short: nobody can clear a browser's cached permanent redirect
+      }}));
+    }
+    // 2026-08-01 HOST ALLOWLIST — fail closed. Only these hosts get the application; anything else
+    // gets an empty 404. Today only bound custom domains can reach this Worker, so this changes
+    // nothing in normal operation — it is the backstop for the case where a host is bound by
+    // accident, a route is added carelessly, or a subdomain is pointed here later. Cheap, and it is
+    // exactly the class of mistake that put .us config on .com for 52 seconds during the cutover.
+    // ⚠ ADD A HOST HERE BEFORE BINDING IT AS A CUSTOM DOMAIN, or it will 404 in production.
+    // www.carnimbus.us is listed ahead of being bound — it is a pending fifth custom domain.
+    if(!SERVED_HOSTS.has(url.hostname))
+      return sec(new Response(null,{status:404,headers:{"Cache-Control":"no-store","X-Robots-Tag":"noindex"}}));
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
-    // 2026-07-28: four hosts only — carnimbus.com · dealer. · creator. · ai.
-    // app. and admin. are detached in wrangler.jsonc; their 301s below survive as bookmark safety nets.
-    const PREFIX={dealer:"/dealer",creator:"/creator",ai:"/ai"}[sub];
-    // AG: ai.carnimbus.com serves the NIMBUS ops HUD again (admin-gated at the API). APIs (/api/ai/*) resolve here.
+    // 2026-08-03: THREE LIVE HOSTS.
+    //   carnimbus.us  — the free public tool. Unchanged, and deliberately so.
+    //   app.          — the dealer wApp: clear → scan → offer → title → settle.
+    //   ai.           — NIMBUS. Reads the demand signal the public tool produces and tells app. what
+    //                   to move, when, to whom, at what price. Closes the loop.
+    // dealer. and creator. are retired-but-bound and redirect immediately below. Their PREFIX entries
+    // stay only so a request that somehow bypasses the redirect resolves rather than 404s.
+    const PREFIX={app:"/app",dealer:"/app",ai:"/ai"}[sub];
+    // AG: ai.carnimbus.us serves the NIMBUS ops HUD again (admin-gated at the API). APIs (/api/ai/*) resolve here.
     // (redirect removed — the /ai PREFIX + /index.html fallback serves site/ai/index.html; noindex via asset header.)
-    // AH2: admin.carnimbus.com is retired — ai.carnimbus.com is the single NIMBUS access point.
-    if(sub==="admin" && !url.pathname.startsWith("/api/")) return Response.redirect("https://ai.carnimbus.com"+url.pathname.replace(/^\/admin/,"")+url.search,301);
-    // R3: app.carnimbus.com (the buyer app) is retired — "only a website for now". Redirect all pages to the site;
-    // /app/* routes + site/app/* code stay intact for a future relaunch. APIs still resolve (nothing else depends on them).
-    if(sub==="app" && !url.pathname.startsWith("/api/")) return Response.redirect("https://carnimbus.com"+(url.pathname==="/"?"":url.pathname)+url.search,301);
-    // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
-    if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
-      if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
-      // Closed system: every app page requires a session — only doors are /signin (+ assets/legal).
-      { const p=url.pathname.toLowerCase();
-        const open = p==="/signin"||p==="/privacy"||p.startsWith("/assets/")||p==="/site.webmanifest"||
-                     p.startsWith("/favicon")||p==="/robots.txt"||p.startsWith("/sitemap")||
-                     p.startsWith("/api/")||                    // APIs keep their own withUser/adminOnly gates
-                     /^\/pass\/[A-Za-z0-9_-]+$/.test(url.pathname); // tokened pass link is bearer-gated
-        if(!open){
-          const uid=await readSession(env,request);             // SESSION_SECRET unset → throws → top catch 500 (fail-close)
-          if(!uid){ const nxt=url.pathname+url.search; return Response.redirect(url.origin+"/signin?next="+encodeURIComponent(nxt),302); }
-        } }
-      // Vanity car URL: /talk/2025-porsche-macan → resolve slug to a vdp id, serve the car page.
-      const tm=url.pathname.match(/^\/talk\/([a-z0-9-]+)$/i);
-      if(tm){ const slug=tm[1];
-        const rows=await env.DB.prepare("SELECT id,year,make,model FROM vdps WHERE active=1").all().catch(()=>({results:[]}));
-        const hit=(rows.results||[]).find(v=>(String(v.year)+"-"+v.make+"-"+v.model).toLowerCase().replace(/[^a-z0-9]+/g,"-")===slug.toLowerCase());
-        if(hit){ url.pathname="/car"; url.searchParams.set("id",hit.id); request=new Request(url,request); }   // clean path → PREFIX block serves car.html, no 301
-        else return Response.redirect(url.origin+"/matches",302); } }
+    // AH2: admin.carnimbus.us is retired — ai.carnimbus.us is the single NIMBUS access point.
+    if(sub==="admin" && !url.pathname.startsWith("/api/")) return Response.redirect("https://ai.carnimbus.us"+url.pathname.replace(/^\/admin/,"")+url.search,301);
+    // 2026-08-03: dealer.carnimbus.us is RETIRED — app.carnimbus.us is the dealer surface.
+    // ARCHIVED-BUT-BOUND, exactly like the four .com entries above: a detached host cannot redirect,
+    // and every console link already emailed to a dealer, plus the two SMS templates below, depend on
+    // this hop. 308 for non-GET so a stale console page's POST keeps its method and body — a 301
+    // would let the client downgrade it to GET and silently drop the payload.
+    if(sub==="dealer"){
+      const code=(request.method==="GET"||request.method==="HEAD")?301:308;
+      return sec(new Response(null,{status:code,headers:{
+        "Location":"https://app.carnimbus.us"+url.pathname+url.search,
+        "Cache-Control":"public, max-age=3600"
+      }}));
+    }
+    // 2026-08-03: creator.carnimbus.us — the PORTAL is retired; the RAIL is not.
+    // The self-serve creator console (feed, claim, post, earnings) is archived at
+    // archive/site-creator-v1/. What survives is /c/<token> on the apex, which is the only thing
+    // that turns an @nimbusbros view into an attributable lead — it stamps web_leads.creator_claim_id
+    // via a 90-day cn_ref cookie. Deleting that would make "billions of views" arrive anonymous.
+    // New creators and their links are now minted from ai. (NIMBUS_ACTIONS.creator_invite), which is
+    // less work than a portal for a handful of partners and keeps creator_payout confirm-gated.
+    // ⚠ ARCHIVED-BUT-BOUND. Live /c/ links printed in video descriptions resolve on ANY host, and a
+    // detached host cannot redirect. Keep it in SERVED_HOSTS and in wrangler.jsonc routes.
+    if(sub==="creator" && !url.pathname.startsWith("/c/")){
+      const code=(request.method==="GET"||request.method==="HEAD")?301:308;
+      return sec(new Response(null,{status:code,headers:{
+        "Location":"https://carnimbus.us"+url.pathname+url.search,
+        "Cache-Control":"public, max-age=3600"
+      }}));
+    }
+    // Closed system: every app. page needs a dealer session. Doors are /signin and /pitch (the public
+    // dealer pitch), plus assets/legal/APIs which carry their own gates.
+    // ⚠ This gate is UX, not the security boundary — withDealer() at the API is. It accepts EITHER
+    // session because withDealer does: cn_dlr (email+password, T-102) takes precedence, and cn_sess
+    // (phone OTP) is still a live fallback for dealers onboarded before T-102. Checking only cn_dlr
+    // here would bounce an OTP dealer off pages whose APIs would have served them fine.
+    if(sub==="app" && !url.pathname.startsWith("/api/")){
+      const p=url.pathname.toLowerCase();
+      // /creators is open for the same reason /signin is: a creator carries cn_crt, not cn_dlr or
+      // cn_sess, so this gate would bounce every one of them to a dealer login they cannot pass.
+      // The page gates itself — creator-app.js shows #gate-auth until /api/creator/feed returns 200,
+      // and every creator API behind it is wrapped in withCreator.
+      const open = p==="/signin"||p==="/pitch"||p==="/creators"||p==="/privacy"||p==="/terms"||
+                   p.startsWith("/assets/")||p==="/site.webmanifest"||
+                   p.startsWith("/favicon")||p==="/robots.txt"||p.startsWith("/sitemap");
+      if(!open){
+        const did=await readDealerSession(env,request);         // SESSION_SECRET unset → throws → top catch 500 (fail-close)
+        const uid=did?null:await readSession(env,request);
+        if(!did&&!uid){ const nxt=url.pathname+url.search; return Response.redirect(url.origin+"/signin?next="+encodeURIComponent(nxt),302); }
+      }
+    }
     // Vanity URLs: legacy prefixed or .html paths 301 to the clean form on the right subdomain.
     { const P=url.pathname;
       if(!P.startsWith("/api/")&&!P.startsWith("/assets/")&&!P.startsWith("/pass/")&&!P.startsWith("/used/")&&!P.startsWith("/c/")){
-        // 2026-07-28: app.carnimbus.com is retired — legacy /app/* paths land on the public browse page.
+        // The BUYER app was retired 2026-07-28; its legacy /app/* paths on the apex land on public browse.
+        // (Unrelated to app.carnimbus.us, which is now the DEALER surface — this branch only runs when
+        // PREFIX is undefined, i.e. on the apex, never on the app. host.)
         if(!PREFIX && P.startsWith("/app/")) return Response.redirect(url.origin+"/browse"+url.search,301);
-        if(!PREFIX && (P.startsWith("/dealer/")||P.startsWith("/creator/"))){
-          const s2=P.startsWith("/dealer/")?"dealer":"creator";
-          let clean=P.replace(/^\/(dealer|creator)/,"").replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
-          return Response.redirect("https://"+s2+".carnimbus.com"+clean+url.search,301);
+        if(!PREFIX && P.startsWith("/dealer/")){
+          // 2026-08-03: /dealer/* now targets app. directly. Sending it to dealer.carnimbus.us would
+          // 301 a second time and cost every apex dealer link an extra round trip.
+          let clean=P.replace(/^\/dealer/,"").replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
+          return Response.redirect("https://app.carnimbus.us"+clean+url.search,301);
         }
+        // 2026-08-06: the creator console is app.carnimbus.us/creators. This used to forward to
+        // creator.carnimbus.us, which now 301s everything but /c/ back to the apex — so an apex
+        // /creator/* link took two hops to a 404. One hop, to where the console actually lives.
+        if(!PREFIX && P.startsWith("/creator/")) return Response.redirect("https://app.carnimbus.us/creators"+url.search,301);
         if(PREFIX && (P.startsWith(PREFIX+"/")||/\.html$/.test(P))){
           let clean=(P.startsWith(PREFIX+"/")?P.slice(PREFIX.length):P).replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
           return Response.redirect(url.origin+clean+url.search,301);
@@ -114,11 +203,16 @@ export default {
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
       // AG-fix: root serves the DIRECTORY form ("/ai/","/admin/") not "/index.html" — Assets canonicalizes an
       // explicit index.html to its dir with a 307, which then hit the clean-URL rule below and looped.
-      // AH2: ai.carnimbus.com is the ONLY console door — root serves the NIMBUS HUD (site/ai/index.html);
+      // AH2: ai.carnimbus.us is the ONLY console door — root serves the NIMBUS HUD (site/ai/index.html);
       // deeper ai paths (/pools,/events,/growth,/wall) serve the admin tool pages from site/admin/.
       // NOTE: the /admin PATH prefix stays even though the admin. HOST is gone — ai. deep paths serve site/admin/*.
+      // app. root = /clear, not /deals. A dealer opens this app asking "what should I do today?",
+      // and /clear is the only page that answers it — aged units that people are searching for and
+      // not finding. /deals is the ledger you consult after you've decided to act.
+      // There is no site/app/index.html and there should not be: the session gate above already
+      // bounced anyone unauthenticated to /signin, so whoever reaches root is signed in.
       url.pathname = sub==="ai" ? (url.pathname==="/" ? "/ai/" : "/admin"+url.pathname)
-                   : PREFIX + (url.pathname==="/" ? ((sub==="dealer"||sub==="creator")?"/signin":"/") : url.pathname);
+                   : PREFIX + (url.pathname==="/" ? ((sub==="app"||sub==="dealer")?"/clear":"/") : url.pathname);
       request = new Request(url, request);
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
@@ -152,23 +246,26 @@ export default {
     if (url.pathname === "/api/sms/send" && request.method === "POST")    return sec(await adminOnly(request, env, smsSendRoute));
     if (url.pathname === "/api/sms/numbers")                              return sec(await adminOnly(request, env, smsNumbers));
     if (url.pathname === "/api/vdp/ingest" && request.method === "POST")  return sec(await adminOnly(request, env, vdpIngest));
-    if (url.pathname === "/api/auth/start" && request.method === "POST")  return sec(await authStart(request, env));
-    if (url.pathname === "/api/auth/verify" && request.method === "POST") return sec(await authVerify(request, env));
-    if (url.pathname === "/api/profile" && request.method === "POST")     return sec(await withUser(request, env, saveProfile));
-    if (url.pathname === "/api/avatar" && request.method === "POST")      return sec(await withUser(request, env, saveAvatar));
+    // ---- RETIRED BUYER APP — ROUTES REMOVED 2026-08-06 ----------------------------------------
+    // The consumer app was retired 2026-07-28 and its front end moved to archive/site-app-buyer-v9/.
+    // These 16 routes stayed wired for another nine days, and were already unreachable: signin.js is
+    // the ONLY caller of /api/auth/start and /api/auth/verify, and it is loaded by no HTML page — so
+    // no cn_sess cookie could be minted by anyone, and every withUser()-gated route below already
+    // returned 401 to the entire internet. Removing them changes no observable behaviour.
+    //
+    // Removed: auth/start auth/verify profile avatar matches slots comments comments/vote softpull
+    //          car-chat book drive/cancel feed/ask whoami chats chats/recent
+    //
+    // Handlers are LEFT IN PLACE, deliberately — the same call that made restoring the creator
+    // console a ten-line change on 2026-08-06 rather than a rewrite. Tables keep their rows.
+    //
+    // ⚠ NOT retired, despite the name: /api/feed is the /browse CAR grid (feed() returns `cars`,
+    // and runtime.js:442 is its only caller). Cutting it blanks the page every creator /c/ link
+    // lands on. /api/comments is the social one; /api/feed is inventory.
     if (url.pathname === "/api/feed")                                     return sec(await feed(request, env));
     if (url.pathname === "/api/search")                                   return sec(await search(request, env, ctx));
-    if (url.pathname === "/api/matches")                                  return sec(await withUser(request, env, matchesList));
     if (url.pathname === "/api/vdp")                                      return sec(await vdpOne(request, env));
-    if (url.pathname === "/api/slots")                                    return sec(await openSlots(request, env));
-    if (url.pathname === "/api/comments/vote" && request.method === "POST") return sec(await withUser(request, env, voteComment));
-    if (url.pathname === "/api/softpull" && request.method === "POST")     return sec(await withUser(request, env, softPull));
-    if (url.pathname === "/api/car-chat" && request.method === "POST")    return sec(await withUser(request, env, carChat));
-    if (url.pathname === "/api/book" && request.method === "POST")         return sec(await withUser(request, env, book));
-    if (url.pathname === "/api/drive/cancel" && request.method === "POST")  return sec(await withUser(request, env, driveCancel));
     if (url.pathname.startsWith("/pass/"))                                return sec(await passPage(request, env));
-    if (url.pathname === "/api/comments")                                 return sec(await comments(request, env));
-    if (url.pathname === "/api/feed/ask" && request.method === "POST")     return sec(await withUser(request, env, feedAsk, ctx));
     if (url.pathname === "/api/me")                                       return sec(await withUser(request, env, me));
     if (url.pathname === "/api/dealer" && request.method === "POST")      return sec(await dealerLead(request, env));
     if (url.pathname === "/api/webleads" && request.method === "POST")     return sec(await webLead(request, env));
@@ -191,28 +288,56 @@ export default {
     if (url.pathname === "/api/dealer/lead-ics")                          return sec(await withDealer(request, env, dealerLeadIcs));
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
     if (url.pathname === "/api/dealer/feedback")                             return sec(await withDealer(request, env, dealerFeedback));
+    // ---- app.carnimbus.us — the dealer wApp (deck v13 S-04: scan → offer → title → settle) ----
+    // Every one of these is withDealer-gated. withDealer IS the security boundary; the page-level
+    // session check in route() is only UX. See docs/SETTLEMENT-RUNBOOK.md.
+    if (url.pathname === "/api/app/vin"   && request.method === "POST") return sec(await withDealer(request, env, appVin));
+    if (url.pathname === "/api/app/offer")                              return sec(await withDealer(request, env, appOffer));
+    if (url.pathname === "/api/app/deal"  && request.method === "POST") return sec(await withDealer(request, env, appDealCreate));
+    if (url.pathname === "/api/app/deal")                               return sec(await withDealer(request, env, appDealGet));
+    if (url.pathname === "/api/app/deals")                              return sec(await withDealer(request, env, appDeals));
+    if (url.pathname === "/api/app/stake" && request.method === "POST") return sec(await withDealer(request, env, appStake));
+    if (url.pathname === "/api/app/title" && request.method === "POST") return sec(await withDealer(request, env, appTitleUpload));
+    if (url.pathname.startsWith("/api/app/title/"))                     return sec(await withDealer(request, env, appTitleGet));
+    if (url.pathname === "/api/app/adjudicate" && request.method === "POST") return sec(await withDealer(request, env, appAdjudicate));
+    if (url.pathname === "/api/app/approve"    && request.method === "POST") return sec(await withDealer(request, env, appApprove));
+    if (url.pathname === "/api/app/dispute"    && request.method === "POST") return sec(await withDealer(request, env, appDispute));
+    if (url.pathname === "/api/app/clear")                                   return sec(await withDealer(request, env, appClear));
+    if (url.pathname === "/api/app/reprice"    && request.method === "POST") return sec(await withDealer(request, env, appReprice));
+    if (url.pathname === "/api/app/rec-skip"   && request.method === "POST") return sec(await withDealer(request, env, appRecSkip));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
     if (url.pathname === "/api/admin/dealer/activate" && request.method === "POST") return sec(await adminOnly(request, env, dealerActivate));
     if (url.pathname === "/api/admin/dealer-cred" && request.method === "POST") return sec(await adminOnly(request, env, (req,e)=>adminDealerCred(req,e)));
     if (url.pathname === "/api/admin/reindex" && request.method === "POST") return sec(await adminOnly(request, env, reindexAll));
     if (url.pathname === "/api/admin/profiles/ingest" && request.method === "POST") return sec(await adminOnly(request, env, profilesIngest));
     if (url.pathname === "/api/admin/export")                             return sec(await adminOnly(request, env, poolExport));
-    if (url.pathname === "/api/whoami")                                   return sec(await withUser(request, env, whoami));
-    if (url.pathname === "/api/chats/recent")                             return sec(await withUser(request, env, recentChat));
-    if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
-    // ---- Creator Network (creator.carnimbus.com) ----
-    if (url.pathname === "/api/creator/signup" && request.method === "POST")  return sec(await creatorSignup(request, env));
-    if (url.pathname === "/api/creator/login"  && request.method === "POST")  return sec(await creatorLogin(request, env));
+    // ---- Creator Network — RESTORED 2026-08-06, deck v13 S-04 ----
+    // The portal was retired 2026-08-03 by deleting these ten route lines. Nothing else was removed:
+    // every handler stayed in this file and every table kept its rows. Deck v13 makes the creator
+    // layer the product ("creator management platform for franchised dealerships"), so the console
+    // is back — on app./creators now, not the retired creator. host. The attribution rail
+    // (/c/<token>, host-agnostic, just below) never stopped working, and the operator verbs on ai.
+    // — creator_invite, creator_approve_post, creator_payout — keep their aiAct confirm gate.
+    if (url.pathname === "/api/creator/signup"  && request.method === "POST") return sec(await creatorSignup(request, env));
+    if (url.pathname === "/api/creator/login"   && request.method === "POST") return sec(await creatorLogin(request, env));
+    if (url.pathname === "/api/creator/logout")                               return sec(creatorLogout());
+    if (url.pathname === "/api/creator/avatar"  && request.method === "POST") return sec(await withCreator(request, env, creatorAvatar));
     if (url.pathname === "/api/creator/feed")                                 return sec(await withCreator(request, env, creatorFeed));
-    if (url.pathname === "/api/creator/claim"  && request.method === "POST")  return sec(await withCreator(request, env, creatorClaim));
-    if (url.pathname === "/api/creator/post"   && request.method === "POST")  return sec(await withCreator(request, env, creatorPost));
+    if (url.pathname === "/api/creator/claim"   && request.method === "POST") return sec(await withCreator(request, env, creatorClaim));
+    if (url.pathname === "/api/creator/post"    && request.method === "POST") return sec(await withCreator(request, env, creatorPost));
     if (url.pathname === "/api/creator/earnings")                             return sec(await withCreator(request, env, creatorEarnings));
-    if (url.pathname === "/api/creator/connect/start" && request.method === "POST") return sec(await withCreator(request, env, creatorConnectStart));
+    if (url.pathname === "/api/creator/connect/start"  && request.method === "POST") return sec(await withCreator(request, env, creatorConnectStart));
     if (url.pathname === "/api/creator/connect/return")                       return sec(await withCreator(request, env, creatorConnectReturn));
     if (url.pathname === "/api/admin/creator/queue")                          return sec(await adminOnly(request, env, (req,e)=>creatorQueue(req,e)));
     // Public tracked link — host-agnostic, no auth. Redirects to the car and drops the cn_ref cookie.
     { const cm=url.pathname.match(/^\/c\/([A-Za-z0-9_-]{4,40})$/); if(cm) return await creatorRedirect(request, env, cm[1]); }
+    // Unauthenticated by necessity — it is the door. Constant-time compare, fails closed when
+    // ADMIN_PASS_HASH is unset, and returns the same "invalid" either way.
+    if (url.pathname === "/api/admin/login" && request.method === "POST")  return sec(await adminLogin(request, env));
+    if (url.pathname === "/api/admin/logout")                             return sec(adminLogout());
+    if (url.pathname === "/api/ai/bands")                                 return sec(await adminOnly(request, env, (req,e)=>aiBands(req,e)));
+    if (url.pathname === "/api/ai/clearance")                             return sec(await adminOnly(request, env, (req,e)=>aiClearance(req,e)));
     if (url.pathname === "/api/ai/verify")                                return sec(await adminOnly(request, env, (req,e)=>aiVerify(req,e)));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await adminOnly(request, env, (req,e)=>aiPulse(e)));
     if (url.pathname === "/api/ai/graph")                                 return sec(await adminOnly(request, env, (req,e)=>aiGraph(e)));
@@ -221,6 +346,7 @@ export default {
     if (url.pathname === "/api/ai/map")                                   return sec(await adminOnly(request, env, (req,e)=>aiMap(req,e)));
     if (url.pathname === "/api/ai/health")                                return sec(await adminOnly(request, env, (req,e)=>aiHealth(req,e)));
     if (url.pathname === "/api/ai/act" && request.method === "POST")      return sec(await adminOnly(request, env, (req,e)=>aiAct(req,e)));
+    if (url.pathname === "/api/ai/demand")                                return sec(await adminOnly(request, env, (req,e)=>aiDemand(req,e)));
     if (url.pathname === "/api/admin/buyers")                             return sec(await adminOnly(request, env, (req,e)=>adminBuyers(e)));
     if (url.pathname === "/api/events" && request.method === "POST")      return sec(await postEvents(request, env));
     if (url.pathname === "/api/admin/events/tail")                        return sec(await adminOnly(request, env, eventsTail));
@@ -239,22 +365,105 @@ export default {
     }
     return sec(assetRes);
   },
+  // ══════════════════════════════════════════════════════════════════════════════════════════
+  // THE CRON — every task heartbeated, every cadence matched to what the task actually needs.
+  //
+  // REBUILT 2026-08-06 after measuring it. The old version executed ≈9,700 D1 statements per
+  // tick — ≈2.8 MILLION a day — and ~97% of that was ONE block: a 50-user
+  // computeSignals/computeMatches loop serving the buyer app retired 2026-07-28. computeMatches
+  // is an N+1 (100-150 sequential `SELECT * FROM vdps WHERE id=?`) plus one embed() and one
+  // Vectorize topK:50 PER USER PER FIVE MINUTES = 14,400 embeddings and 14,400 vector queries a
+  // day, for 5 profiles rows that no live page reads. Deleted.
+  //
+  // Also deleted: residentAgent and syntheticNudger (nothing renders a comment; between them
+  // they wrote 2,087 of the 2,395 rows in `comments` and were the only uncapped Workers-AI spend
+  // in the cron) and growthRollup (guarded to 1/day, so 287 of its 288 daily runs were a wasted
+  // guard query, and its output is read only by an orphaned admin page).
+  //
+  // Two calls used to run UNGUARDED — runQueue and syncEmbeddings. A throw in either aborted
+  // every task after it, silently. runJob() now wraps all of them, so one failure can no longer
+  // take the loop down, and the failure is recorded instead of vanishing.
   async scheduled(event, env) {
-    await runQueue(env);
-    await syncEmbeddings(env);
-    await residentAgent(env).catch(()=>{});   // L9: one labeled community post per ≤2h
-    await syntheticNudger(env).catch(()=>{});  // C1: synthetic agent nudges per ≤4h
-    // Refresh persisted backend matches for all buyers with a profile (demo-scale; bounded to 50/run).
-    try{ const us=await env.DB.prepare("SELECT user_id FROM profiles ORDER BY updated_at DESC LIMIT 50").all();
-      for(const r of (us.results||[])){ await computeSignals(env, r.user_id).catch(()=>{}); await computeMatches(env, r.user_id).catch(()=>{}); } }catch(_){}
-    await enrichInventory(env).catch(()=>{});   // Wave E1: inventory intelligence, 3 vehicles/run
-    await growthRollup(env).catch(()=>{});      // Wave E4: funnel snapshot, ≤1/day
-    await syncDealerFeeds(env).catch(()=>{});   // AF: pull each subscribed dealer's authorized feed, ≤1/day
-    await checkSourceListings(env).catch(()=>{});   // R7: auto-archive link-ingested cars whose page is gone/sold
-    await driveReminders(env).catch(()=>{});    // Wave H1: enqueue T-2h test-drive reminders
-    await creatorAgent(env).catch(()=>{});      // Creator Network: L2 — close dead drops, re-price unlocked, re-score. Never pays.
+    // Hourly and daily gates. The cron fires every 5 minutes because SMS dispatch needs it;
+    // nothing else here does. A task whose INPUT changes hourly cannot produce new output by
+    // running twelve times an hour — it just costs twelve times as much.
+    const now = new Date();
+    const HOURLY = now.getUTCMinutes() < 5;
+    const DAILY  = HOURLY && now.getUTCHours() === 9;   // 09:0x UTC ≈ 02:0x LA
+
+    await runJob(env, "runQueue",        () => runQueue(env));          // outbound SMS — needs 5 min
+    await runJob(env, "settlementWatch", () => settlementWatch(env));   // 2 SELECTs; expiring Stripe auths
+
+    if (HOURLY) {
+      await runJob(env, "syncEmbeddings",  () => syncEmbeddings(env));
+      await runJob(env, "enrichInventory", () => enrichInventory(env));
+      await runJob(env, "creatorAgent",    () => creatorAgent(env));
+      await runJob(env, "driveReminders",  () => driveReminders(env));  // live again — webLead now writes test_drives
+      await runJob(env, "demandRollup",    () => demandRollup(env));    // scans → demand_cells (ZIP3 × segment × band, k≥5)
+      await runJob(env, "clearanceSweep",  () => clearanceSweep(env));  // …→ clearance_recs. Its only input is what the line above wrote.
+    }
+    if (DAILY) {
+      await runJob(env, "syncDealerFeeds",     () => syncDealerFeeds(env));
+      await runJob(env, "checkSourceListings", () => checkSourceListings(env));  // was 1,440 writes + 1,440 external fetches/day
+    }
   },
 };
+
+// ---- job_runs: the heartbeat (0076) ----------------------------------------------------------
+// Before this there was no `last_run` column anywhere, so "did the cron run today?" could not be
+// answered from any surface. On 2026-07-11 migrations were committed but never applied; every
+// comment INSERT threw silently and the feed sat in degraded fallback until the founder happened
+// to ask "is the feed even connected?". Nothing in the code made that visible. This does.
+//
+// runJob NEVER rethrows: one failing task must not abort the rest of the tick, which is exactly
+// what unguarded runQueue/syncEmbeddings used to do. The failure is recorded instead of lost.
+async function runJob(env, name, fn) {
+  const t0 = Date.now(), started = new Date().toISOString();
+  let ok = 1, err = null;
+  try { await fn(); }
+  catch (e) { ok = 0; err = String((e && (e.message || e.name)) || e).slice(0, 300); }
+  await env.DB.prepare("INSERT INTO job_runs (job,started_at,ms,ok,error) VALUES (?,?,?,?,?)")
+    .bind(name, started, Date.now() - t0, ok, err).run().catch(() => {});
+  return ok === 1;
+}
+// A swallowed write still never blocks the request — it just stops being invisible. There are 69
+// bare `.run().catch(()=>{})` on write paths in this file; each one converted here becomes a row
+// somebody can actually find.
+async function safeWrite(env, label, stmt) {
+  try { return await stmt.run(); }
+  catch (e) {
+    await env.DB.prepare("INSERT INTO job_runs (job,started_at,ms,ok,error) VALUES (?,?,0,0,?)")
+      .bind("write:" + label, new Date().toISOString(), String((e && e.message) || e).slice(0, 300))
+      .run().catch(() => {});
+    return null;
+  }
+}
+
+// Two things the settlement engine cannot check inline, both of which fail SILENTLY if unwatched.
+//
+// 1. LEDGER DRIFT. deals.state is a cache of deal_events. dealTransition() is the only writer and
+//    it is guarded, but a partial failure (state UPDATE lands, event INSERT does not) would leave
+//    them disagreeing and the ledger is the one that is right. Log loudly; do not auto-"fix" by
+//    overwriting either side, because which one is wrong is a judgement call about real money.
+//
+// 2. EXPIRING AUTHORIZATIONS. A Stripe manual-capture authorization lapses after 7 days. A deal
+//    parked in STAKED past that point looks funded and is not. Warn at day 5 so there are two days
+//    to act. This is the single most likely way for this system to quietly lie to a dealer.
+async function settlementWatch(env){
+  try{
+    const drift=await env.DB.prepare(
+      "SELECT d.id, d.state AS cached, (SELECT to_state FROM deal_events e WHERE e.deal_id=d.id ORDER BY e.id DESC LIMIT 1) AS ledger "+
+      "FROM deals d WHERE ledger IS NOT NULL AND ledger <> d.state LIMIT 20").all().catch(()=>({results:[]}));
+    for(const r of (drift.results||[]))
+      console.error("settlement_drift: deal="+r.id+" deals.state="+r.cached+" ledger="+r.ledger+" — the ledger is authoritative");
+    const stale=await env.DB.prepare(
+      "SELECT s.deal_id, s.authorized_at FROM stakes s JOIN deals d ON d.id=s.deal_id "+
+      "WHERE s.status='requires_capture' AND d.state IN ('STAKED','TITLED','ADJUDICATED') "+
+      "AND s.authorized_at < datetime('now','-5 days') LIMIT 20").all().catch(()=>({results:[]}));
+    for(const r of (stale.results||[]))
+      console.error("stake_expiring: deal="+r.deal_id+" authorized_at="+r.authorized_at+" — Stripe authorizations lapse at 7 days; re-stake or settle");
+  }catch(_){}
+}
 
 // ==================== auth/session (HMAC cookie) ====================
 async function hmac(env, s){ const secret=env.SESSION_SECRET; if(!secret) throw new Error("SESSION_SECRET unset");
@@ -320,7 +529,41 @@ async function decryptAnswers(a, secret) {
 }
 async function withUser(request,env,fn,ctx){ const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401); return fn(request,env,uid,ctx); }
 function ctEq(a,b){ a=String(a); b=String(b); if(a.length!==b.length) return false; let r=0; for(let i=0;i<a.length;i++) r|=a.charCodeAt(i)^b.charCodeAt(i); return r===0; }
-async function adminOnly(request,env,fn){ if(!env.ADMIN_KEY||!ctEq(request.headers.get("x-admin-key")||"",env.ADMIN_KEY)) return json({ok:false,error:"forbidden"},403); return fn(request,env); }
+// ---- ADMIN ACCESS — two doors to the same room (2026-08-06) ----------------------------------
+// The flash-key model (a file on a USB stick, read through showOpenFilePicker, re-read every 2s)
+// is desktop-Chrome-only by construction: Safari, Firefox and EVERY iOS browser lack the File
+// System Access API, and nimbus.js's fallback input passes handle=null into unlockFlash, which
+// rejects !handle — so the fallback could never unlock. The console built for the owner was the
+// one surface he could not open on the device he actually carries, and it told him "Invalid",
+// which reads as "your key is wrong" rather than "your browser can't do this".
+//
+// So: a second door. A passphrase mints a signed cn_adm cookie using the same hmac/hashPw
+// primitives the dealer sessions already use. The x-admin-key header still works EXACTLY as
+// before — every script, every curl, and the flash key itself are unaffected — because adminOnly
+// accepts either. Nothing is taken away; a way in is added.
+async function makeAdminSession(env){ const exp=Date.now()+7*864e5, p="a."+exp; return p+"."+await hmac(env,p); }
+async function readAdminSession(env,request){
+  const m=(request.headers.get("Cookie")||"").match(/cn_adm=([^;]+)/); if(!m) return false;
+  const parts=m[1].split("."); if(parts.length!==3) return false;
+  if(!(+parts[1]>Date.now())) return false;
+  try{ return ctEq(parts[2], await hmac(env,parts[0]+"."+parts[1])); }catch(_){ return false; }
+}
+async function adminLogin(request,env){
+  const {pass}=await request.json().catch(()=>({}));
+  // Fail closed and identically in both directions: an unset passphrase must not become an open
+  // door, and a wrong one must not be distinguishable from an unconfigured one.
+  if(!env.ADMIN_PASS_HASH||!env.ADMIN_PASS_SALT||!pass) return json({ok:false,error:"invalid"},401);
+  const h=await hashPw(String(pass),env.ADMIN_PASS_SALT).catch(()=>null);
+  if(!h||!ctEq(h,env.ADMIN_PASS_HASH)) return json({ok:false,error:"invalid"},401);
+  const cookie="cn_adm="+await makeAdminSession(env)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(7*86400);
+  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}});
+}
+function adminLogout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
+  "Set-Cookie":"cn_adm=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",...SEC}}); }
+async function adminOnly(request,env,fn){
+  if(env.ADMIN_KEY && ctEq(request.headers.get("x-admin-key")||"",env.ADMIN_KEY)) return fn(request,env);
+  if(await readAdminSession(env,request)) return fn(request,env);
+  return json({ok:false,error:"forbidden"},403); }
 
 // ==================== SMS (Twilio REST; dark until secrets set) ====================
 async function sendSMS(env,to,body){ if(!env.TWILIO_ACCOUNT_SID) return {ok:false,dark:true};
@@ -338,7 +581,7 @@ async function sendEmail(env,{to,subject,text}){
   if(!env.RESEND_API_KEY||!to) return {ok:false,dark:true};
   const r=await fetch("https://api.resend.com/emails",{method:"POST",
     headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"content-type":"application/json"},
-    body:JSON.stringify({from:"CarNimbus <hello@carnimbus.com>",to:[to],subject,text})}).catch(()=>null);
+    body:JSON.stringify({from:"CarNimbus <hello@carnimbus.us>",to:[to],subject,text})}).catch(()=>null);
   return {ok:!!(r&&r.ok)}; }
 async function smsNumbers(request,env){ if(!env.TWILIO_ACCOUNT_SID) return json({ok:false,error:"twilio_dark"});
   const r=await fetch(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers.json?PageSize=10`,
@@ -386,7 +629,7 @@ async function smsInbound(request,env){ const form=await request.formData().catc
     if(!wb) return false;
     await leadTransition(env,wb,"confirmed","sms",rawText);
     reply="You're back on the books — we'll confirm the exact time shortly."; return true; })()){/* handled */}
-  else if(/^(HELP|INFO)$/.test(text)) reply="CarNimbus: AI car buying, LA. Up to 4 msgs/mo. Msg&data rates may apply. Reply STOP to cancel. hello@carnimbus.com";
+  else if(/^(HELP|INFO)$/.test(text)) reply="CarNimbus: AI car buying, LA. Up to 4 msgs/mo. Msg&data rates may apply. Reply STOP to cancel. hello@carnimbus.us";
   else if(text==="START"){ await env.DB.prepare("UPDATE waitlist SET sms_consent=1 WHERE phone=?").bind(from).run().catch(()=>{}); reply="Welcome back to CarNimbus. Reply STOP anytime."; }
   else if(rawText && from && from!==env.TWILIO_FROM && env.SMS_MATCH_LIVE &&
           (await env.DB.prepare("SELECT 1 FROM web_leads WHERE phone=? AND matched_car<>''").bind(from).first().catch(()=>null))){
@@ -455,10 +698,10 @@ function slug(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").
 function vdpPath(v){ return "/used/"+v.year+"-"+slug(v.make)+"-"+slug(v.model)+"-"+v.id; }
 function escHtml(s=""){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function xmlEsc(s=""){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;"); }
-const SEO_ORIGIN="https://carnimbus.com";
+const SEO_ORIGIN="https://carnimbus.us";
 
 function robotsTxt(host){
-  if(host!=="carnimbus.com"&&host!=="www.carnimbus.com")
+  if(host!=="carnimbus.us"&&host!=="www.carnimbus.us")
     return new Response("User-agent: *\nDisallow: /\n",{headers:{"content-type":"text/plain; charset=utf-8","cache-control":"public, max-age=3600"}});
   const body=`# CarNimbus robots.txt
 User-agent: *
@@ -570,8 +813,8 @@ ${row("Est. monthly","$"+(a.price_mo||"?")+"/mo","$"+(b.price_mo||"?")+"/mo")}
 ${row("Year",String(a.year),String(b.year))}${row("Body",a.body||"—",b.body||"—")}
 ${row("Drivetrain",a.drivetrain||"—",b.drivetrain||"—")}${row("Mileage",String(a.miles||"—"),String(b.miles||"—"))}
 </tbody></table>
-<div class="row" style="gap:10px;margin-top:18px"><a class="btn primary md" href="https://app.carnimbus.com/car?id=${a.id}" style="text-decoration:none">Talk to the ${escHtml(a.make+" "+a.model)} →</a>
-<a class="btn ghost md" href="https://app.carnimbus.com/car?id=${b.id}" style="text-decoration:none">Talk to the ${escHtml(b.make+" "+b.model)} →</a></div>
+<div class="row" style="gap:10px;margin-top:18px"><a class="btn primary md" href="https://carnimbus.us${vdpPath(a)}" style="text-decoration:none">See the ${escHtml(a.make+" "+a.model)} →</a>
+<a class="btn ghost md" href="https://carnimbus.us${vdpPath(b)}" style="text-decoration:none">See the ${escHtml(b.make+" "+b.model)} →</a></div>
 </div></div></div></main></body></html>`;
   return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"public, max-age=600, s-maxage=3600"}}); }
 async function usedPage(env,pathname){
@@ -664,7 +907,7 @@ ${schema.map(o=>`<script type="application/ld+json">${JSON.stringify(o).replace(
           ${v.body?`<div>Body · ${escHtml(v.body)}</div>`:""}<div>Condition · Used, Certified</div>
         </div>
         ${takeHtml}
-        <a class="btn primary lg" href="https://app.carnimbus.com/car?id=${v.id}" style="text-decoration:none;display:inline-flex;margin-top:18px">Talk to this car →</a>
+        <a class="btn primary lg" href="/start" style="text-decoration:none;display:inline-flex;margin-top:18px">Find your match →</a>
       </div>
       <aside>
         <h2 style="font:700 14px Manrope;margin:0 0 10px">Questions buyers ask</h2>
@@ -795,13 +1038,38 @@ async function vdpIngest(request,env){ const body=await request.json().catch(()=
   for(const c of cars){ const cd=(c.dealer_id!=null?(parseInt(c.dealer_id,10)||null):did);
     if(!c.vin||!String(c.vin).trim()){ skipped++; continue; }        // BI: never write a vin-less row
     try{
+    // null = "the CSV did not mention active" → 1 for a new row, unchanged for an existing one.
+    const act=(c.active==null||c.active==="")?null:(+c.active?1:0);
     await env.DB.prepare(
+    // ABSENT MEANS "LEAVE IT ALONE". Until 2026-08-06 this overwrote miles, price_total, mileage
+    // and location_zip from whatever the row carried — so a minimal `vin,price_mo` CSV, the
+    // obvious way to fix one price, silently blanked all four. It also never updated
+    // year/make/model/trim, so correcting a typo appeared to work and changed nothing.
+    // NULLIF is what separates "not supplied" from "deliberately cleared": the binds below
+    // coerce missing values to '' or null, so without it every absent column reads as a clear.
+    //
+    // `active` is honoured rather than hardcoded, so a round-tripped export keeps archived cars
+    // archived. A hand-written CSV with no `active` column still defaults to 1 — which is what a
+    // dealer adding new inventory means.
     "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,dealer_id,active,embedding_synced,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?) ON CONFLICT(vin) DO UPDATE SET price_mo=excluded.price_mo, miles=excluded.miles, price_total=excluded.price_total, mileage=excluded.mileage, location_zip=excluded.location_zip, dealer_id=COALESCE(excluded.dealer_id,vdps.dealer_id), active=1, embedding_synced=0, deactivated_at=NULL, updated_at=excluded.updated_at")
-    .bind(c.vin,c.year,c.make,c.model,c.trim||"",c.price_mo,c.miles||"",c.drivetrain||"",c.body||"",
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?,1),0,?) ON CONFLICT(vin) DO UPDATE SET "+
+    "price_mo=COALESCE(excluded.price_mo,vdps.price_mo), "+
+    "miles=COALESCE(NULLIF(excluded.miles,''),vdps.miles), "+
+    "price_total=COALESCE(excluded.price_total,vdps.price_total), "+
+    "mileage=COALESCE(excluded.mileage,vdps.mileage), "+
+    "location_zip=COALESCE(NULLIF(excluded.location_zip,''),vdps.location_zip), "+
+    "year=COALESCE(excluded.year,vdps.year), "+
+    "make=COALESCE(NULLIF(excluded.make,''),vdps.make), "+
+    "model=COALESCE(NULLIF(excluded.model,''),vdps.model), "+
+    "trim=COALESCE(NULLIF(excluded.trim,''),vdps.trim), "+
+    "dealer_id=COALESCE(excluded.dealer_id,vdps.dealer_id), "+
+    "active=COALESCE(?,vdps.active), embedding_synced=0, "+
+    "deactivated_at=CASE WHEN COALESCE(?,vdps.active)=1 THEN NULL ELSE vdps.deactivated_at END, "+
+    "updated_at=excluded.updated_at")
+    .bind(c.vin,c.year||null,c.make||"",c.model||"",c.trim||"",parseInt(c.price_mo,10)||null,c.miles||"",c.drivetrain||"",c.body||"",
       JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),
       parseInt(c.price_total,10)||null, parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null, String(c.location_zip||"").slice(0,10),
-      cd, new Date().toISOString()).run();
+      cd, act, new Date().toISOString(), act, act).run();
     count++; }catch(_){ failed++; } }
   return json({ok:true,count,skipped,failed}); }
 // ===== AF: Dealer Engine — Stripe billing → inventory on/off, per-dealer feed sync, compliant outreach =====
@@ -899,7 +1167,7 @@ async function sendDealerOutreach(env, dealerId){
   if(sup){ try{ await env.DB.prepare("INSERT INTO dealer_outreach (dealer_id,email,status,created_at) VALUES (?,?, 'suppressed', datetime('now'))").bind(dealerId,d.gm_email).run(); }catch(_){ return "failed"; } return "suppressed"; }
   const token=genCode("UNS");
   const subject="Pre-qualified LA buyers for "+(d.dealership||"your store");
-  const optOut="https://carnimbus.com/api/unsubscribe?t="+token;
+  const optOut="https://carnimbus.us/api/unsubscribe?t="+token;
   const ADDR=env.OUTREACH_FROM_ADDRESS;
   const body="Hi "+(d.gm_name||"there")+",\n\nCarNimbus routes pre-qualified, ready-to-drive buyers to LA dealerships. "+
     "We can turn your rooftop's Drive Now engine on this week — your live inventory, matched to real local buyers, no work on your side.\n\n"+
@@ -912,7 +1180,7 @@ async function sendDealerOutreach(env, dealerId){
   }catch(_){ return "failed"; }
   if(env.RESEND_API_KEY){
     const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"content-type":"application/json"},
-      body:JSON.stringify({from:"CarNimbus <hello@carnimbus.com>",to:[d.gm_email],subject,text:body,
+      body:JSON.stringify({from:"CarNimbus <hello@carnimbus.us>",to:[d.gm_email],subject,text:body,
         headers:{"List-Unsubscribe":"<"+optOut+">","List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}})}).catch(()=>null);
     if(!r||!r.ok) return "failed";
   }
@@ -953,7 +1221,11 @@ async function poolExport(request,env){ const pool=new URL(request.url).searchPa
       lines.push(head.map(k=>k==="phone"?csvCell(r.phone):k==="sid"?csvCell(r.sid):k==="created_at"?csvCell(r.created_at):
         csvCell(Array.isArray(a[k])?a[k].join("|"):a[k])).join(",")); }
     return new Response(lines.join("\n"),{headers:{"content-type":"text/csv","content-disposition":'attachment; filename="buyers.csv"'}}); }
-  if(pool==="vdps"){ const rows=await env.DB.prepare("SELECT * FROM vdps ORDER BY updated_at DESC LIMIT 5000").all();
+  // active=1 ONLY. The HUD puts ⇩ Export next to ⇧ Upload CSV, so "export the sheet, fix one
+  // price in Excel, upload it back" is the most natural thing a non-specialist will ever do here
+  // — and until 2026-08-06 it relisted every archived and sold car in the file, because the
+  // export emitted them and vdpIngest forced every row it saw back to active=1.
+  if(pool==="vdps"){ const rows=await env.DB.prepare("SELECT * FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 5000").all();
     const head=["vin","year","make","model","trim","price_mo","price_total","miles","mileage","drivetrain","body","features","description","photo","location_zip","dealer_id","active"];
     const lines=[head.join(",")];
     for(const v of (rows.results||[])){ let fe=[],ph=[]; try{fe=JSON.parse(v.features||"[]")}catch(_){} try{ph=JSON.parse(v.photos||"[]")}catch(_){}
@@ -1188,7 +1460,7 @@ async function search(request,env,ctx){ try{
   const LEASE_APR_EQ=+(0.00275*2400).toFixed(1);     // AJ: MF→APR-equiv (standard ×2400). Constant: leaseMoFor's money factor is fixed.
   const leaseMoFor=(price,dn)=>{ const resid=price*0.55, mf=0.00275; return Math.max(99,Math.round((price-dn-resid)/36+(price+resid)*mf)); };   // AD3: 36-mo, 55% residual — honest ballpark like the APR default
   const radius=parseFloat(u.searchParams.get("radius"))||0;   // T4: 0/"" = any distance
-  const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text (legacy: calc.js/start.js send none; homepage now sends type=)
+  const q=String(u.searchParams.get("q")||"").toLowerCase().slice(0,80);   // Y3: dream-car text (/start sends none; homepage sends type=)
   const TYPE_OK=new Set(["sedan","suv","truck","sport"]);
   const tRaw=String(u.searchParams.get("type")||"").toLowerCase().slice(0,8);
   const carType=TYPE_OK.has(tRaw)?tRaw:null;   // AI: unknown value ⇒ no type signal, never a crash
@@ -1242,16 +1514,44 @@ async function search(request,env,ctx){ try{
     logEvent(env,{anon_id:anon,action:"intent.opened_calculator",source:"calculator",location:zip||null}),
     logEvent(env,{anon_id:anon,action:"intent.search_results",source:"calculator",location:zip||null,confidence:out.length})];
   // AC3: scans ledger — one row per validated web scan (src=scan), deduped per IP+terms; repeats counted, not re-inserted.
-  const MAKE_RE=/acura|alfa|aston|audi|bentley|bmw|buick|cadillac|chevrolet|chevy|chrysler|dodge|ferrari|fiat|ford|genesis|gmc|honda|hummer|hyundai|infiniti|jaguar|jeep|kia|lamborghini|land rover|range rover|lexus|lincoln|lotus|lucid|maserati|mazda|mclaren|mercedes|benz|mini|mitsubishi|nissan|polestar|pontiac|porsche|\bram\b|rivian|rolls|saab|saturn|scion|smart|subaru|suzuki|tesla|toyota|volkswagen|\bvw\b|volvo/;
-  // AI: `||carType` keeps the ledger alive — the homepage no longer sends free text, so MAKE_RE never matches and
-  // scans would silently stop recording (NIMBUS DAILY SCANS → 0). dream_car now holds the type for scanner rows.
-  if(u.searchParams.get("src")==="scan" && (MAKE_RE.test(q)||carType)){
+  // (MAKE_RE removed 2026-08-03 — it gated the scans ledger on the visitor naming a make, which the
+  // homepage calculator never does. That gate is what made the sensor deaf; see the block below.)
+  // 2026-08-03: RECORD EVERY REAL SEARCH, not just src=scan.
+  // Only lead.js passed src=scan, so /start — a surface public traffic actually lands on, and the
+  // CTA target of every /used/ SEO page — wrote NOTHING. The demand sensor was deaf on its own
+  // front door. (2026-08-06: start.js now sends src=scan AND a zip; calc.js, the third caller this
+  // comment used to name, was dead code included by no HTML and has been removed.)
+  //
+  // The MAKE_RE/carType gate goes too. It required the visitor to name a make or pick a type, but
+  // the calculator asks for neither — it asks budget, down, ZIP. Those searches are still demand;
+  // they are just demand without a stated body style, which segmentOfQuery records as "any".
+  //
+  // Bot noise is bounded: need_inputs returns before this point, so a row requires a valid 5-digit
+  // ZIP and a positive budget, and the unique index counts repeats instead of inserting duplicates.
+  if(u.searchParams.get("src")==="scan" || zip){
     const ip=request.headers.get("CF-Connecting-IP")||"0.0.0.0";
     const top=out[0]?[out[0].year,out[0].make,out[0].model].filter(Boolean).join(" "):null;
+    // 2026-08-03: `reason` and `top_mo` are persisted now. THIS IS THE DEMAND SIGNAL.
+    // `results` alone was useless — search() widens the radius and relaxes the budget until it
+    // finds something, so with any inventory at all `results=0` never happens (measured: the
+    // minimum across 62 production scans was 17). What actually matters is whether we had to
+    // COMPROMISE to answer, which is exactly what `reason` already said and nobody stored.
+    const topMo=out[0]?(+out[0].price_mo||null):null;
     jobs.push(env.DB.prepare(
-      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,budget,zip,radius,ua,results,top_match,fico) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "+
-      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,budget,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match, fico=excluded.fico")
-      .bind(ip,q||carType,deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top,isCash?"":fico).run().catch(()=>{}));
+      "INSERT INTO scans (ip,dream_car,deal_type,monthly,down,budget,zip,radius,ua,results,top_match,fico,reason,top_mo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "+
+      "ON CONFLICT(ip,dream_car,deal_type,monthly,down,budget,zip,radius) DO UPDATE SET repeats=repeats+1, last_ts=datetime('now'), results=excluded.results, top_match=excluded.top_match, fico=excluded.fico, reason=excluded.reason, top_mo=excluded.top_mo")
+      // `q||carType||""` — NOT `q||carType`. carType is null when the visitor picked no body style,
+      // which the homepage calculator never asks for, and scans.dream_car is NOT NULL. Binding null
+      // threw a constraint violation that this .catch() swallowed, so every calculator search failed
+      // to record silently. That one missing `||""` was the whole reason the sensor looked deaf.
+      // Empty string is correct here: segmentOfQuery("") → "any", i.e. budget and place, no stated
+      // body style — which is exactly what the calculator collects.
+      .bind(ip,q||carType||"",deal,monthly,down,isCash?budget:0,zip,radius||0,String(request.headers.get("User-Agent")||"").slice(0,160),out.length,top,isCash?"":fico,reason||null,topMo).run().catch(()=>{}));
+    // The busiest surface in the product emitted no event at all — every funnel view built on the
+    // event spine started one step downstream of the search that caused it. `discovery` is one of
+    // the seven allowed prefixes (worker.js:1928); no new prefix is introduced.
+    jobs.push(logEvent(env,{action:"discovery.search",source:"public",location:zip,
+      confidence:out.length,session_id:reason?("search:"+reason):"search"}).catch(()=>{}));
   }
   const logs=Promise.all(jobs);
   if(ctx&&ctx.waitUntil) ctx.waitUntil(logs); else await logs;
@@ -1499,12 +1799,12 @@ async function book(request,env,uid){ const {vdpId,slot}=await request.json().ca
   else await env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
     .bind(uid,vdpId,center,String(slot).slice(0,60),"confirmed",tok,new Date().toISOString()).run();
   const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
-  const smsBody=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`;
+  const smsBody=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.us/pass/${tok} — ${slot} at ${center}. Reply STOP to opt out.`;
   await sendSMS(env,u&&u.phone,smsBody).catch(()=>{});                                   // instant — no cron wait
   await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
     .bind(u&&u.phone,"drive-confirm",smsBody,new Date(Date.now()+864e5).toISOString(),"none",new Date().toISOString()).run().catch(()=>{});   // +24h reminder, not duplicate
   if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
-    if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${slot}. Reply here to text the buyer. Console: dealer.carnimbus.com`).catch(()=>{}); }
+    if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus: new Drive Now appointment — ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}), ${v.year} ${v.make} ${v.model}, ${slot}. Reply here to text the buyer. Console: app.carnimbus.us`).catch(()=>{}); }
   await logEvent(env,{action:"action.appointment_set",vehicle_id:vdpId,source:"drive-now"});   // E1: surf→appointment terminal event
   return json({ok:true,pass:"/pass/"+tok,center:center,slot:slot}); }
 // O4: buyer cancels a drive — clears it on their side (status=cancelled, kept for records) AND frees the dealer slot.
@@ -1648,12 +1948,12 @@ ${dream?`Their dream car is "${dream}" — I honor it and show where I deliver t
       .bind(uid,vdpId,b.center,b.slot,"confirmed",tok,new Date().toISOString()).run();
     await logEvent(env,{action:"action.appointment_set",vehicle_id:vdpId,source:"car-chat"});   // E1: surf→appointment terminal event
     const u=await env.DB.prepare("SELECT phone,handle FROM users WHERE id=?").bind(uid).first();
-    const chatSms=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.com/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`;
+    const chatSms=`Your ${v.year} ${v.make} ${v.model} Drive Now pass: carnimbus.us/pass/${tok} — ${b.slot} at ${b.center}. Reply STOP to opt out.`;
     await sendSMS(env,u.phone,chatSms).catch(()=>{});
     await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,created_at) VALUES (?,?,?,?,?,?)")
       .bind(u.phone,"drive-confirm",chatSms,new Date(Date.now()+864e5).toISOString(),"none",new Date().toISOString()).run();
     if(v.dealer_id){ const dl=await env.DB.prepare("SELECT name,phone FROM dealer_leads WHERE id=? AND status='active'").bind(v.dealer_id).first();
-      if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus — added to your calendar: ${fmtSlotLabel(b.slot)} with ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}) for the ${v.year} ${v.make} ${v.model}. Reply here to text them. Console: dealer.carnimbus.com`).catch(()=>{}); }
+      if(dl&&dl.phone) await sendSMS(env,dl.phone,`CarNimbus — added to your calendar: ${fmtSlotLabel(b.slot)} with ${(u&&u.handle)||"a buyer"} (•••-${String(u&&u.phone||"").slice(-4)}) for the ${v.year} ${v.make} ${v.model}. Reply here to text them. Console: app.carnimbus.us`).catch(()=>{}); }
     pass="/pass/"+tok; } }   // close: claimed-else, slotManaged-else
     }catch(_){} }
   // R9: they hold THIS car's confirmed drive and asked for the pass — hand them the existing one, never dead-end.
@@ -1688,7 +1988,7 @@ async function openSlots(request,env){ const u=new URL(request.url); const vid=+
 function icsFor(t){ const dt=String(t.slot).replace(/[^0-9]/g,"").slice(0,12);   // YYYYMMDDHHMM
   const start=dt.length>=12?dt.slice(0,8)+"T"+dt.slice(8,12)+"00":(dt.slice(0,8)+"T180000");
   const end=dt.length>=12?dt.slice(0,8)+"T"+String(+dt.slice(8,10)+1).padStart(2,"0")+dt.slice(10,12)+"00":(dt.slice(0,8)+"T190000");
-  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//EN","BEGIN:VEVENT","UID:"+t.pass_token+"@carnimbus.com","DTSTAMP:"+start,"DTSTART:"+start,"DTEND:"+end,"SUMMARY:CarNimbus test drive — "+t.year+" "+t.make+" "+t.model,"LOCATION:"+(t.center||"Porsche South Bay"),"DESCRIPTION:Drive Now pass carnimbus.com/pass/"+t.pass_token,"END:VEVENT","END:VCALENDAR"].join("\r\n");
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//EN","BEGIN:VEVENT","UID:"+t.pass_token+"@carnimbus.us","DTSTAMP:"+start,"DTSTART:"+start,"DTEND:"+end,"SUMMARY:CarNimbus test drive — "+t.year+" "+t.make+" "+t.model,"LOCATION:"+(t.center||"Porsche South Bay"),"DESCRIPTION:Drive Now pass carnimbus.us/pass/"+t.pass_token,"END:VEVENT","END:VCALENDAR"].join("\r\n");
   return new Response(ics,{headers:{"content-type":"text/calendar; charset=utf-8","content-disposition":'attachment; filename="carnimbus-drive.ics"'}}); }
 async function passPage(request,env){ const tok=new URL(request.url).pathname.split("/")[2].replace(/\.ics$/,"")||"";
   const t=await env.DB.prepare("SELECT td.*,v.year,v.make,v.model,v.trim,v.price_mo,v.miles,v.drivetrain,v.body,v.features,v.photos,u.phone,u.sid,p.answers,s.mileage_exact,s.drivetrain_detail,s.engine,s.horsepower,s.safety_features_json,s.tech_features_json,s.comfort_features_json FROM test_drives td JOIN vdps v ON v.id=td.vdp_id JOIN users u ON u.id=td.user_id LEFT JOIN profiles p ON p.user_id=td.user_id LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE td.pass_token=?").bind(tok).first();
@@ -1706,7 +2006,6 @@ async function passPage(request,env){ const tok=new URL(request.url).pathname.sp
   if(!feats.length) feats.push(...parseJ(t.features));
   const milesLabel=t.mileage_exact!=null?Number(t.mileage_exact).toLocaleString():(t.miles||"—");
   const driveLabel=t.drivetrain_detail||t.drivetrain||"—";
-  const passSlug=(t.year+"-"+t.make+"-"+t.model).toLowerCase().replace(/[^a-z0-9]+/g,"-");
   const safePhoto=(/^\/assets\/[\w/?=.-]*$/.test(photo)&&!photo.includes(".."))?photo:"";   // dealer-controlled → allowlist, no traversal, before CSS url()
   const carTitle=escHtml(t.year+" "+t.make+" "+t.model);
   let a={}; try{ a=JSON.parse(t.answers)||{}; a=await decryptAnswers(a, env.PII_KEY); }catch(_){}
@@ -1736,9 +2035,9 @@ ${isPrint?".noprint{display:none!important}body{background:#fff;padding:8px;disp
 .mono{font-family:ui-monospace,Menlo,monospace}.cy{color:#18C8FF}
 .back{display:inline-flex;align-items:center;gap:5px;font:600 11px Manrope;color:#8ca0c4;text-decoration:none;margin-bottom:2px}</style></head>
 <body><div class="pass">
-<a class="brand" href="https://app.carnimbus.com/matches"><img src="/assets/logo.png" alt="" style="width:24px;height:24px"><b style="font:700 14px 'Space Grotesk',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:9px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></a>
+<a class="brand" href="https://carnimbus.us/browse"><img src="/assets/logo.png" alt="" style="width:24px;height:24px"><b style="font:700 14px 'Space Grotesk',Manrope;color:#fff">CarNimbus</b><span class="mono" style="margin-left:auto;font-size:9px;color:#18C8FF;letter-spacing:.18em">DRIVE NOW</span></a>
 <div class="hero"></div><div class="pd">
-<a class="back noprint" href="https://app.carnimbus.com/matches">‹ Back to my matches</a>
+<a class="back noprint" href="https://carnimbus.us/browse">‹ Back to inventory</a>
 <div class="mono" style="font-size:10px;color:#8ca0c4;letter-spacing:.22em;margin-top:8px">${T.pass}</div>
 <div style="font:800 24px Manrope;color:#fff;margin:6px 0 3px">${carTitle}</div>
 <div class="cy" style="font:700 12px Manrope">${escHtml(t.center||"CarNimbus Test Drive Center")} · LA Car Guy · 424-398-8611</div>
@@ -1757,11 +2056,11 @@ ${feats.slice(0,4).map(f=>`<div style="grid-column:span 2;color:#cbd5e1"><span c
 <div style="font:600 10px Manrope;color:#8ca0c4;margin-top:8px">${T.scan}</div></div></div>
 <button id="pm-print" class="btn primary md noprint" type="button" style="width:100%;margin-top:16px">${T.save}</button>
 ${t.status!=="cancelled"?`<div class="row noprint" style="gap:8px;margin-top:8px">
-<a class="btn ghost sm" href="https://app.carnimbus.com/talk/${passSlug}" style="flex:1;text-decoration:none;text-align:center;justify-content:center">${T.resched}</a>
+<a class="btn ghost sm" href="https://carnimbus.us${vdpPath({year:t.year,make:t.make,model:t.model,id:t.vdp_id})}" style="flex:1;text-decoration:none;text-align:center;justify-content:center">${T.resched}</a>
 <button id="pm-cancel" class="btn ghost sm" type="button" data-token="${escHtml(t.pass_token)}" data-confirm="${escHtml(T.cancelConfirm)}" style="flex:1">${T.cancel}</button>
 </div><div id="pm-cancelled" class="noprint" style="display:none;font:700 12px Manrope;color:#f5a623;margin-top:10px;text-align:center">${T.cancelled} · slot freed</div>`:""}
 <div id="pm-hint" class="noprint" style="display:none;font:600 10px Manrope;color:#8ca0c4;margin-top:8px;text-align:center">iPhone: in the print sheet choose <b style="color:#e2e9f2">Save to Files</b> — or tap Share ⬆️ → <b style="color:#e2e9f2">Print</b>.</div>
-<div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.com · ${T.tag}</div>
+<div style="text-align:center;font:600 9px Manrope;color:#8ca0c4;margin-top:10px">carnimbus.us · ${T.tag}</div>
 </div></div>
 </body></html>`,{headers:{"content-type":"text/html"}}); }
 function cidFor(id){ const n=100000000+(id*7919)%900000000; const s=String(n); return s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }
@@ -1840,7 +2139,10 @@ async function dealerConsole(request,env,uid,dealer){
     "(SELECT COUNT(*) FROM web_leads w JOIN creator_claims cc ON cc.id=w.creator_claim_id WHERE cc.drop_id=d.id) leads "+
     "FROM creator_drops d WHERE d.dealer_id=?").bind(dealer.id).all().catch(()=>({results:[]}));
   const dropBy={}; for(const d of (dropRows.results||[])) dropBy[d.vdp_id]={rate_cents:d.rate_cents,status:d.status,claims:d.claims||0,posts:d.posts||0,leads:d.leads||0};
-  return json({ok:true,dealer:dealer,kpis:k,deltas:{today:rt.t||0,yesterday:rt.y||0},
+  // Creator payouts scale with days-on-lot, and lot_date is data only the dealer can supply.
+  // Surfaced as a nudge in the INVENTORY pane — 94/95 cars have no date today.
+  const nod=await env.DB.prepare("SELECT COUNT(*) c FROM vdps v WHERE "+DSCOPE+" AND v.active=1 AND v.lot_date IS NULL").bind(dealer.id).first().catch(()=>null);
+  return json({ok:true,dealer:dealer,kpis:k,deltas:{today:rt.t||0,yesterday:rt.y||0},no_lot_date:(nod&&nod.c)||0,
     appointments:(tds.results||[]).map(t=>({...t,who:t.handle||("Rider •••-"+String(t.phone).slice(-4)),cid:cidFor(t.id),phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),
     listings:(ls.results||[]).map(v=>({...v,photos:JSON.parse(v.photos||"[]"),drop:dropBy[v.id]||null})),
     archived:(ar.results||[]).map(v=>({...v,photos:JSON.parse(v.photos||"[]")}))});
@@ -2183,7 +2485,7 @@ async function dealerLeadIcs(request,env,uid,dealer){
   const esc=v=>String(v==null?"":v).replace(/[\r\n]+/g," ").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").slice(0,200);
   const name=esc([L.first_name,L.last_name].filter(Boolean).join(" "))||"Buyer";
   const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//Dealer//EN","BEGIN:VEVENT",
-    "UID:cn-lead-"+L.id+"@carnimbus.com","DTSTART:"+S,"DTEND:"+E,
+    "UID:cn-lead-"+L.id+"@carnimbus.us","DTSTART:"+S,"DTEND:"+E,
     "SUMMARY:Test Drive — "+name+" — "+esc(L.matched_car),
     "DESCRIPTION:CID "+esc(L.cid)+"\\nPhone "+esc(L.phone)+"\\n"+(L.trade_in?("Trade-in: "+esc(L.trade_in)):""),
     "END:VEVENT","END:VCALENDAR"].join("\r\n");
@@ -2370,9 +2672,10 @@ async function aiPulse(env){
     pendingCreators:await q("SELECT COUNT(*) c FROM creators WHERE status='pending'"),
     openDrops:      await q("SELECT COUNT(*) c FROM creator_drops WHERE status='open'"),
     postsPending:   await q("SELECT COUNT(*) c FROM creator_posts WHERE status='submitted'"),
-    owedCents:     (await q("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status='approved'"))||0,
+    owedCents:     (await q("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status IN ('approved','paying')"))||0,
     accruedCents:  (await q("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status='accrued'"))||0,
-    creatorLeads:   await q("SELECT COUNT(*) c FROM web_leads WHERE creator_claim_id IS NOT NULL AND COALESCE(is_demo,0)=0"),
+    creatorLeads:   await q("SELECT COUNT(*) c FROM web_leads WHERE creator_id IS NOT NULL AND COALESCE(is_demo,0)=0"),
+    refClicks:     (await q("SELECT COALESCE(SUM(ref_clicks),0) c FROM creators"))||0,
     // legacy (not shown on the new console, retained for compatibility)
     cars: await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
     leadsToday: driveNowsToday, leadsTotal: await q("SELECT COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0") };
@@ -2406,8 +2709,12 @@ async function aiTrends(env){
       claims: (await env.DB.prepare("SELECT COUNT(*) c FROM creator_claims WHERE substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
       posts:  (await env.DB.prepare("SELECT COUNT(*) c FROM creator_posts WHERE substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
       clicks: (await env.DB.prepare("SELECT COALESCE(SUM(clicks),0) c FROM creator_claims").first().catch(()=>({c:0})))?.c||0,
-      leads:  (await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE creator_claim_id IS NOT NULL AND COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
-      spentCents:(await env.DB.prepare("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status IN ('approved','paid')").first().catch(()=>({c:0})))?.c||0,
+      leads:  (await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE creator_id IS NOT NULL AND COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      // Split the two link types so it's visible which one is actually producing.
+      claim_leads:(await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE creator_claim_id IS NOT NULL AND COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      ref_leads:(await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE creator_id IS NOT NULL AND creator_claim_id IS NULL AND COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      ref_clicks:(await env.DB.prepare("SELECT COALESCE(SUM(ref_clicks),0) c FROM creators").first().catch(()=>({c:0})))?.c||0,
+      spentCents:(await env.DB.prepare("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status IN ('approved','paying','paid')").first().catch(()=>({c:0})))?.c||0,
       topCreators: await rows("SELECT c.handle t, COUNT(w.id) c FROM creators c JOIN creator_claims cc ON cc.creator_id=c.id LEFT JOIN web_leads w ON w.creator_claim_id=cc.id GROUP BY c.id ORDER BY c DESC LIMIT 8")
     },
     overTime
@@ -2422,6 +2729,10 @@ async function adminBuyers(env){
 // ===== BI: Nimbus conversational ops brain — insights (aiAsk) + guarded actions (aiAct). =====
 const NIMBUS_ACTIONS = { dealer_engine:"turn a dealer's inventory engine on/off (args: dealer_id, on)",
   reindex:"re-embed inventory + profiles into search (no args)",
+  // Added 2026-08-06. Until this existed there was NO way to correct one price: the CSV upload
+  // was the only route, and a minimal vin,price_mo row used to blank four other columns. Raw SQL
+  // from a laptop was the alternative. One column, one car, reversible.
+  set_price:"change one car's monthly price (args: vin, price_mo)",
   activate_vin:"put a car back in inventory (args: vin)",
   deactivate_vin:"take a car out of inventory (args: vin)",
   purge_test:"purge all is_demo test rows (confirm required)",
@@ -2435,6 +2746,11 @@ const NIMBUS_ACTIONS = { dealer_engine:"turn a dealer's inventory engine on/off 
   creator_reinstate:"reinstate a suspended creator (args: creator_id)",
   creator_clawback:"reverse an accrued or approved earning (args: earning_id)",
   creator_payout:"IRREVERSIBLE - send an approved earning to the creator's Stripe account (args: earning_id)",
+  // 2026-08-03: these two replace the retired self-serve portal. Link-minting and Stripe onboarding
+  // now happen here, with a human in the loop on both.
+  creator_invite:"create a creator, mint their permanent /c/ link, and start Stripe onboarding (args: handle, email)",
+  creator_sync:"re-read Stripe and refresh payouts_enabled for a creator (args: creator_id)",
+  backfill_drops:"open a priced drop for every active car that doesn't have one yet (no args)",
   drop_rate:"set a drop's per-post rate in cents and lock it from re-pricing (args: drop_id, cents)",
   close_drop:"stop a drop from being claimed (args: drop_id)",
   open_drop:"reopen a closed drop (args: drop_id)" };
@@ -2463,7 +2779,33 @@ async function aiHealth(request,env){
         : /enotfound|dns|getaddrinfo/i.test(m) ? "hostname does not resolve — the tunnel URL is stale/changed"
         : /refused|econnrefused/i.test(m) ? "connection refused — tunnel is up but nothing is listening on that port"
         : ("could not connect ("+m.slice(0,80)+")"); } }
-  return json({ok:true,appliance,host,why,cloud:env.AI?"bound":"absent",build:"R17",ts:Date.now()}); }
+  // ---- WHAT HEALTH ACTUALLY MEANS (2026-08-06) ------------------------------------------------
+  // This used to check ONE thing — whether the AI appliance answered a ping — and return ok:true
+  // regardless of everything else. The green dot could be green with D1 entirely down, which is
+  // the opposite of what a health check is for. D1 is the only dependency whose failure takes the
+  // whole product with it, so it decides `ok` now; the AI appliance is reported, not fatal.
+  let db="down", dbWhy="";
+  try{ const t=await env.DB.prepare("SELECT 1 x").first(); db=(t&&t.x===1)?"up":"err"; }
+  catch(e){ db="down"; dbWhy=String((e&&e.message)||e).slice(0,160); }
+  let r2=env.DOCS?"bound":"absent", vec=env.MATCH_INDEX?"bound":"absent";
+  // Cron freshness. "Did the cron run?" had no answer anywhere before job_runs (0076). Stale is a
+  // real outage — a silent cron looks exactly like a working one from the outside.
+  let cron="unknown", lastRun=null, cronFails=0;
+  if(db==="up"){
+    const j=await env.DB.prepare("SELECT MAX(started_at) t FROM job_runs").first().catch(()=>null);
+    lastRun=(j&&j.t)||null;
+    if(lastRun){ const ageMin=Math.round((Date.now()-Date.parse(lastRun+"Z"))/60000);
+      cron = ageMin<=15 ? "fresh" : ageMin<=90 ? "late" : "stale"; }
+    const f=await env.DB.prepare("SELECT COUNT(*) c FROM job_runs WHERE ok=0 AND started_at > ?")
+      .bind(new Date(Date.now()-864e5).toISOString()).first().catch(()=>null);
+    cronFails=(f&&f.c)||0;
+  }
+  // Twilio going dark stops every lead alert and says nothing — sendSMS returns {dark:true}.
+  const sms=env.TWILIO_ACCOUNT_SID?(env.ADMIN_PHONE?"live":"no_admin_phone"):"dark";
+  const ok = db==="up" && cron!=="stale";
+  return json({ok,db,dbWhy,appliance,host,why,cloud:env.AI?"bound":"absent",r2,vec,
+    cron,last_run:lastRun,cron_failures_24h:cronFails,sms,
+    build:(env.CF_VERSION_METADATA&&env.CF_VERSION_METADATA.id)||"unversioned",ts:Date.now()}); }
 // R15: deterministic verb layer (build-list #3/#11/#15) — answers instantly, survives total model loss.
 // All SQL parameterized; purge_test touches is_demo=1 rows only; remove proposes, never executes.
 async function nimbusVerb(env,q,p){
@@ -2507,6 +2849,16 @@ async function nimbusVerb(env,q,p){
     const tot=e.reduce((a,x)=>a+(+x.amount_cents||0),0);
     return {answer:(e.map(x=>`earning #${x.id} · ${x.handle} · $${((x.amount_cents||0)/100).toFixed(2)}${x.payouts_enabled?"":" · ⚠ Stripe onboarding incomplete"}`).join("\n")||"Nothing approved for payout.")+
       (e.length?`\n\nTotal owed: $${(tot/100).toFixed(2)}. Say "pay earning <id>" to propose a transfer.`:"")};
+  }
+  if(/^(show |list |view )?(me )?(the )?(affiliate )?links$/.test(q)){
+    const lk=await rows("SELECT c.handle, c.ref_token, COALESCE(c.ref_clicks,0) clicks, "+
+      "(SELECT COUNT(*) FROM web_leads w WHERE w.creator_id=c.id) leads FROM creators c WHERE c.ref_token IS NOT NULL ORDER BY clicks DESC LIMIT 25");
+    const cm=await rows("SELECT c.handle, cc.token, COALESCE(cc.clicks,0) clicks, d.vin FROM creator_claims cc "+
+      "JOIN creators c ON c.id=cc.creator_id JOIN creator_drops d ON d.id=cc.drop_id ORDER BY cc.clicks DESC LIMIT 15");
+    const a=["PERSONAL LINKS"].concat(lk.length?lk.map(x=>`carnimbus.us/c/${x.ref_token} · ${x.handle} · ${x.clicks} clicks · ${x.leads} leads`):["(none)"]);
+    a.push("","CAR LINKS");
+    a.push.apply(a,cm.length?cm.map(x=>`carnimbus.us/c/${x.token} · ${x.handle} · ${x.vin||"—"} · ${x.clicks} clicks`):["(none)"]);
+    return {answer:a.join("\n")};
   }
   if((m=q.match(/^approve post #?(\d+)$/))){
     return {answer:`Approving post #${m[1]} releases its earning for payout.`,proposed_action:{name:"creator_approve_post",args:{post_id:m[1]}}};
@@ -2642,6 +2994,21 @@ async function aiAct(request,env){
     else if(action==="activate_vin"||action==="deactivate_vin"){ const on=action==="activate_vin"?1:0; const vin=String(a.vin||"").trim();
       if(!vin) return json({ok:false,error:"bad_vin"},400);
       await env.DB.prepare("UPDATE vdps SET active=?, deactivated_at=? WHERE vin=?").bind(on, on?null:new Date().toISOString(), vin).run(); result=`${vin} ${on?"activated":"deactivated"}`; }
+    // ONE car, ONE column. The old ways to change a price were a CSV upload (which used to blank
+    // miles/price_total/mileage/location_zip) or raw SQL from a laptop. embedding_synced=0 so the
+    // next syncEmbeddings re-indexes it, exactly as appReprice does — otherwise search keeps
+    // ranking on the old price.
+    else if(action==="set_price"){
+      const vin=String(a.vin||"").trim(); const mo=parseInt(a.price_mo,10);
+      if(!vin) return json({ok:false,error:"bad_vin"},400);
+      if(!mo||mo<50||mo>9999) return json({ok:false,error:"bad_price"},400);
+      const cur=await env.DB.prepare("SELECT id,price_mo FROM vdps WHERE vin=?").bind(vin).first().catch(()=>null);
+      if(!cur) return json({ok:false,error:"not_found"},404);
+      const r=await env.DB.prepare("UPDATE vdps SET price_mo=?, embedding_synced=0, updated_at=? WHERE vin=?")
+        .bind(mo,new Date().toISOString(),vin).run();
+      if(!r||!r.meta||r.meta.changes!==1) return json({ok:false,error:"not_found"},404);
+      await logEvent(env,{action:"dealer.price_set",vehicle_id:cur.id,source:"nimbus",confidence:mo}).catch(()=>{});
+      result=`${vin} $${cur.price_mo||"—"}/mo → $${mo}/mo`; }
     else if(action==="purge_test"){   // R15: confirm-gated; scoped strictly to is_demo rows
       const n=await env.DB.prepare("DELETE FROM web_leads WHERE is_demo=1").run();
       await env.DB.prepare("UPDATE vdps SET active=0, deactivated_at=? WHERE dealer_id IN (SELECT id FROM dealer_leads WHERE is_demo=1)").bind(new Date().toISOString()).run();
@@ -2688,12 +3055,50 @@ async function aiAct(request,env){
       if(!e) return json({ok:false,error:"bad_earning"},400);
       if(e.status!=="approved") return json({ok:false,error:"not_approved"},422);
       if(!e.stripe_account_id||!e.payouts_enabled) return json({ok:false,error:"payouts_not_enabled"},422);
+      // CLAIM FIRST. Until 2026-08-06 this transferred and THEN updated, with aiAct's single
+      // catch turning any failure in between into a generic "Action failed" — leaving the
+      // earning 'approved' and the Pay button on screen. The obvious human response to a failure
+      // message is to press the button again, and that paid the creator twice with no trace.
+      // The guarded UPDATE is the lock: exactly one caller can move approved → paying.
+      const claim=await env.DB.prepare("UPDATE creator_earnings SET status='paying' WHERE id=? AND status='approved'")
+        .bind(eid).run().catch(()=>null);
+      if(!claim||!claim.meta||claim.meta.changes!==1) return json({ok:false,error:"not_approved_or_in_flight"},409);
+      // …and the idempotency key is the belt to that braces: even if this row were lost entirely,
+      // Stripe refuses a second transfer carrying the same key.
       const t=await stripeApi(env,"transfers",{amount:e.amount_cents,currency:"usd",destination:e.stripe_account_id,
-        "metadata[earning_id]":String(eid),"metadata[creator_id]":String(e.cid)});
-      if(!t.ok||!t.data.id) return json({ok:false,error:"stripe_failed"},502);
+        "metadata[earning_id]":String(eid),"metadata[creator_id]":String(e.cid)}, "earning-"+eid);
+      if(!t.ok||!t.data.id){
+        await env.DB.prepare("UPDATE creator_earnings SET status='approved' WHERE id=? AND status='paying'")
+          .bind(eid).run().catch(()=>{});
+        return json({ok:false,error:"stripe_failed"},502);
+      }
+      // If THIS throws, the row stays 'paying' — not payable again, and visibly stuck rather than
+      // silently repayable. That is the failure mode we want.
       await env.DB.prepare("UPDATE creator_earnings SET status='paid', stripe_transfer_id=?, paid_at=? WHERE id=?")
         .bind(t.data.id,new Date().toISOString(),eid).run();
       result="paid $"+(e.amount_cents/100).toFixed(2)+" — transfer "+t.data.id; }
+    // 2026-08-03: the two verbs that replace the retired creator portal.
+    else if(action==="creator_invite"){
+      const r=await creatorInvite(env,a);
+      if(!r.ok) return json(r,r.error==="bad_request"?400:502);
+      result="invited "+r.handle+" — link "+r.link+(r.onboard?" · onboarding "+r.onboard:" · STRIPE NOT CONFIGURED, no payouts yet"); }
+    else if(action==="creator_sync"){
+      const r=await creatorSync(env,a);
+      if(!r.ok) return json(r,r.error==="bad_creator"?400:502);
+      result=r.handle+" — payouts "+(r.payouts_enabled?"ENABLED":"still pending Stripe KYC"); }
+    else if(action==="backfill_drops"){
+      // Mirrors dealerAutoPlace (:1961): NOT EXISTS guard, so re-running is a no-op, never a duplicate.
+      const cars=await env.DB.prepare(
+        "SELECT v.id,v.vin,v.price,v.price_mo,v.lot_date FROM vdps v WHERE v.active=1 "+
+        "AND NOT EXISTS (SELECT 1 FROM creator_drops d WHERE d.vdp_id=v.id) LIMIT 500").all().catch(()=>({results:[]}));
+      const now=new Date().toISOString(); let opened=0, cents=0;
+      for(const v of (cars.results||[])){
+        const r=rateForDrop(v);
+        const ok=await env.DB.prepare("INSERT INTO creator_drops (vin,vdp_id,dealer_id,rate_cents,rate_why,locked,status,created_at) VALUES (?,?,(SELECT dealer_id FROM vdps WHERE id=?),?,?,0,'open',?)")
+          .bind(v.vin,v.id,v.id,r.cents,JSON.stringify(r.why),now).run().then(()=>1).catch(()=>0);
+        if(ok){ opened++; cents+=r.cents; }
+      }
+      result=opened+" drop(s) opened"+(opened?(" · avg $"+((cents/opened)/100).toFixed(0)+"/post"):"")+" (reversible: close_drop)"; }
     else if(action==="drop_rate"){
       const did2=parseInt(a.drop_id,10), cents=parseInt(a.cents,10);
       if(!did2||!(cents>=0)) return json({ok:false,error:"bad_drop"},400);
@@ -2886,7 +3291,7 @@ async function routeLead(env, L){
   try{ const r=await fetch(env.CRM_ENDPOINT,{method:"POST",headers:{"content-type":"application/xml"},body:adfFor(L)});
     return r.ok?"routed":("crm_"+r.status); }catch(_){ return "crm_error"; } }
 // ===================================================================================================
-// ===== CREATOR NETWORK (creator.carnimbus.com) — slide-4 step 2 ====================================
+// ===== CREATOR NETWORK (creator.carnimbus.us) — slide-4 step 2 ====================================
 // ===================================================================================================
 // Dealer uploads a VIN -> NIMBUS prices a "drop" -> approved creators see it ranked -> they claim a
 // tracked link -> a buyer clicks it -> the lead carries creator_claim_id -> the post earns.
@@ -2982,7 +3387,30 @@ async function dropForListing(env,v,dealerId,now){
   await logEvent(env,{action:"dealer.drop_created",vehicle_id:v.id,source:"dealer-portal",confidence:r.cents/100});
 }
 
-// ---- Creator session ------------------------------------------------------------------------------
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// THE CREATOR CONSOLE — retired 2026-08-03, RESTORED 2026-08-06 for deck v13 S-04.
+//
+// Everything from here to `creatorRedirect()` serves the one-page console, now at
+// app.carnimbus.us/creators (it ran on creator.carnimbus.us until the domain cutover; that host
+// stays bound and 301s to the apex, since a detached host cannot redirect).
+//
+// The retirement removed ten route lines and nothing else — no handler was deleted and no table
+// was dropped. That is the only reason this restore is a ten-line change instead of a rewrite,
+// and it is the argument for leaving unrouted bodies in place rather than ripping them out.
+//
+// LIVE AGAIN: makeCreatorSession · readCreatorSession · creatorCookie · withCreator · creatorSignup
+//        creatorLogin · creatorLogout · creatorAvatar · creatorFeed · creatorAffinity
+//        creatorClaim · creatorPost · creatorEarnings · creatorConnectStart · creatorConnectReturn
+//
+// NEVER STOPPED: creatorStats (creatorAgent + creatorQueue) · mintRefToken (creatorInvite) ·
+//        refForCookies (lead capture) · stripeApi (payouts AND appStake) ·
+//        creatorRedirect (/c/ — the attribution rail) · rateForDrop · dropFit · dropForListing
+//
+// What replaced the portal: operator verbs on ai. — creator_invite, creator_sync,
+// creator_approve_post, creator_payout — all through aiAct's confirm gate.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+// ---- Creator session (DEAD — see the block above) --------------------------------------------------
 // Mirrors makeDealerSession/readDealerSession (cn_dlr) with a "c" prefix and its own cookie.
 async function makeCreatorSession(env,id){ const exp=Date.now()+30*864e5, p="c"+id+"."+exp; return p+"."+await hmac(env,p); }
 async function readCreatorSession(env,request){ const m=(request.headers.get("Cookie")||"").match(/cn_crt=([^;]+)/); if(!m) return null;
@@ -2994,7 +3422,7 @@ function creatorCookie(tok){ return "cn_crt="+tok+"; Path=/; HttpOnly; Secure; S
 async function withCreator(request,env,fn){
   const cid=await readCreatorSession(env,request);
   if(!cid) return json({ok:false,error:"auth"},401);
-  const c=await env.DB.prepare("SELECT id,email,handle,status,followers_declared,score,score_why,stripe_account_id,payouts_enabled FROM creators WHERE id=?").bind(cid).first();
+  const c=await env.DB.prepare("SELECT id,email,handle,status,followers_declared,score,score_why,stripe_account_id,payouts_enabled,ref_token,ref_clicks,avatar,display_name FROM creators WHERE id=?").bind(cid).first();
   if(!c) return json({ok:false,error:"auth"},401);
   if(c.status!=="approved") return json({ok:false,error:"pending"},403);
   return fn(request,env,cid,c);
@@ -3014,8 +3442,9 @@ async function creatorSignup(request,env){
   const approved=followers>=CREATOR_MIN_FOLLOWERS;
   const salt=newSalt(), hash=await hashPw(String(b.password),salt), now=new Date().toISOString();
   const seed=creatorScore({});
-  const ins=await env.DB.prepare("INSERT INTO creators (email,pw_hash,pw_salt,handle,status,followers_declared,score,score_why,audience_tags,scored_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(em,hash,salt,handle,approved?"approved":"pending",followers,seed.score,JSON.stringify(seed.why),platform,now,now).run();
+  const ref=await mintRefToken(env,handle);
+  const ins=await env.DB.prepare("INSERT INTO creators (email,pw_hash,pw_salt,handle,status,followers_declared,score,score_why,audience_tags,scored_at,created_at,ref_token,ref_clicks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)")
+    .bind(em,hash,salt,handle,approved?"approved":"pending",followers,seed.score,JSON.stringify(seed.why),platform,now,now,ref).run();
   const id=ins.meta.last_row_id;
   await env.DB.prepare("INSERT INTO creator_socials (creator_id,platform,handle,url,followers_declared,verified,created_at) VALUES (?,?,?,?,?,0,?)")
     .bind(id,platform,handle,String(b.url||"").slice(0,300),followers,now).run().catch(()=>{});
@@ -3026,9 +3455,10 @@ async function creatorLogin(request,env){
   const {email,password}=await request.json().catch(()=>({}));
   const em=String(email||"").trim().toLowerCase().slice(0,120);
   if(!em||!password) return json({ok:false,error:"bad_request"},400);
-  const c=await env.DB.prepare("SELECT id,pw_hash,pw_salt,status FROM creators WHERE email=?").bind(em).first().catch(()=>null);
+  const c=await env.DB.prepare("SELECT id,pw_hash,pw_salt,status,handle,ref_token FROM creators WHERE email=?").bind(em).first().catch(()=>null);
   if(c && await verifyPw(String(password),c.pw_salt,c.pw_hash)){
     if(c.status!=="approved") return json({ok:false,error:"pending"},403);
+    if(!c.ref_token) await env.DB.prepare("UPDATE creators SET ref_token=? WHERE id=?").bind(await mintRefToken(env,c.handle),c.id).run().catch(()=>{});
     return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":creatorCookie(await makeCreatorSession(env,c.id)),...SEC}});
   }
   // One credential, both portals: dealer staff sign in here with their existing dealer email+password.
@@ -3038,16 +3468,28 @@ async function creatorLogin(request,env){
   if(!did) return json({ok:false,error:"bad_credentials"},401);
   const d=await env.DB.prepare("SELECT id,status,client_no,name,dealership FROM dealer_leads WHERE id=?").bind(did).first();
   if(!d||d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
-  let row=await env.DB.prepare("SELECT id,status FROM creators WHERE email=?").bind(em).first().catch(()=>null);
+  let row=await env.DB.prepare("SELECT id,status,handle,ref_token FROM creators WHERE email=?").bind(em).first().catch(()=>null);
   if(!row){
     const salt=newSalt(), hash=await hashPw(String(password),salt), now=new Date().toISOString();
-    const seed=creatorScore({});
-    const ins=await env.DB.prepare("INSERT INTO creators (email,pw_hash,pw_salt,handle,status,followers_declared,score,score_why,audience_tags,scored_at,created_at,dealer_id) VALUES (?,?,?,?, 'approved', 0,?,?, 'dealer-linked', ?,?,?)")
-      .bind(em,hash,salt,"@"+em.split("@")[0].slice(0,40),seed.score,JSON.stringify(seed.why),now,now,did).run();
+    const seed=creatorScore({}), handle="@"+em.split("@")[0].slice(0,40);
+    const ref=await mintRefToken(env,handle);
+    const ins=await env.DB.prepare("INSERT INTO creators (email,pw_hash,pw_salt,handle,status,followers_declared,score,score_why,audience_tags,scored_at,created_at,dealer_id,ref_token,ref_clicks) VALUES (?,?,?,?, 'approved', 0,?,?, 'dealer-linked', ?,?,?,?,0)")
+      .bind(em,hash,salt,handle,seed.score,JSON.stringify(seed.why),now,now,did,ref).run();
     row={id:ins.meta.last_row_id,status:"approved"};
-  } else if(row.status!=="approved"){
+  } else {
     // A dealer-verified identity clears a pending self-serve signup for the same address.
-    await env.DB.prepare("UPDATE creators SET status='approved', dealer_id=COALESCE(dealer_id,?) WHERE id=?").bind(did,row.id).run();
+    if(row.status!=="approved")
+      await env.DB.prepare("UPDATE creators SET status='approved', dealer_id=COALESCE(dealer_id,?) WHERE id=?").bind(did,row.id).run();
+    if(!row.ref_token)
+      await env.DB.prepare("UPDATE creators SET ref_token=? WHERE id=?").bind(await mintRefToken(env,row.handle),row.id).run().catch(()=>{});
+  }
+  // A face staged before the account existed (dealer staff auto-provision on first login here).
+  // COALESCE so a creator who has since uploaded their own photo is never overwritten.
+  const st=await env.DB.prepare("SELECT avatar,display_name FROM creator_avatar_stage WHERE email=?").bind(em).first().catch(()=>null);
+  if(st){
+    await env.DB.prepare("UPDATE creators SET avatar=COALESCE(avatar,?), display_name=COALESCE(display_name,?) WHERE id=?")
+      .bind(st.avatar,st.display_name,row.id).run().catch(()=>{});
+    await env.DB.prepare("DELETE FROM creator_avatar_stage WHERE email=?").bind(em).run().catch(()=>{});
   }
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":creatorCookie(await makeCreatorSession(env,row.id)),...SEC}});
 }
@@ -3068,7 +3510,8 @@ async function creatorStats(env,cid){
     "FROM creator_posts p WHERE p.creator_id=?").bind(cid).first().catch(()=>null);
   const k=await env.DB.prepare("SELECT SUM(clicks) clicks FROM creator_claims WHERE creator_id=?").bind(cid).first().catch(()=>null);
   // COUNT of leads only — never the lead rows themselves. Fence 1.
-  const l=await env.DB.prepare("SELECT COUNT(*) leads FROM web_leads w JOIN creator_claims cc ON cc.id=w.creator_claim_id WHERE cc.creator_id=?").bind(cid).first().catch(()=>null);
+  // creator_id covers BOTH link types; the old claim-join would miss every personal-link lead.
+  const l=await env.DB.prepare("SELECT COUNT(*) leads FROM web_leads w WHERE w.creator_id=?").bind(cid).first().catch(()=>null);
   return {posts:(s&&s.posts)||0,approved:(s&&s.approved)||0,rejected:(s&&s.rejected)||0,
     reach:(s&&s.reach)||0,clicks:(k&&k.clicks)||0,leads:(l&&l.leads)||0};
 }
@@ -3086,12 +3529,15 @@ async function creatorAffinity(env,cid){
 // ---- Creator feed / claim / post ------------------------------------------------------------------
 async function creatorFeed(request,env,cid,me){
   const rows=await env.DB.prepare(
-    "SELECT d.id,d.vin,d.vdp_id,d.rate_cents,d.rate_why,d.created_at, v.year,v.make,v.model,v.trim,v.body,v.price,v.price_mo,v.photos, "+
+    "SELECT d.id,d.vin,d.vdp_id,d.rate_cents,d.rate_why,d.created_at, v.year,v.make,v.model,v.trim,v.body,v.price,v.price_mo,v.photos,v.lot_date,v.location_zip, s.dealer_name,s.dealer_zip, "+
     "(SELECT COUNT(*) FROM creator_claims x WHERE x.drop_id=d.id) claims, "+
     "(SELECT cc.token FROM creator_claims cc WHERE cc.drop_id=d.id AND cc.creator_id=?) mine, "+
     "(SELECT cc.id FROM creator_claims cc WHERE cc.drop_id=d.id AND cc.creator_id=?) claim_id, "+
     "(SELECT p.status FROM creator_posts p JOIN creator_claims cc ON cc.id=p.claim_id WHERE cc.drop_id=d.id AND cc.creator_id=?) post_status "+
-    "FROM creator_drops d JOIN vdps v ON v.id=d.vdp_id WHERE d.status='open' AND v.active=1 ORDER BY d.id DESC LIMIT 60")
+    // A car with no rooftop can't be shot at a location, so it has nothing to offer a creator
+    // deciding where to drive. Filtered from the feed only — the drop and the vdp are untouched.
+    "FROM creator_drops d JOIN vdps v ON v.id=d.vdp_id LEFT JOIN vdp_specs s ON s.vin=v.vin "+
+    "WHERE d.status='open' AND v.active=1 AND s.dealer_name IS NOT NULL AND s.dealer_name<>'' ORDER BY d.id DESC LIMIT 60")
     .bind(cid,cid,cid).all().catch(()=>({results:[]}));
   const aff=await creatorAffinity(env,cid);
   const drops=(rows.results||[]).map(function(d){
@@ -3101,9 +3547,28 @@ async function creatorFeed(request,env,cid,me){
       rate_cents:d.rate_cents,rate_why:JSON.parse(d.rate_why||"[]"),
       claims:+d.claims||0,claimed:!!d.mine,token:d.mine||null,claim_id:d.claim_id||null,
       post_status:d.post_status||null,link:d.mine?(SEO_ORIGIN+"/c/"+d.mine):null,
+      // Where the car physically is — what a creator actually decides on ("I'll shoot at Lexus SM today").
+      dealer_name:d.dealer_name||null, zip:d.dealer_zip||d.location_zip||null,
+      // Age is REAL or ABSENT. lot_date is dealer-entered; 94/95 cars have none today, and we never
+      // invent one. Live by arithmetic, no cron — same trick as the dealer console.
+      lot_date:d.lot_date||null,
+      days_on_lot:d.lot_date?Math.max(0,Math.floor((Date.now()-Date.parse(d.lot_date))/864e5)):null,
       fit:fit.score,fit_why:fit.why};
   }).sort(function(a,b){return b.fit-a.fit;});
-  return json({ok:true,creator:{handle:me.handle,score:me.score,payouts_enabled:me.payouts_enabled},drops});
+  // Everything the one-page console needs in a single request: the personal link + its numbers,
+  // and the three bucket counts for the fixed bottom bar.
+  const rl=await env.DB.prepare("SELECT COUNT(*) n FROM web_leads WHERE creator_id=?").bind(cid).first().catch(()=>null);
+  const bk=await env.DB.prepare(
+    "SELECT (SELECT COUNT(*) FROM creator_drops WHERE status='open') o, "+
+    "(SELECT COUNT(*) FROM creator_claims WHERE creator_id=?) c, "+
+    "(SELECT COALESCE(SUM(amount_cents),0) FROM creator_earnings WHERE creator_id=? AND status='paid') p").bind(cid,cid).first().catch(()=>null);
+  return json({ok:true,
+    creator:{handle:me.handle,score:me.score,payouts_enabled:me.payouts_enabled,
+      avatar:me.avatar||null, name:me.display_name||me.handle,
+      ref_link:me.ref_token?(SEO_ORIGIN+"/c/"+me.ref_token):null,
+      ref_clicks:me.ref_clicks||0, ref_leads:(rl&&rl.n)||0},
+    buckets:{open:(bk&&bk.o)||0, claimed:(bk&&bk.c)||0, paid_cents:(bk&&bk.p)||0},
+    drops});
 }
 async function creatorClaim(request,env,cid,me){
   const {drop_id}=await request.json().catch(()=>({}));
@@ -3157,10 +3622,14 @@ async function creatorEarnings(request,env,cid,me){
 }
 
 // ---- Stripe Connect Express (no SDK — plain fetch, honouring the no-npm/no-build rule) -------------
-async function stripeApi(env,path,form){
+// idemKey: Stripe's Idempotency-Key. Retrying with the same key returns the ORIGINAL result
+// instead of performing the action again — the only thing that makes a money transfer safe to
+// retry when the network or our own database fails after Stripe already succeeded.
+async function stripeApi(env,path,form,idemKey){
   const body=new URLSearchParams(); for(const k in form) if(form[k]!==undefined&&form[k]!==null) body.set(k,String(form[k]));
   const r=await fetch("https://api.stripe.com/v1/"+path,{method:"POST",
-    headers:{"Authorization":"Bearer "+env.STRIPE_SECRET_KEY,"content-type":"application/x-www-form-urlencoded"},body});
+    headers:{"Authorization":"Bearer "+env.STRIPE_SECRET_KEY,"content-type":"application/x-www-form-urlencoded",
+      ...(idemKey?{"Idempotency-Key":String(idemKey)}:{})},body});
   const d=await r.json().catch(()=>({})); return {ok:r.ok,data:d};
 }
 async function creatorConnectStart(request,env,cid,me){
@@ -3172,7 +3641,7 @@ async function creatorConnectStart(request,env,cid,me){
     acct=a.data.id;
     await env.DB.prepare("UPDATE creators SET stripe_account_id=? WHERE id=?").bind(acct,cid).run();
   }
-  const base="https://creator.carnimbus.com";
+  const base="https://creator.carnimbus.us";
   const l=await stripeApi(env,"account_links",{account:acct,refresh_url:base+"/earnings",return_url:base+"/earnings?connected=1",type:"account_onboarding"});
   if(!l.ok||!l.data.url) return json({ok:false,error:"stripe_failed"},502);
   return json({ok:true,url:l.data.url});
@@ -3188,27 +3657,135 @@ async function creatorConnectReturn(request,env,cid,me){
   return json({ok:true,payouts_enabled:!!pe,charges_enabled:!!ce});
 }
 
+// ---- Operator-side creator management (replaces the retired portal) --------------------------------
+// The portal let a creator sign themselves up and connect Stripe. With it archived, both happen from
+// ai.carnimbus.us through aiAct's confirm gate. For a handful of partners this is LESS work than a
+// self-serve console, and it keeps a human in the loop on the only two things that matter: who gets
+// an attributable link, and who can receive money.
+//
+// creatorInvite returns TWO urls and the operator sends both:
+//   link      — the permanent /c/<ref_token>. This is the @nimbusbros attribution rail.
+//   onboard   — Stripe Express onboarding. Until they finish it, payouts_enabled stays 0 and
+//               creator_payout refuses with payouts_not_enabled. That gate is Stripe's KYC, not ours.
+async function creatorInvite(env,args){
+  const handle=String(args.handle||"").trim().slice(0,60);
+  const email=String(args.email||"").trim().toLowerCase().slice(0,120);
+  if(!handle||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return {ok:false,error:"bad_request"};
+  const dupe=await env.DB.prepare("SELECT id,ref_token FROM creators WHERE email=?").bind(email).first().catch(()=>null);
+  let cid, ref;
+  if(dupe){ cid=dupe.id; ref=dupe.ref_token; }
+  else{
+    // status 'approved' on purpose: the operator inviting them IS the approval, and Stripe's KYC is
+    // what actually gates money leaving. An unverified follower count never gates a payout.
+    const r=await env.DB.prepare("INSERT INTO creators (email,handle,status,created_at) VALUES (?,?,'approved',datetime('now'))")
+      .bind(email,handle).run().catch(()=>null);
+    if(!r||!r.meta||!r.meta.last_row_id) return {ok:false,error:"create_failed"};
+    cid=r.meta.last_row_id;
+  }
+  if(!ref){ ref=await mintRefToken(env,handle);
+    await env.DB.prepare("UPDATE creators SET ref_token=? WHERE id=?").bind(ref,cid).run().catch(()=>{}); }
+  const out={ok:true,creator_id:cid,handle,link:SEO_ORIGIN+"/c/"+ref};
+  if(env.STRIPE_SECRET_KEY){
+    const row=await env.DB.prepare("SELECT stripe_account_id FROM creators WHERE id=?").bind(cid).first().catch(()=>null);
+    let acct=row&&row.stripe_account_id;
+    if(!acct){
+      const a=await stripeApi(env,"accounts",{type:"express",email,"capabilities[transfers][requested]":"true"});
+      if(a.ok&&a.data&&a.data.id){ acct=a.data.id;
+        await env.DB.prepare("UPDATE creators SET stripe_account_id=? WHERE id=?").bind(acct,cid).run().catch(()=>{}); }
+    }
+    if(acct){
+      // return_url points at the APEX, not creator.carnimbus.us — that host now 301s and Stripe
+      // would bounce the creator through a redirect on the last step of onboarding.
+      const l=await stripeApi(env,"account_links",{account:acct,
+        refresh_url:SEO_ORIGIN+"/", return_url:SEO_ORIGIN+"/?connected=1", type:"account_onboarding"});
+      if(l.ok&&l.data&&l.data.url) out.onboard=l.data.url;
+    }
+  }
+  return out;
+}
+
+// Re-reads Stripe and updates payouts_enabled. This is what creatorConnectReturn used to do when the
+// creator landed back on the portal; with no portal, the operator runs it from ai. after the creator
+// says they finished onboarding. creator_payout checks the flag, so this must run before a first payout.
+async function creatorSync(env,args){
+  if(!env.STRIPE_SECRET_KEY) return {ok:false,error:"stripe_unconfigured"};
+  const cid=parseInt(args.creator_id,10);
+  const c=cid?await env.DB.prepare("SELECT id,handle,stripe_account_id FROM creators WHERE id=?").bind(cid).first().catch(()=>null):null;
+  if(!c) return {ok:false,error:"bad_creator"};
+  if(!c.stripe_account_id) return {ok:false,error:"not_connected"};
+  const r=await fetch("https://api.stripe.com/v1/accounts/"+c.stripe_account_id,
+    {headers:{"Authorization":"Bearer "+env.STRIPE_SECRET_KEY}}).catch(()=>null);
+  if(!r||!r.ok) return {ok:false,error:"stripe_failed"};
+  const d=await r.json().catch(()=>({}));
+  const pe=d.payouts_enabled?1:0, ce=d.charges_enabled?1:0;
+  await env.DB.prepare("UPDATE creators SET payouts_enabled=?, charges_enabled=? WHERE id=?").bind(pe,ce,cid).run().catch(()=>{});
+  return {ok:true,creator_id:cid,handle:c.handle,payouts_enabled:!!pe,charges_enabled:!!ce};
+}
+
 // ---- The tracked link: /c/<token> -----------------------------------------------------------------
 // Host-agnostic (added to the PREFIX passthrough). Records the click, drops a 90d first-party cookie,
 // and sends the visitor to the car. No creator identity is exposed to the buyer.
+// One token space, two kinds of link:
+//   claim token   -> a specific car. Earns the per-post fee. Cookie cn_ref.
+//   ref token     -> the creator's permanent personal link. Lands on /browse. Cookie cn_cref.
+// A claim link sets both cookies, so a buyer who arrives on a car page and then wanders still
+// credits the creator who sent them.
 async function creatorRedirect(request,env,token){
   const t=String(token||"").slice(0,40);
   const cl=await env.DB.prepare(
-    "SELECT cc.id, v.id vid, v.year, v.make, v.model FROM creator_claims cc "+
+    "SELECT cc.id, cc.creator_id, v.id vid, v.year, v.make, v.model FROM creator_claims cc "+
     "JOIN creator_drops d ON d.id=cc.drop_id JOIN vdps v ON v.id=d.vdp_id WHERE cc.token=?").bind(t).first().catch(()=>null);
-  if(!cl) return Response.redirect(SEO_ORIGIN+"/browse",302);
+  if(!cl){
+    // Personal affiliate link.
+    const cr=await env.DB.prepare("SELECT id,ref_token FROM creators WHERE ref_token=?").bind(t).first().catch(()=>null);
+    if(!cr) return Response.redirect(SEO_ORIGIN+"/browse",302);
+    await env.DB.prepare("UPDATE creators SET ref_clicks=COALESCE(ref_clicks,0)+1 WHERE id=?").bind(cr.id).run().catch(()=>{});
+    await logEvent(env,{action:"social.referred",source:"creator-ref"}).catch(()=>{});   // frozen prefix, same as claim links
+    return new Response(null,{status:302,headers:{
+      "Location":SEO_ORIGIN+"/browse",
+      "Set-Cookie":"cn_cref="+t+"; Path=/; Secure; SameSite=Lax; Max-Age=7776000",
+      "Cache-Control":"no-store"}});
+  }
   await env.DB.prepare("UPDATE creator_claims SET clicks=clicks+1 WHERE id=?").bind(cl.id).run().catch(()=>{});
   await logEvent(env,{action:"social.referred",vehicle_id:cl.vid,source:"creator-link"}).catch(()=>{});
-  return new Response(null,{status:302,headers:{
-    "Location":SEO_ORIGIN+vdpPath({year:cl.year,make:cl.make,model:cl.model,id:cl.vid}),
-    "Set-Cookie":"cn_ref="+t+"; Path=/; Secure; SameSite=Lax; Max-Age=7776000",
-    "Cache-Control":"no-store"}});
+  const owner=await env.DB.prepare("SELECT ref_token FROM creators WHERE id=?").bind(cl.creator_id).first().catch(()=>null);
+  const h=new Headers({"Location":SEO_ORIGIN+vdpPath({year:cl.year,make:cl.make,model:cl.model,id:cl.vid}),"Cache-Control":"no-store"});
+  h.append("Set-Cookie","cn_ref="+t+"; Path=/; Secure; SameSite=Lax; Max-Age=7776000");
+  if(owner&&owner.ref_token) h.append("Set-Cookie","cn_cref="+owner.ref_token+"; Path=/; Secure; SameSite=Lax; Max-Age=7776000");
+  return new Response(null,{status:302,headers:h});
 }
 function readRef(request){ const m=(request.headers.get("Cookie")||"").match(/cn_ref=([^;]+)/); return m?m[1]:null; }
-async function claimIdForRef(env,request){
-  const t=readRef(request); if(!t) return null;
-  const r=await env.DB.prepare("SELECT id FROM creator_claims WHERE token=?").bind(String(t).slice(0,40)).first().catch(()=>null);
-  return r?r.id:null;
+function readCref(request){ const m=(request.headers.get("Cookie")||"").match(/cn_cref=([^;]+)/); return m?m[1]:null; }
+// Resolves both cookies -> {claim_id, creator_id}. claim_id is null for a personal-link arrival.
+async function refForCookies(env,request){
+  let claim_id=null, creator_id=null;
+  const t=readRef(request);
+  if(t){ const r=await env.DB.prepare("SELECT id,creator_id FROM creator_claims WHERE token=?").bind(String(t).slice(0,40)).first().catch(()=>null);
+    if(r){ claim_id=r.id; creator_id=r.creator_id||null; } }
+  if(!creator_id){ const c=readCref(request);
+    if(c){ const r2=await env.DB.prepare("SELECT id FROM creators WHERE ref_token=?").bind(String(c).slice(0,40)).first().catch(()=>null);
+      if(r2) creator_id=r2.id; } }
+  return {claim_id,creator_id};
+}
+// Mint a stable personal token: the handle slug if free, else a random code.
+async function mintRefToken(env,handle){
+  const base=String(handle||"").toLowerCase().replace(/[^a-z0-9]+/g,"").slice(0,24);
+  if(base){ const taken=await env.DB.prepare("SELECT 1 FROM creators WHERE ref_token=?").bind(base).first().catch(()=>null);
+    if(!taken) return base; }
+  return genCode("CR").replace(/[^A-Za-z0-9]/g,"").toLowerCase();
+}
+function creatorLogout(){ return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json",
+  "Set-Cookie":"cn_crt=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"}}); }
+// The creator's own face in the header. The browser crops + resizes to 96x96 before this ever runs,
+// so a 5MB phone photo never leaves the device. Two controls on the only new write surface here:
+// a strict data-URI shape (no javascript:, no svg — svg can carry script), and a hard size cap.
+async function creatorAvatar(request,env,cid){
+  const {avatar}=await request.json().catch(()=>({}));
+  const a=String(avatar||"");
+  if(!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(a)) return json({ok:false,error:"bad_image"},400);
+  if(a.length>40000) return json({ok:false,error:"too_large"},413);
+  await env.DB.prepare("UPDATE creators SET avatar=? WHERE id=?").bind(a,cid).run();
+  return json({ok:true});
 }
 
 // ---- creatorAgent: cron, L2, reversible actions ONLY ----------------------------------------------
@@ -3239,9 +3816,20 @@ async function creatorQueue(request,env){
   const all=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]})); return r.results||[]; };
   const creators=await all(
     "SELECT c.id,c.handle,c.email,c.status,c.followers_declared,c.score,c.score_why,c.payouts_enabled, "+
+    "c.ref_token,c.ref_clicks, "+
     "(SELECT COUNT(*) FROM creator_posts p WHERE p.creator_id=c.id) posts, "+
-    "(SELECT COUNT(*) FROM web_leads w JOIN creator_claims cc ON cc.id=w.creator_claim_id WHERE cc.creator_id=c.id) leads "+
+    "(SELECT COUNT(*) FROM web_leads w WHERE w.creator_id=c.id) leads "+
     "FROM creators c ORDER BY c.score DESC, c.id DESC LIMIT 100");
+  // Every affiliate link, traceable from ai.carnimbus.us — the tracking Brandon asked for.
+  const links=await all(
+    "SELECT 'personal' kind, c.ref_token token, c.handle, NULL vin, COALESCE(c.ref_clicks,0) clicks, "+
+    "(SELECT COUNT(*) FROM web_leads w WHERE w.creator_id=c.id AND w.creator_claim_id IS NULL) leads "+
+    "FROM creators c WHERE c.ref_token IS NOT NULL "+
+    "UNION ALL "+
+    "SELECT 'car' kind, cc.token, c.handle, d.vin, COALESCE(cc.clicks,0), "+
+    "(SELECT COUNT(*) FROM web_leads w WHERE w.creator_claim_id=cc.id) "+
+    "FROM creator_claims cc JOIN creators c ON c.id=cc.creator_id JOIN creator_drops d ON d.id=cc.drop_id "+
+    "ORDER BY clicks DESC LIMIT 120");
   const drops=await all(
     "SELECT d.id,d.vin,d.rate_cents,d.rate_why,d.locked,d.status, v.year,v.make,v.model,v.lot_date, "+
     "(SELECT COUNT(*) FROM creator_claims x WHERE x.drop_id=d.id) claims "+
@@ -3258,8 +3846,22 @@ async function creatorQueue(request,env){
   }
   const payouts=await all(
     "SELECT e.id,e.amount_cents,e.status,c.id creator_id,c.handle,c.payouts_enabled,c.stripe_account_id "+
-    "FROM creator_earnings e JOIN creators c ON c.id=e.creator_id WHERE e.status='approved' ORDER BY e.id ASC LIMIT 50");
-  return json({ok:true,creators,drops,posts,payouts,stripe_ready:!!env.STRIPE_SECRET_KEY});
+    // 'paying' is included so a payout that got stuck between the Stripe transfer and the DB
+    // write is VISIBLE rather than vanishing from every surface. The UI must not offer a Pay
+    // button for those — the row is claimed and the transfer may already have landed; it needs a
+    // human to reconcile against Stripe, not another click.
+    "FROM creator_earnings e JOIN creators c ON c.id=e.creator_id WHERE e.status IN ('approved','paying') ORDER BY e.id ASC LIMIT 50");
+  // dealer_programs was added 2026-08-06 with a writer (appApprove credits $179 per settled deal,
+  // deck v13 S-04 step 1) and NO READER — so the loop the deck draws as a circle was open at the
+  // read end and the budget was invisible everywhere. This closes it. `committed` counts 'paying'
+  // as spent, because that money is in flight at Stripe whether or not our write landed.
+  const programs=await all(
+    "SELECT p.dealer_id, d.dealership, p.budget_cents, p.status, "+
+    "(SELECT COALESCE(SUM(e.amount_cents),0) FROM creator_earnings e JOIN creators c ON c.id=e.creator_id "+
+    " WHERE c.dealer_id=p.dealer_id AND e.status IN ('approved','paying','paid')) committed_cents "+
+    "FROM dealer_programs p LEFT JOIN dealer_leads d ON d.id=p.dealer_id "+
+    "WHERE p.status='active' ORDER BY p.budget_cents DESC LIMIT 50");
+  return json({ok:true,creators,links,drops,posts,payouts,programs,stripe_ready:!!env.STRIPE_SECRET_KEY});
 }
 
 async function webLead(request,env){ const b=await request.json().catch(()=>({}));
@@ -3300,9 +3902,48 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   const consentTs=consent?nowIso:null, consentUrl=String(request.headers.get("Referer")||"").slice(0,300)||null;
   // Creator attribution: the cn_ref cookie set by /c/<token> resolves to the claim that produced this
   // lead. This is the row that makes a creator's post provably worth money.
-  const refClaim=await claimIdForRef(env,request).catch(()=>null);
-  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent,dealer_id,vdp_id,cid,is_demo,consent_ts,consent_url,anon_id,creator_claim_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,nowIso,first,last,email,addr,slot,consent,dealerId,vid||null,cid,isDemo,consentTs,consentUrl,readAnon(request),refClaim).run();
+  // 26 columns / 26 placeholders / 26 binds — counted literally. A mismatch here silently corrupts
+  // every lead insert, so if you add one, add it in all three places.
+  //
+  // credit_band and budget added 2026-08-06. The column existed since 0057 and was NEVER written:
+  // lead.js has always sent `fico`, and this function has always ignored it. FICO moves the APR by
+  // up to 11.5 points — a ~$180/mo swing on a $30k car — so it is the single most price-relevant
+  // fact the visitor gives us, and it was being dropped at the last step of the funnel. Same for a
+  // cash buyer's stated budget, which only ever reached routeLead (a no-op until CRM_ENDPOINT).
+  const ref=await refForCookies(env,request).catch(()=>({claim_id:null,creator_id:null}));
+  const band=String(b.fico||"").slice(0,12)||null;
+  const cashBudget=parseInt(String(b.budget||"").replace(/\D/g,""),10)||null;
+  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent,dealer_id,vdp_id,cid,is_demo,consent_ts,consent_url,anon_id,creator_claim_id,creator_id,credit_band,budget) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,nowIso,first,last,email,addr,slot,consent,dealerId,vid||null,cid,isDemo,consentTs,consentUrl,readAnon(request),ref.claim_id,ref.creator_id,band,cashBudget).run();
+  // ---- MAKE IT AN ACTUAL APPOINTMENT (2026-08-06) --------------------------------------------
+  // Until now this function never touched test_drives and never minted a pass token, so a
+  // homepage "Schedule Appointment" produced a CRM row and nothing else. Three consequences:
+  //   · driveReminders() reads ONLY test_drives, so the T-2h reminder never fired for a homepage
+  //     booking — the single most valuable message in the flow;
+  //   · /pass/<token> was unreachable from the public funnel, so nobody got a pass;
+  //   · the confirmation email below promises "we'll confirm the address by text" and nothing in
+  //     the system was scheduled to send it.
+  //
+  // test_drives.user_id needs a users row, so we upsert one on the phone number (UNIQUE). That is
+  // the same identity the SMS thread and STOP/START list already key on, so it creates no new
+  // notion of a person. Both readers — passPage and driveReminders — join users for the phone.
+  //
+  // SLOT FORMAT: lead.js sends "2026-08-10T10:00"; test_drives.slot is LA wall-clock
+  // "YYYY-MM-DD HH:MM" (see driveReminders). Convert, or the reminder query silently never matches.
+  let passTok=null;
+  if(slot && vid){
+    const tdSlot=String(slot).replace("T"," ").slice(0,16);
+    await env.DB.prepare("INSERT INTO users (phone,created_at,handle,zip) VALUES (?,?,?,?) "+
+      "ON CONFLICT(phone) DO UPDATE SET handle=COALESCE(users.handle,excluded.handle), zip=COALESCE(excluded.zip,users.zip)")
+      .bind("+1"+ph,nowIso,String(first||"").slice(0,40),zip).run().catch(()=>{});
+    const ur=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind("+1"+ph).first().catch(()=>null);
+    if(ur&&ur.id){
+      passTok=crypto.randomUUID().replace(/-/g,"").slice(0,24);
+      await safeWrite(env,"web_lead_test_drive",
+        env.DB.prepare("INSERT INTO test_drives (user_id,vdp_id,center,slot,status,pass_token,created_at) VALUES (?,?,?,?,?,?,?)")
+          .bind(ur.id,vid,String(addr||"").slice(0,120),tdSlot,"confirmed",passTok,nowIso));
+    }
+  }
   // AI/TASK-006: drop-in CRM seam. No-op ("unrouted") until CRM_ENDPOINT exists, so this changes nothing today.
   const routed=await routeLead(env,{matched_car:mc,vin:String(b.vin||"").slice(0,17),phone:"+1"+ph,
     dream_car:car,deal_type:deal,monthly:mo,down:dn,budget:String(b.budget||"").replace(/\D/g,"").slice(0,7),zip,radius:rad});
@@ -3320,6 +3961,7 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   // T-102: buyer confirmation email (Resend). Dark-safe: no-ops without RESEND_API_KEY. No A2P gate — always try when present.
   if(email) await sendEmail(env,{to:email,subject:"Your CarNimbus test drive — "+(mc||car),
     text:`Hi ${first},\n\nYou're scheduled to drive the ${mc||car}${slot?` on ${slot.replace("T"," at ")}`:""}.\n`+
+      (passTok?`Your pass: https://carnimbus.us/pass/${passTok}\n`:"")+
       `We'll confirm the exact dealership address by text. Reply to that text with any questions — the car answers.\n\nThe power's in your hands,\nCarNimbus`}).catch(()=>{});
   await logEvent(env,{action:"intent.web_lead",location:zip,source:"drive-now"});
   return json({ok:true}); }
@@ -3528,4 +4170,795 @@ function json(obj, status = 200) {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
+}
+
+// ============================================================================================
+// app.carnimbus.us — THE DEALER wAPP + NIMBUS SETTLEMENT
+// Deck v13 S-04: "Scan the VIN from your lot. Preview pricing in seconds. Confirm & upload
+// title. Done."  S-07 MOAT: funds locked before the sale, seller paid at punch, agents
+// adjudicate release, no 10-day arbitration window.
+//
+// THREE INVARIANTS. Breaking any one of them breaks a promise made in writing somewhere.
+//
+//  1. deal_events IS THE LEDGER. deals.state is a cache of it. Never UPDATE deals.state
+//     without appending the matching event — dealTransition() is the only writer, on purpose.
+//
+//  2. MONEY IS NEVER HELD. The Stripe PaymentIntent uses capture_method:"manual", so funds are
+//     AUTHORIZED against the buyer's card and captured only at punch. Nothing ever lands in a
+//     CarNimbus balance. Turning this into a stored balance makes CarNimbus a money transmitter
+//     and is a legal change, not a product change.
+//
+//  3. A HUMAN RELEASES THE MONEY. AUTONOMY-POLICY.md:20 — "irreversible actions never reach L3
+//     ... a payout ... caps at L1 by policy." The adjudicator writes a recommendation with a
+//     rationale in seconds; appApprove() is the only path to SETTLED and it requires a person.
+//     The deck's word "autonomous" is true about SPEED and false about AUTONOMY.
+// ============================================================================================
+
+const DEAL_FEE_CENTS   = 89500;    // $895 seller fee — deck v13 S-05 ARPU
+// Deck v13 S-04 step 1: "Deal closes; the program is funded." 20% of the seller fee = $179 per
+// closed deal, credited to that rooftop's creator program. Declared next to the fee it derives
+// from so the ratio is visible rather than a second magic number somewhere else in the file.
+const PROGRAM_FUND_PCT   = 0.20;
+const PROGRAM_FUND_CENTS = Math.round(DEAL_FEE_CENTS * PROGRAM_FUND_PCT);   // 17900
+const AGING_BENCHMARK  = 495400;   // $4,954 average discount to clear a prior-model-year unit
+                                   // (S&P Global Mobility, Mar 2026 — deck v13 S-02)
+
+// The only legal transitions. Anything not listed here is rejected, including no-op self-loops:
+// a repeated POST must fail loudly rather than append a duplicate ledger row.
+const DEAL_FLOW = {
+  DRAFT:       ["STAKED"],
+  STAKED:      ["TITLED", "DISPUTED"],
+  TITLED:      ["ADJUDICATED", "DISPUTED"],
+  ADJUDICATED: ["SETTLED", "DISPUTED"],
+  SETTLED:     [],
+  DISPUTED:    [],
+};
+
+// Append to the ledger, then re-derive deals.state from it. The UPDATE is guarded on the state we
+// read, so two concurrent requests cannot both advance the same deal — the loser sees 0 rows
+// changed and gets a 409 rather than silently winning a race over someone else's money.
+async function dealTransition(env, dealId, from, to, actor, actorKind, reason) {
+  const allowed = DEAL_FLOW[from] || [];
+  if (!allowed.includes(to)) return { ok: false, error: "illegal_transition", from, to };
+  const r = await env.DB.prepare("UPDATE deals SET state=?, settled_at=CASE WHEN ?='SETTLED' THEN datetime('now') ELSE settled_at END WHERE id=? AND state=?")
+    .bind(to, to, dealId, from).run().catch(() => null);
+  if (!r || !r.meta || r.meta.changes !== 1) return { ok: false, error: "state_conflict", from, to };
+  await env.DB.prepare("INSERT INTO deal_events (deal_id,from_state,to_state,actor,actor_kind,reason) VALUES (?,?,?,?,?,?)")
+    .bind(dealId, from, to, String(actor), actorKind, reason || null).run().catch(() => {});
+  return { ok: true, state: to };
+}
+
+// Every read of a deal goes through here. A dealer may only ever see a deal they are the seller
+// on — tenancy is enforced in the WHERE clause, not in a caller's if-statement.
+async function dealForSeller(env, id, dealerId) {
+  return env.DB.prepare("SELECT * FROM deals WHERE id=? AND seller_dealer_id=?")
+    .bind(parseInt(id, 10) || 0, dealerId).first().catch(() => null);
+}
+
+// vPIC decode, cached in m0_vpic_cache. NHTSA is free and public and occasionally slow; a decode
+// failure must degrade to "we know the VIN but not the trim", never block a dealer standing on a lot.
+async function vpicDecode(env, vin) {
+  const hit = await env.DB.prepare("SELECT payload FROM m0_vpic_cache WHERE vin=? AND fetched_at > ?")
+    .bind(vin, Math.floor(Date.now() / 1000) - 86400 * 30).first().catch(() => null);
+  if (hit && hit.payload) { try { return JSON.parse(hit.payload); } catch (_) {} }
+  try {
+    const r = await fetch("https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/" + encodeURIComponent(vin) + "?format=json",
+      { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const row = (d && d.Results && d.Results[0]) || null;
+    if (!row) return null;
+    const out = {
+      year: row.ModelYear || "", make: row.Make || "", model: row.Model || "",
+      trim: row.Trim || "", body: row.BodyClass || "",
+      drivetrain: row.DriveType || "", fuel: row.FuelTypePrimary || "",
+    };
+    await env.DB.prepare("INSERT INTO m0_vpic_cache (vin,fetched_at,error_code,payload) VALUES (?,?,?,?) ON CONFLICT(vin) DO UPDATE SET fetched_at=excluded.fetched_at, payload=excluded.payload")
+      .bind(vin, Math.floor(Date.now() / 1000), String(row.ErrorCode || ""), JSON.stringify(out)).run().catch(() => {});
+    return out;
+  } catch (_) { return null; }
+}
+
+// POST /api/app/vin — step 1. Accepts {vin} as JSON, or a photo as multipart when the phone has no
+// BarcodeDetector (every iPhone), in which case Workers AI reads the plate.
+async function appVin(request, env) {
+  let vin = "";
+  const ct = request.headers.get("content-type") || "";
+  if (ct.indexOf("multipart/form-data") === 0) {
+    const fd = await request.formData().catch(() => null);
+    const photo = fd && fd.get("photo");
+    if (!photo || typeof photo === "string") return json({ ok: false, error: "no_photo" }, 400);
+    vin = await ocrVin(env, photo).catch(() => "");
+    if (!vin) return json({ ok: false, error: "ocr_failed", reason: "Could not read a VIN in that photo. Type it instead." }, 422);
+  } else {
+    const b = await request.json().catch(() => ({}));
+    vin = String(b.vin || "");
+  }
+  const v = validateVin(vin, { strict: true });
+  if (!v.valid) {
+    // Loud on purpose. A VIN that passes syntax but fails the check digit is very often a
+    // transposition, and a transposed VIN decodes to a DIFFERENT REAL CAR.
+    return json({ ok: false, error: "bad_vin", vin: v.normalized || vin.toUpperCase(),
+      syntaxValid: v.syntaxValid, checkDigitValid: v.checkDigitValid,
+      expectedCheckDigit: v.expectedCheckDigit, reason: v.reason }, 400);
+  }
+  const decoded = await vpicDecode(env, v.normalized);
+  return json({ ok: true, vin: v.normalized, valid: true, checkDigitValid: true,
+    expectedCheckDigit: v.expectedCheckDigit, reason: null,
+    decoded: decoded || { year: "", make: "", model: "", trim: "", body: "", drivetrain: "", fuel: "" } });
+}
+
+// Workers AI reads the VIN off a door-jamb plate or windshield. Returns "" rather than throwing —
+// tier 3 (manual entry) is always on screen, so a failure here is a nudge, not a dead end.
+async function ocrVin(env, photo) {
+  if (!env.AI) return "";
+  const buf = new Uint8Array(await photo.arrayBuffer());
+  const r = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
+    image: [...buf],
+    prompt: "This is a photo of a vehicle identification number (VIN) plate or windshield. Reply with ONLY the 17-character VIN, uppercase, no spaces, no punctuation, no explanation. If you cannot read 17 characters, reply NONE.",
+    max_tokens: 40,
+  }).catch(() => null);
+  const raw = String((r && (r.description || r.response)) || "").toUpperCase();
+  const m = raw.replace(/[^A-HJ-NPR-Z0-9]/g, "").match(/[A-HJ-NPR-Z0-9]{17}/);
+  return m ? m[0] : "";
+}
+
+// GET /api/app/offer?vin= — step 2. vPIC decode + whatever vdp_specs already knows about this VIN.
+// A VIN with no vdp_specs row still gets an offer; the market band and grade simply do not render.
+async function appOffer(request, env, _uid, d) {
+  const url = new URL(request.url);
+  const v = validateVin(String(url.searchParams.get("vin") || ""), { strict: true });
+  if (!v.valid) return json({ ok: false, error: "bad_vin", reason: v.reason, expectedCheckDigit: v.expectedCheckDigit }, 400);
+  const decoded = await vpicDecode(env, v.normalized);
+  const s = await env.DB.prepare("SELECT mileage_exact,condition_grade,title_status,days_on_lot,market_price_low,market_price_avg,market_price_high,price_vs_market FROM vdp_specs WHERE vin=?")
+    .bind(v.normalized).first().catch(() => null);
+  // The offer is the wholesale mark. market_price_* are stored in whole dollars, so ×100 for cents.
+  // With no market row we have no defensible number and say so rather than inventing one — an offer
+  // a dealer cannot trace is worse than no offer, and this whole product is sold on price honesty.
+  const avgCents = s && s.market_price_avg ? Math.round(Number(s.market_price_avg) * 100) : 0;
+  const offerCents = avgCents ? Math.max(0, avgCents - DEAL_FEE_CENTS) : 0;
+  return json({ ok: true, vin: v.normalized, dealer: d.dealership || d.name || "",
+    decoded: decoded || {},
+    specs: s ? {
+      mileage_exact: s.mileage_exact, condition_grade: s.condition_grade, title_status: s.title_status,
+      days_on_lot: s.days_on_lot, market_price_low: s.market_price_low,
+      market_price_avg: s.market_price_avg, market_price_high: s.market_price_high,
+      price_vs_market: s.price_vs_market,
+    } : null,
+    offer: { offer_cents: offerCents, fee_cents: DEAL_FEE_CENTS, benchmark_cents: AGING_BENCHMARK,
+             priced: !!avgCents } });
+}
+
+// POST /api/app/deal — creates the deal in DRAFT and mints the salt that keeps the VIN off chain.
+// 32 bytes, generated here and never transmitted anywhere. Losing it means the token id for this
+// deal can never be recomputed, which is the correct failure mode: it is a commitment, not a key.
+async function appDealCreate(request, env, _uid, d) {
+  const b = await request.json().catch(() => ({}));
+  const v = validateVin(String(b.vin || ""), { strict: true });
+  if (!v.valid) return json({ ok: false, error: "bad_vin", reason: v.reason }, 400);
+  const offer = parseInt(b.offer_cents, 10);
+  if (!Number.isFinite(offer) || offer <= 0) return json({ ok: false, error: "bad_offer" }, 400);
+  const salt = [...crypto.getRandomValues(new Uint8Array(32))].map(x => x.toString(16).padStart(2, "0")).join("");
+  const r = await env.DB.prepare("INSERT INTO deals (vin,vin_salt,seller_dealer_id,state,offer_cents,fee_cents) VALUES (?,?,?,'DRAFT',?,?)")
+    .bind(v.normalized, salt, d.id, offer, DEAL_FEE_CENTS).run().catch(() => null);
+  if (!r || !r.meta || !r.meta.last_row_id) return json({ ok: false, error: "create_failed" }, 500);
+  const id = r.meta.last_row_id;
+  await env.DB.prepare("INSERT INTO deal_events (deal_id,from_state,to_state,actor,actor_kind,reason) VALUES (?,NULL,'DRAFT',?,'dealer','deal created')")
+    .bind(id, String(d.id)).run().catch(() => {});
+  await logEvent(env, { action: "dealer.deal_created", source: "app", session_id: "deal:" + id, confidence: offer / 100 }).catch(() => {});
+  return json({ ok: true, deal: { id, vin: v.normalized, state: "DRAFT", offer_cents: offer, fee_cents: DEAL_FEE_CENTS } });
+}
+
+// POST /api/app/stake — "funds locked before the sale".
+// capture_method:"manual" is the whole design. Stripe authorizes against the buyer's card and holds
+// NOTHING for us. See invariant 2 at the top of this section before changing a character of this.
+// ⚠ Stripe authorizations lapse after 7 days. A deal that sits in STAKED past that window has to be
+// re-staked; the cron warns at day 5. Documented in docs/SETTLEMENT-RUNBOOK.md.
+async function appStake(request, env, _uid, d) {
+  if (!env.STRIPE_SECRET_KEY) return json({ ok: false, error: "stripe_unconfigured" }, 503);
+  const b = await request.json().catch(() => ({}));
+  const deal = await dealForSeller(env, b.deal_id, d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 404);
+  if (deal.state !== "DRAFT") return json({ ok: false, error: "wrong_state", state: deal.state }, 409);
+  const pi = await stripeApi(env, "payment_intents", {
+    amount: deal.offer_cents, currency: "usd", capture_method: "manual",
+    "automatic_payment_methods[enabled]": "true",
+    description: "CarNimbus deal #" + deal.id + " — " + deal.vin,
+    "metadata[deal_id]": String(deal.id), "metadata[vin]": deal.vin,
+  });
+  if (!pi.ok || !pi.data || !pi.data.id) return json({ ok: false, error: "stripe_failed" }, 502);
+  await env.DB.prepare("INSERT INTO stakes (deal_id,stripe_payment_intent,amount_cents,status,authorized_at) VALUES (?,?,?,?,datetime('now')) ON CONFLICT(deal_id) DO UPDATE SET stripe_payment_intent=excluded.stripe_payment_intent, amount_cents=excluded.amount_cents, status=excluded.status, authorized_at=excluded.authorized_at")
+    .bind(deal.id, pi.data.id, deal.offer_cents, pi.data.status || "requires_capture").run().catch(() => {});
+  const t = await dealTransition(env, deal.id, "DRAFT", "STAKED", d.id, "dealer", "buyer capital authorized");
+  if (!t.ok) return json({ ok: false, error: t.error }, 409);
+  await logEvent(env, { action: "dealer.deal_staked", source: "app", session_id: "deal:" + deal.id, confidence: deal.offer_cents / 100 }).catch(() => {});
+  return json({ ok: true, state: "STAKED", status: pi.data.status || "requires_capture", amount_cents: deal.offer_cents });
+}
+
+// POST /api/app/title — steps 3 and 4. The title image goes to R2, never to D1 and never anywhere
+// public. Key is deals/<id>/title.<ext> so tenancy is checkable from the key alone.
+async function appTitleUpload(request, env, _uid, d) {
+  if (!env.DOCS) return json({ ok: false, error: "docs_unconfigured" }, 503);
+  const fd = await request.formData().catch(() => null);
+  if (!fd) return json({ ok: false, error: "bad_form" }, 400);
+  const deal = await dealForSeller(env, fd.get("deal_id"), d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 404);
+  if (deal.state !== "STAKED") return json({ ok: false, error: "wrong_state", state: deal.state }, 409);
+  const file = fd.get("file");
+  if (!file || typeof file === "string") return json({ ok: false, error: "no_file" }, 400);
+  if (file.size > 12 * 1024 * 1024) return json({ ok: false, error: "too_large" }, 413);
+  const type = String(file.type || "");
+  if (type.indexOf("image/") !== 0) return json({ ok: false, error: "not_an_image" }, 415);
+  const key = "deals/" + deal.id + "/title";
+  await env.DOCS.put(key, file.stream(), { httpMetadata: { contentType: type } });
+  const t = await dealTransition(env, deal.id, "STAKED", "TITLED", d.id, "dealer", "title uploaded");
+  if (!t.ok) return json({ ok: false, error: t.error }, 409);
+  await logEvent(env, { action: "dealer.deal_titled", source: "app", session_id: "deal:" + deal.id }).catch(() => {});
+  return json({ ok: true, state: "TITLED" });
+}
+
+async function appTitleGet(request, env, _uid, d) {
+  if (!env.DOCS) return json({ ok: false, error: "docs_unconfigured" }, 503);
+  const id = new URL(request.url).pathname.split("/").pop();
+  const deal = await dealForSeller(env, id, d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 403);   // 403 not 404: do not confirm a deal exists to a dealer who does not own it
+  const obj = await env.DOCS.get("deals/" + deal.id + "/title");
+  if (!obj) return json({ ok: false, error: "no_title" }, 404);
+  return new Response(obj.body, { headers: {
+    "content-type": (obj.httpMetadata && obj.httpMetadata.contentType) || "application/octet-stream",
+    "cache-control": "private, no-store",       // a title document is never cached by a proxy
+    "X-Robots-Tag": "noindex, nofollow",
+  }});
+}
+
+// POST /api/app/adjudicate — the agent recommends. It does NOT release.
+// Writes autonomy_level 'L1' and leaves approved_by NULL, which appApprove requires a human to fill.
+async function appAdjudicate(request, env, _uid, d) {
+  const b = await request.json().catch(() => ({}));
+  const deal = await dealForSeller(env, b.deal_id, d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 404);
+  if (deal.state !== "TITLED") return json({ ok: false, error: "wrong_state", state: deal.state }, 409);
+  const stake = await env.DB.prepare("SELECT * FROM stakes WHERE deal_id=?").bind(deal.id).first().catch(() => null);
+  const specs = await env.DB.prepare("SELECT title_status,condition_grade,mileage_exact FROM vdp_specs WHERE vin=?").bind(deal.vin).first().catch(() => null);
+  const hasTitle = env.DOCS ? !!(await env.DOCS.head("deals/" + deal.id + "/title").catch(() => null)) : false;
+
+  // Deterministic facts first. The model explains the recommendation; it does not discover it.
+  // An LLM that can flip "the title is missing" to "release the funds" is a hole, not a feature.
+  const facts = {
+    stake_authorized: !!(stake && stake.status === "requires_capture"),
+    stake_amount_matches: !!(stake && stake.amount_cents === deal.offer_cents),
+    title_document_present: hasTitle,
+    title_status: (specs && specs.title_status) || "unknown",
+  };
+  const blocking = [];
+  if (!facts.stake_authorized)      blocking.push("buyer capital is not authorized");
+  if (!facts.stake_amount_matches)  blocking.push("authorized amount does not match the offer");
+  if (!facts.title_document_present) blocking.push("no title document on file");
+  if (/salvage|rebuilt|flood|lemon/i.test(String(facts.title_status))) blocking.push("branded title: " + facts.title_status);
+  const decision = blocking.length ? "hold" : "release";
+
+  let rationale = decision === "release"
+    ? "Buyer capital is authorized for the full offer, a title document is on file, and the title carries no brand. Nothing blocks release."
+    : "Held. " + blocking.join("; ") + ".";
+  if (env.AI) {
+    const w = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+      messages: [
+        { role: "system", content: "You explain an already-decided vehicle escrow adjudication to a car dealer in 2-3 plain sentences. You do NOT decide anything and you never contradict the decision or the blocking reasons you are given. No preamble, no bullet points." },
+        { role: "user", content: "Decision: " + decision + ". Blocking reasons: " + (blocking.join("; ") || "none") + ". Facts: " + JSON.stringify(facts) + ". Offer: $" + (deal.offer_cents / 100).toFixed(0) + ". Explain." },
+      ], max_tokens: 220,
+    }).catch(() => null);
+    const txt = String((w && w.response) || "").trim();
+    if (txt) rationale = txt;
+  }
+  const confidence = decision === "release" ? 0.94 : 0.99;   // holding on a missing document is near-certain; releasing never claims certainty
+  await env.DB.prepare("INSERT INTO adjudications (deal_id,agent,model,decision,rationale,confidence,autonomy_level) VALUES (?,?,?,?,?,?,'L1')")
+    .bind(deal.id, "settlementAdjudicator", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", decision, rationale, confidence).run().catch(() => {});
+  const t = await dealTransition(env, deal.id, "TITLED", "ADJUDICATED", "settlementAdjudicator", "agent", decision);
+  if (!t.ok) return json({ ok: false, error: t.error }, 409);
+  return json({ ok: true, state: "ADJUDICATED",
+    adjudication: { decision, rationale, confidence, autonomy_level: "L1", approved_by: null, blocking } });
+}
+
+// POST /api/app/approve — THE HUMAN GATE. The only path to SETTLED.
+// AUTONOMY-POLICY.md names settlement_release L1-forever for the same reason as creator_payout:
+// capturing an authorization moves real money and cannot be reversed from inside this system.
+async function appApprove(request, env, _uid, d) {
+  const b = await request.json().catch(() => ({}));
+  const deal = await dealForSeller(env, b.deal_id, d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 404);
+  if (deal.state !== "ADJUDICATED") return json({ ok: false, error: "wrong_state", state: deal.state }, 409);
+  const adj = await env.DB.prepare("SELECT * FROM adjudications WHERE deal_id=? ORDER BY id DESC LIMIT 1").bind(deal.id).first().catch(() => null);
+  if (!adj) return json({ ok: false, error: "no_adjudication" }, 409);
+  if (adj.decision !== "release") return json({ ok: false, error: "adjudication_holds", rationale: adj.rationale }, 409);
+  const stake = await env.DB.prepare("SELECT * FROM stakes WHERE deal_id=?").bind(deal.id).first().catch(() => null);
+  if (!stake) return json({ ok: false, error: "no_stake" }, 409);
+
+  // Capture — "seller paid at punch". This is the irreversible step; everything above it is a check.
+  const cap = await stripeApi(env, "payment_intents/" + stake.stripe_payment_intent + "/capture", {});
+  if (!cap.ok) return json({ ok: false, error: "capture_failed", detail: (cap.data && cap.data.error && cap.data.error.code) || "" }, 502);
+  await env.DB.prepare("UPDATE stakes SET status='captured', captured_at=datetime('now') WHERE deal_id=?").bind(deal.id).run().catch(() => {});
+  await env.DB.prepare("UPDATE adjudications SET approved_by=?, approved_at=datetime('now') WHERE id=?").bind(d.id, adj.id).run().catch(() => {});
+  const t = await dealTransition(env, deal.id, "ADJUDICATED", "SETTLED", d.id, "dealer", "human approved release");
+  if (!t.ok) return json({ ok: false, error: t.error }, 409);
+  // Deck v13 S-04 step 1 — "Deal closes; the program is funded."
+  // AFTER the transition, deliberately: dealTransition is the only writer of deals.state and it can
+  // lose a race (changes!==1 → state_conflict). Crediting before it would fund a program off a deal
+  // that never settled. The conflict target matches idx_programs_dealer exactly, which SQLite
+  // requires. Budget movement stays L1 — a human pressed this button; nothing here is autonomous.
+  await env.DB.prepare(
+    "INSERT INTO dealer_programs (dealer_id,budget_cents) VALUES (?,?) "+
+    "ON CONFLICT(dealer_id) DO UPDATE SET budget_cents=budget_cents+excluded.budget_cents, "+
+    "updated_at=datetime('now')")
+    .bind(d.id, PROGRAM_FUND_CENTS).run().catch(() => {});
+  await logEvent(env, { action: "dealer.program_funded", source: "app", session_id: "deal:" + deal.id, confidence: PROGRAM_FUND_CENTS / 100 }).catch(() => {});
+  await logEvent(env, { action: "dealer.deal_settled", source: "app", session_id: "deal:" + deal.id, confidence: stake.amount_cents / 100 }).catch(() => {});
+  return json({ ok: true, state: "SETTLED" });
+}
+
+// POST /api/app/dispute — cancels the authorization so the buyer's money is released immediately.
+// There is no arbitration window here by design; the SLA lives in the reason text and the runbook.
+async function appDispute(request, env, _uid, d) {
+  const b = await request.json().catch(() => ({}));
+  const deal = await dealForSeller(env, b.deal_id, d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 404);
+  const reason = String(b.reason || "").slice(0, 500);
+  if (!reason) return json({ ok: false, error: "reason_required" }, 400);
+  const stake = await env.DB.prepare("SELECT * FROM stakes WHERE deal_id=?").bind(deal.id).first().catch(() => null);
+  if (stake && stake.status !== "captured" && env.STRIPE_SECRET_KEY) {
+    await stripeApi(env, "payment_intents/" + stake.stripe_payment_intent + "/cancel", {}).catch(() => {});
+    await env.DB.prepare("UPDATE stakes SET status='canceled' WHERE deal_id=?").bind(deal.id).run().catch(() => {});
+  }
+  const t = await dealTransition(env, deal.id, deal.state, "DISPUTED", d.id, "dealer", reason);
+  if (!t.ok) return json({ ok: false, error: t.error, state: deal.state }, 409);
+  await logEvent(env, { action: "dealer.deal_disputed", source: "app", session_id: "deal:" + deal.id }).catch(() => {});
+  return json({ ok: true, state: "DISPUTED" });
+}
+
+async function appDealGet(request, env, _uid, d) {
+  const deal = await dealForSeller(env, new URL(request.url).searchParams.get("id"), d.id);
+  if (!deal) return json({ ok: false, error: "not_found" }, 404);
+  const [ev, stake, adj] = await Promise.all([
+    env.DB.prepare("SELECT from_state,to_state,actor,actor_kind,reason,at FROM deal_events WHERE deal_id=? ORDER BY id").bind(deal.id).all().catch(() => ({ results: [] })),
+    env.DB.prepare("SELECT amount_cents,status,authorized_at,captured_at FROM stakes WHERE deal_id=?").bind(deal.id).first().catch(() => null),
+    env.DB.prepare("SELECT decision,rationale,confidence,autonomy_level,approved_by,approved_at FROM adjudications WHERE deal_id=? ORDER BY id DESC LIMIT 1").bind(deal.id).first().catch(() => null),
+  ]);
+  const spec = await env.DB.prepare("SELECT payload FROM m0_vpic_cache WHERE vin=?").bind(deal.vin).first().catch(() => null);
+  let decoded = {}; if (spec && spec.payload) { try { decoded = JSON.parse(spec.payload); } catch (_) {} }
+  // vin_salt is deliberately absent from this response and from every response. Nothing consumes it
+  // today (the token layer is deferred — see the VTT block at the end of this file), but it is a
+  // commitment secret and a secret that leaks once has leaked forever.
+  return json({ ok: true,
+    deal: { id: deal.id, vin: deal.vin, state: deal.state, offer_cents: deal.offer_cents,
+            fee_cents: deal.fee_cents, created_at: deal.created_at, settled_at: deal.settled_at },
+    decoded, events: ev.results || [], stake: stake || null, adjudication: adj || null, token: null });
+}
+
+async function appDeals(request, env, _uid, d) {
+  const rows = await env.DB.prepare("SELECT d.id,d.vin,d.state,d.offer_cents,d.created_at,c.payload FROM deals d LEFT JOIN m0_vpic_cache c ON c.vin=d.vin WHERE d.seller_dealer_id=? ORDER BY d.id DESC LIMIT 200")
+    .bind(d.id).all().catch(() => ({ results: [] }));
+  const deals = (rows.results || []).map(r => {
+    let dec = {}; if (r.payload) { try { dec = JSON.parse(r.payload); } catch (_) {} }
+    return { id: r.id, vin: r.vin, state: r.state, offer_cents: r.offer_cents, created_at: r.created_at,
+             year: dec.year || "", make: dec.make || "", model: dec.model || "" };
+  });
+  return json({ ok: true, deals });
+}
+
+// NOTE on logEvent above: events.vehicle_id is INTEGER, so the VIN cannot go in it. Deal identity
+// rides in session_id as a correlation id and `confidence` carries dollars, matching the existing
+// dealer.drop_created convention (EVENT-TAXONOMY.md). The ledger of record is deal_events, not this.
+
+// ---- VTT (title token) — DEFERRED, NOT BUILT ------------------------------------------------
+// The deck's MOAT slide says "Agent-native ERC chain" and Mobility Capital v5 §43 specifies a
+// Vehicle Title Token as ERC-721, "One per VIN". THIS BUILD SHIPS NO CHAIN LAYER, and the reason
+// is not caution — it is that the mitigation which would have made it doctrinally clean has
+// already been examined and rejected in writing, in this repository.
+//
+// 01D-iov/nimbus-foundation-iov/layer5-deferred/README.md quarantines CatallaxyVIN.sol, an
+// ERC-721 vehicle index registry built on exactly the design proposed here — registration under a
+// SALTED commitment rather than keccak256(vin). Its verdict, verbatim:
+//
+//     "The blocker is not the commitment. It is that the contract writes a permanent
+//      per-vehicle record to a public ledger: a token id, an owner address, a commitment ...
+//      That is undeletable behavioural metadata about a specific vehicle and a specific wallet
+//      even though no payload is stored ... A standing 45-day Delete Act deletion cadence plus
+//      CCPA erasure rights cannot be satisfied against it."
+//
+// Salting makes the id non-enumerable. It does not make it non-derived, and it does nothing at
+// all about the owner address, which that README calls "a persistent global identifier".
+// Three further walls, each independently disqualifying:
+//   · ERC-721 is transferable by construction; a transferable title token is a market, which is
+//     Refusal 3 — and escrow is custody of value, which is the California DFAL question (in force
+//     since 1 July 2026) that §9.7 of NF-WP-1 already declined once.
+//   · "When settlement eventually exists it is fiat, via a conventional processor (Stripe)."
+//     NF-1 §3.5 L5-4. That is what appStake/appApprove above actually do.
+//   · Solidity needs a compiler and third-party libraries. NF-WP-1 §14 fixes the binding stack at
+//     Cloudflare Workers + vanilla JS + D1 with NO BUILD STEP, so this repo cannot compile a
+//     contract even if the doctrine cleared it.
+//
+// Nothing above is a new policy. It is a decision already recorded, which this build declines to
+// quietly reverse in a source-file header. Reopening it is a charter action, not a code change.
+// See 06-exec/06A-decis/2026-08-03-app-dealer-wapp/ for the decision record.
+
+// ============================================================================================
+// THE DEMAND LOOP — carnimbus.us (sensor) → ai. (predict) → app. (act) → back again
+//
+// The free public tool's job is not to collect leads. It is to record, thousands of times a week,
+// what someone wanted and whether we could serve it. `scans.results = 0` is a person we failed —
+// and every one of those failures names a car that is priced wrong on a lot nearby.
+//
+// demandRollup()      turns raw scans into demand_cells (ZIP3 × segment × band × week), k>=5.
+// clearanceAdvisor()  joins a dealer's aged inventory against those cells and says what to move.
+//
+// AUTONOMY: clearanceAdvisor is L0 — SUGGEST ONLY. AUTONOMY-POLICY.md:62 — "Every new agent, and
+// every materially new capability on an existing agent, starts at L0." It writes clearance_recs
+// rows; a human presses Reprice. It never writes vdps.price_mo itself.
+// ============================================================================================
+
+// The five APR_FICO keys plus 'unknown'. scans.fico is whatever the buyer picked on the public
+// calculator, so normalise rather than trusting it — a free-text band would fragment every cell.
+// Case-insensitive on purpose. The public calculator sends lowercase today and APR_FICO's keys match,
+// but a copy edit on one <option> label would otherwise dump a whole credit band into "unknown"
+// silently — no error, no alert, just cells that quietly stop being about anyone in particular.
+function bandKey(f){ const s=String(f||"").trim().toLowerCase();
+  return s==="800+"?"800+" : s==="740-799"?"740-799" : s==="670-739"?"670-739"
+       : s==="580-669"?"580-669" : s==="under 580"?"under 580" : "unknown"; }
+
+// scans.dream_car is free text a buyer typed ("bronco", "3 row suv", "f150"). segOf() wants
+// (make, model) so feed it the same string twice — its regexes match on the concatenation.
+//
+// An EMPTY query is "any", not "sedan". The homepage calculator never asks what body style someone
+// wants — it asks budget, down payment and ZIP — so bucketing all of that into "sedan" would have
+// invented a preference nobody expressed and buried it in the one segment most likely to look
+// plausible. "any" is the truth: demand at a price point in a place, body style unstated.
+// clearanceAdvisor matches a car against its own segment OR "any", so these still price real units.
+function segmentOfQuery(q){ const s=String(q||"").trim(); if(!s) return "any"; return segOf(s,s); }
+// ONE definition of "which week is this". demandRollup writes demand_cells keyed on it, and
+// clearanceAdvisor and appClear read them back on it — three copies of the same arithmetic is three
+// chances for the reader to miss the writer's rows by one week and report "no demand data" forever.
+function weekKey(d){ const t=new Date(d); const y=t.getUTCFullYear();
+  const jan1=Date.UTC(y,0,1); const days=Math.floor((Date.UTC(y,t.getUTCMonth(),t.getUTCDate())-jan1)/864e5);
+  return y+"-W"+String(Math.floor((days+new Date(jan1).getUTCDay())/7)).padStart(2,"0"); }
+
+// SQLite has no percentile function, so sort in JS. Cells are small by construction (k>=5, and a
+// week of one ZIP3 × segment × band), so this never sorts anything large.
+function pct(sorted,p){ if(!sorted.length) return null;
+  const i=Math.min(sorted.length-1,Math.max(0,Math.round((sorted.length-1)*p)));
+  return sorted[i]; }
+
+// Rebuilds the current and previous ISO week only. Bounded work on a 5-minute cron, and idempotent
+// — running it twice changes nothing but updated_at. Prior weeks are immutable once they roll off,
+// which is what makes the 8-week trend on the demand board trustworthy.
+async function demandRollup(env){
+  const wk=weekKey;
+  const since=new Date(Date.now()-21*864e5).toISOString().slice(0,10);
+  const rows=await env.DB.prepare(
+    "SELECT first_ts, zip, dream_car, fico, monthly, results, reason, top_mo FROM scans "+
+    "WHERE zip IS NOT NULL AND length(zip)>=3 AND monthly>0 AND substr(first_ts,1,10) >= ? LIMIT 20000")
+    .bind(since).all().catch(()=>({results:[]}));
+  // THIN-RESULT THRESHOLD, relative to what we actually have to sell.
+  // Measured on production 2026-08-03: a $350/mo search in 902 returns 33 cars; a $280/mo search
+  // returns 2. Neither is "unserved" by any binary test — search() prices each unit INTO the
+  // buyer's budget by stretching term and applying their down payment, so `results=0` never
+  // happens, `over_budget` rarely fires, and top_mo always lands just under what they asked
+  // (350→345, 280→277). Every yes/no definition of a miss is structurally unable to fire here.
+  //
+  // What a miss actually looks like is SCARCITY: two options out of ninety-five. That buyer was
+  // technically served and practically wasn't. Ten percent of live inventory, floored at 5, is the
+  // line — relative so it scales as inventory grows, floored so a tiny lot can still register.
+  const inv=await env.DB.prepare("SELECT COUNT(*) c FROM vdps WHERE active=1").first().catch(()=>({c:0}));
+  const THIN=Math.max(5,Math.round(((inv&&inv.c)||0)*0.10));
+  const live=new Set([wk(Date.now()), wk(Date.now()-7*864e5)]);
+  const cells=new Map();
+  for(const r of (rows.results||[])){
+    const week=wk(r.first_ts); if(!live.has(week)) continue;
+    const key=week+"|"+String(r.zip).slice(0,3)+"|"+segmentOfQuery(r.dream_car)+"|"+bandKey(r.fico);
+    let c=cells.get(key); if(!c){ c={n:0,unserved:0,mo:[]}; cells.set(key,c); }
+    c.n++; c.mo.push(+r.monthly||0);
+    // UNSERVED = we could not answer them on their own terms.
+    //   results=0                    nothing at all (rare — search widens until it finds something)
+    //   widen_radius | over_budget   we had to leave their area or exceed their budget to answer
+    //   top_mo > monthly             the best thing we showed them costs more than they said
+    // need_inputs is NOT demand — they never told us enough to search. search() returns before the
+    // scans INSERT in that case so the row should not exist, but the exclusion is written here too:
+    // a guard that depends on a caller's early return is a guard that breaks when someone refactors
+    // the caller, and it would break by silently inflating every cell.
+    if(r.reason==="need_inputs") continue;
+    const compromised = r.reason==="widen_radius" || r.reason==="over_budget";
+    const overAsk = r.top_mo!=null && +r.monthly>0 && +r.top_mo > +r.monthly;
+    const thin = (+r.results||0) < THIN;      // the one that actually fires — see THIN above
+    if(!r.results || compromised || overAsk || thin) c.unserved++;
+  }
+  let written=0, suppressed=0;
+  for(const [key,c] of cells){
+    // k>=5. Enforced HERE, before anything is written. A suppressed cell leaves no row on disk.
+    if(c.n<5){ suppressed++; continue; }
+    const [week,zip3,segment,band]=key.split("|");
+    const mo=c.mo.slice().sort((a,b)=>a-b);
+    await env.DB.prepare(
+      "INSERT INTO demand_cells (week,zip3,segment,band,scans,unserved,monthly_p25,monthly_p50,monthly_p75,updated_at) "+
+      "VALUES (?,?,?,?,?,?,?,?,?,datetime('now')) ON CONFLICT(week,zip3,segment,band) DO UPDATE SET "+
+      "scans=excluded.scans, unserved=excluded.unserved, monthly_p25=excluded.monthly_p25, "+
+      "monthly_p50=excluded.monthly_p50, monthly_p75=excluded.monthly_p75, updated_at=excluded.updated_at")
+      .bind(week,zip3,segment,band,c.n,c.unserved,pct(mo,0.25),pct(mo,0.50),pct(mo,0.75)).run().catch(()=>{});
+    written++;
+  }
+  if(written||suppressed) console.log("demand_rollup: "+written+" cells written, "+suppressed+" suppressed below k=5");
+  return {written,suppressed};
+}
+
+// For each of a dealer's active units, find the demand cell it should be competing in and decide
+// whether a price move would put it in front of people who are already looking.
+//
+// Every returned row carries its own evidence — the unserved count, the median budget, how many of
+// those searches the new price would reach. A dealer told to drop $115/mo is entitled to see the
+// 31 searches that produced the number, and a recommendation that cannot show its work is one a
+// dealer correctly ignores.
+async function clearanceAdvisor(env,dealerId){
+  const week=weekKey(Date.now());
+  const cars=await env.DB.prepare(
+    "SELECT v.id, v.vin, v.year, v.make, v.model, v.trim, v.price_mo, v.lot_date, v.first_seen, v.location_zip, "+
+    "       s.days_on_lot, s.dealer_zip "+
+    "FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin "+
+    "WHERE v.active=1 AND v.dealer_id=? LIMIT 400").bind(dealerId).all().catch(()=>({results:[]}));
+  const out=[]; let unknownAge=0;
+  for(const v of (cars.results||[])){
+    const zip3=String(v.location_zip||v.dealer_zip||"").slice(0,3);
+    if(zip3.length<3) continue;
+    const segment=segOf(v.make,v.model);
+    // Match the car's own segment OR "any". An "any" cell is someone who told us their budget and
+    // ZIP but not what body style they wanted — that is demand for everything in range, including
+    // this unit. Excluding it would throw away most of the homepage calculator's signal.
+    const cell=await env.DB.prepare(
+      "SELECT * FROM demand_cells WHERE week=? AND zip3=? AND segment IN (?,'any') ORDER BY unserved DESC LIMIT 1")
+      .bind(week,zip3,segment).first().catch(()=>null);
+    // No cell means no evidence. Return nothing rather than a low-confidence guess — the first thing
+    // a dealer decides about a recommender is whether to trust it, and they decide once.
+    if(!cell||!cell.monthly_p50) continue;
+    const listed=+v.price_mo||0; if(!listed) continue;
+    const gap=listed-cell.monthly_p50;
+    if(gap<=0) continue;                       // already priced into the market; nothing to say
+    // AGE, best evidence first. 0073 read only days_on_lot and lot_date; in production 0 of 95 live
+    // cars had the first and 1 of 95 had the second, so every unit computed as age 0 and the
+    // age>=30 gate silently excluded the entire inventory. first_seen (0074) is the floor — the
+    // earliest event we have for that VIN. It UNDERSTATES true age, which is the safe direction.
+    const days=(d)=>Math.floor((Date.now()-new Date(d).getTime())/864e5);
+    const age = v.days_on_lot!=null ? +v.days_on_lot
+              : v.lot_date  ? days(v.lot_date)
+              : v.first_seen? days(v.first_seen) : null;
+    const ageSource = v.days_on_lot!=null ? "dealer" : v.lot_date ? "lot_date" : v.first_seen ? "observed" : "unknown";
+    if(age===null){ unknownAge++; continue; }
+    // AGED = 30+ days we can evidence, OR a prior-model-year unit. The second test is the deck's own
+    // definition (S-02: "207,727 prior-model-year units"), and it is true regardless of how long we
+    // have been watching — a 2024 car sitting in August 2026 is aged whether we saw it arrive or not.
+    // Without it the system cannot recommend anything until 30 days after we first observed a VIN,
+    // which would have meant an empty /clear for another five days on a live product.
+    const priorModelYear = (+v.year||9999) <= (new Date().getUTCFullYear()-1);
+    if(age<30 && !priorModelYear){ continue; }
+    // Suggest just above p50 — enough to enter the bulk of the budget distribution without giving
+    // away the whole gap. Rounded to $5 because nobody lists a car at $663/mo.
+    //
+    // THEN CAP IT, and the cap is the difference between a tool a dealer uses and one they close.
+    // Un-capped, this recommended dropping a 2023 Porsche Macan from $640 to $295 — because the
+    // "any" cell's median comes from budget shoppers who never specified a body style, and a Macan
+    // is not what they were shopping for. A 54% cut is not a price move, it is a punchline, and one
+    // of those on the first screen costs you the dealer's belief in every number that follows.
+    //
+    // A real aged-inventory move is 5-15%. Cap at 12%, and if even the capped price still cannot
+    // reach their range, say nothing: this unit genuinely cannot serve this demand, and pretending
+    // otherwise is how the whole surface stops being read.
+    const MAX_DROP=0.12;
+    const floorMo=Math.round((listed*(1-MAX_DROP))/5)*5;
+    let suggested=Math.round((cell.monthly_p50*1.015)/5)*5;
+    if(suggested<floorMo) suggested=floorMo;
+    if(cell.monthly_p75 && suggested>cell.monthly_p75) continue;
+    // A CLEARANCE RECOMMENDATION MUST LOWER THE PRICE. Caught on the first live cron run
+    // 2026-08-06: three units listed at $291-293 against a p50 of $290 passed the gap>0 test by a
+    // dollar or two, and then p50×1.015 rounded to $5 produced $295 — the tool telling a dealer to
+    // RAISE the price of a car it had just flagged as aged and unsold. The gap test compares
+    // against the median; this compares against what we are about to print on the card, which is
+    // the only comparison a dealer actually sees. Same failure family as the $640→$295 Macan: an
+    // arithmetically defensible number that is obvious nonsense on screen.
+    if(suggested>=listed) continue;
+    // How many of the cell's searches the new price plausibly reaches. p50→p75 is the top half of
+    // the distribution; anything at or under p50 reaches at least half. Deliberately conservative.
+    const reachable=suggested<=cell.monthly_p50 ? Math.round(cell.unserved*0.5)
+                  : suggested<=cell.monthly_p75 ? Math.round(cell.unserved*0.35)
+                  : Math.round(cell.unserved*0.15);
+    const confidence=cell.scans>=30?"high":cell.scans>=12?"medium":"low";
+    out.push({ vdp_id:v.id, vin:v.vin, year:v.year, make:v.make, model:v.model, trim:v.trim,
+      week, zip3, segment, band:cell.band, listed_mo:listed, suggested_mo:suggested,
+      unserved:cell.unserved, cell_scans:cell.scans, reachable, age_days:age, age_source:ageSource,
+      prior_model_year:priorModelYear, confidence,
+      p25:cell.monthly_p25, p50:cell.monthly_p50, p75:cell.monthly_p75,
+      // +1 so a prior-model-year unit we have only observed briefly still ranks by demand rather
+      // than collapsing to zero. Age is a multiplier on urgency, not a gate on it.
+      score: cell.unserved*(1+age/30) });
+  }
+  out.sort((a,b)=>b.score-a.score);
+  return { recs: out.slice(0,12), unknown_age: unknownAge, considered: (cars.results||[]).length };
+}
+
+// ---- ai.carnimbus.us — INVENTORY BY CREDIT BAND (deck v13 S-04, screen 2) ---------------------
+// The band is READ, never inferred. listing_placements.credit_band is what the dealer actually
+// placed the unit at, and it is the same value search() uses to override the payment for a buyer in
+// that band (worker.js:1372) — so this panel shows the shopper exactly what the shopper would see.
+// Deriving a band from price instead would have invented a number that contradicts the live pricing.
+const BAND_ORDER=["800+","740-799","670-739","580-669","under 580"];
+async function aiBands(request,env){
+  const rows=await env.DB.prepare(
+    "SELECT p.credit_band band, v.id, v.year, v.make, v.model, v.trim, p.monthly, v.price_mo, "+
+    "       s.dealer_name, v.lot_date, v.first_seen "+
+    "FROM listing_placements p JOIN vdps v ON v.id=p.vdp_id LEFT JOIN vdp_specs s ON s.vin=v.vin "+
+    "WHERE v.active=1 ORDER BY p.monthly DESC LIMIT 600").all().catch(()=>({results:[]}));
+  const by={};
+  for(const r of (rows.results||[])){
+    const b=BAND_ORDER.indexOf(String(r.band||""))>=0?r.band:"unbanded";
+    (by[b]=by[b]||[]).push({ id:r.id, year:r.year, make:r.make, model:r.model, trim:r.trim||"",
+      monthly:+r.monthly||+r.price_mo||0, dealer:r.dealer_name||"—",
+      days: r.lot_date ? Math.max(0,Math.floor((Date.now()-Date.parse(r.lot_date))/864e5))
+          : r.first_seen ? Math.max(0,Math.floor((Date.now()-Date.parse(r.first_seen))/864e5)) : null });
+  }
+  const bands=BAND_ORDER.concat(["unbanded"]).filter(b=>by[b]&&by[b].length)
+    .map(b=>({ band:b, count:by[b].length, cars:by[b] }));
+  return json({ ok:true, bands, total:(rows.results||[]).length });
+}
+
+// ---- ai.carnimbus.us — CLEARANCE ACCURACY ----------------------------------------------------
+// clearance_recs was written by app./clear and read by nothing. AUTONOMY-POLICY.md:62 puts
+// clearanceAdvisor at L0 and says graduation is on MEASURED accuracy — so the measurement needs a
+// reader before the ladder means anything. Take rate and skip reasons are that reader.
+async function aiClearance(request,env){
+  const url=new URL(request.url);
+  const week=String(url.searchParams.get("week")||"").slice(0,8) || weekKey(Date.now());
+  const t=await env.DB.prepare(
+    "SELECT COUNT(*) issued, "+
+    "SUM(CASE WHEN outcome='taken' THEN 1 ELSE 0 END) taken, "+
+    "SUM(CASE WHEN outcome='skipped' THEN 1 ELSE 0 END) skipped, "+
+    "AVG(CASE WHEN outcome='taken' THEN listed_mo-suggested_mo END) avg_drop "+
+    "FROM clearance_recs WHERE week=?").bind(week).first().catch(()=>null);
+  const byConf=await env.DB.prepare(
+    "SELECT confidence, COUNT(*) n, SUM(CASE WHEN outcome='taken' THEN 1 ELSE 0 END) taken "+
+    "FROM clearance_recs WHERE week=? GROUP BY confidence").bind(week).all().catch(()=>({results:[]}));
+  const skips=await env.DB.prepare(
+    "SELECT COALESCE(skip_reason,'(none given)') reason, COUNT(*) n FROM clearance_recs "+
+    "WHERE week=? AND outcome='skipped' GROUP BY reason ORDER BY n DESC LIMIT 12")
+    .bind(week).all().catch(()=>({results:[]}));
+  const recent=await env.DB.prepare(
+    "SELECT r.vdp_id, r.listed_mo, r.suggested_mo, r.confidence, r.outcome, r.unserved, "+
+    "       v.year, v.make, v.model FROM clearance_recs r LEFT JOIN vdps v ON v.id=r.vdp_id "+
+    "WHERE r.week=? ORDER BY r.unserved DESC LIMIT 25").bind(week).all().catch(()=>({results:[]}));
+  const issued=(t&&t.issued)||0, taken=(t&&t.taken)||0;
+  return json({ ok:true, week,
+    totals:{ issued, taken, skipped:(t&&t.skipped)||0,
+             open: issued-taken-((t&&t.skipped)||0),
+             take_rate: issued? Math.round((taken/issued)*100) : null,
+             avg_drop: (t&&t.avg_drop!=null)? Math.round(t.avg_drop) : null },
+    by_confidence:(byConf.results||[]), skip_reasons:(skips.results||[]), recent:(recent.results||[]),
+    // L0 is stated by the API, not just the docs — a reader of this endpoint should not have to go
+    // find AUTONOMY-POLICY.md to learn that nothing here moved a price on its own.
+    autonomy:"L0 — suggest only; every reprice was pressed by a human" });
+}
+
+// ---- ai.carnimbus.us/demand — the board ------------------------------------------------------
+// The headline is deliberately the failure number: "N searches we could not serve this week."
+// Volume is vanity; a busy ZIP you already serve is not a problem. Unserved demand is the only
+// figure on this page that maps to an action a dealer can take today.
+async function aiDemand(request,env){
+  const url=new URL(request.url);
+  const week=String(url.searchParams.get("week")||"").slice(0,8) || weekKey(Date.now());
+  const cells=await env.DB.prepare(
+    "SELECT week,zip3,segment,band,scans,unserved,monthly_p25,monthly_p50,monthly_p75 "+
+    "FROM demand_cells WHERE week=? ORDER BY unserved DESC LIMIT 400").bind(week).all().catch(()=>({results:[]}));
+  const rows=cells.results||[];
+  const totals=rows.reduce((a,r)=>({scans:a.scans+r.scans,unserved:a.unserved+r.unserved}),{scans:0,unserved:0});
+  // Grid: ZIP3 × segment, summed over credit bands. Bands stay available in the drill-down.
+  const grid={};
+  for(const r of rows){ grid[r.zip3]=grid[r.zip3]||{};
+    grid[r.zip3][r.segment]=(grid[r.zip3][r.segment]||0)+r.unserved; }
+  // 8-week trend of unserved, for the sparkline.
+  const trend=await env.DB.prepare(
+    "SELECT week t, SUM(unserved) c FROM demand_cells GROUP BY week ORDER BY week DESC LIMIT 8").all().catch(()=>({results:[]}));
+  return json({ ok:true, week, totals,
+    unserved_pct: totals.scans ? +(100*totals.unserved/totals.scans).toFixed(1) : 0,
+    grid, cells:rows, trend:(trend.results||[]).reverse(),
+    // Honesty, on the page rather than in a footnote: at low traffic most cells are suppressed by
+    // k>=5 and the board is thin. Saying so beats a confident-looking empty grid.
+    note: rows.length ? null : "No cells yet. Either there is no traffic this week, or every cell is below the k=5 privacy floor." });
+}
+
+// ---- app.carnimbus.us/clear — the dealer's queue ----------------------------------------------
+// Answers "what should I do today?" — the question a dealer actually opens the app with.
+// Recommendations are persisted so the outcome can be measured; AUTONOMY-POLICY graduation is on
+// MEASURED accuracy, and with no record of what was recommended there is nothing to measure.
+async function persistClearanceRecs(env,dealerId,recs){
+  for(const r of recs){
+    await env.DB.prepare(
+      "INSERT INTO clearance_recs (dealer_id,vdp_id,week,zip3,segment,band,listed_mo,suggested_mo,unserved,reachable,age_days,confidence) "+
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(dealer_id,vdp_id,week) DO UPDATE SET "+
+      "listed_mo=excluded.listed_mo, suggested_mo=excluded.suggested_mo, unserved=excluded.unserved, "+
+      "reachable=excluded.reachable, age_days=excluded.age_days, confidence=excluded.confidence")
+      .bind(dealerId,r.vdp_id,r.week,r.zip3,r.segment,r.band,r.listed_mo,r.suggested_mo,r.unserved,r.reachable,r.age_days,r.confidence)
+      .run().catch(()=>{});
+  }
+  return recs.length;
+}
+// CRON. Until now clearanceAdvisor ran in exactly one place — inside appClear, on a dealer page
+// load — so a dealer who never opened /clear produced no clearance_recs, and the accuracy data that
+// AUTONOMY-POLICY graduation depends on was conditioned on the engagement it was supposed to
+// measure. Measured 2026-08-06: 0 rows on disk while 14 units qualified. The queue was not empty,
+// it was unrun.
+async function clearanceSweep(env){
+  const ds=await env.DB.prepare(
+    "SELECT DISTINCT dealer_id id FROM vdps WHERE active=1 AND dealer_id IS NOT NULL LIMIT 50")
+    .all().catch(()=>({results:[]}));
+  let wrote=0;
+  for(const d of (ds.results||[])){
+    const adv=await clearanceAdvisor(env,d.id).catch(()=>null);
+    if(adv&&adv.recs&&adv.recs.length) wrote+=await persistClearanceRecs(env,d.id,adv.recs);
+  }
+  return wrote;
+}
+async function appClear(request,env,_uid,d){
+  const adv=await clearanceAdvisor(env,d.id);
+  const recs=adv.recs;
+  await persistClearanceRecs(env,d.id,recs);
+  // The week comes from the clock, NOT from recs[0]. Binding recs[0].week meant that on an empty
+  // result the bind was "" — so the skipped-list matched nothing and, worse, the demand_cells count
+  // below always came back 0, making the empty state report "not enough public searches" even when
+  // the real cause was the opposite. The two causes have different owners; reporting the wrong one
+  // sends the dealer to fix something that isn't broken.
+  const week=weekKey(Date.now());
+  const skipped=await env.DB.prepare(
+    "SELECT vdp_id FROM clearance_recs WHERE dealer_id=? AND outcome='skipped' AND week=?")
+    .bind(d.id, week).all().catch(()=>({results:[]}));
+  const hide=new Set((skipped.results||[]).map(x=>x.vdp_id));
+  const open=recs.filter(r=>!hide.has(r.vdp_id));
+  if(open.length) await logEvent(env,{action:"dealer.recommendation_shown",source:"app",confidence:open.length}).catch(()=>{});
+  // When there is nothing to show, say WHY. An unexplained empty screen reads as broken, and a
+  // dealer who thinks the tool is broken never opens it again. The two real causes are different
+  // problems with different fixes: not enough public searches yet (ours to solve, via traffic), or
+  // no lot dates on their inventory (theirs to solve, in the console).
+  let why=null;
+  if(!open.length){
+    const cells=await env.DB.prepare("SELECT COUNT(*) c FROM demand_cells WHERE week=?")
+      .bind(week).first().catch(()=>({c:0}));
+    why = (cells&&cells.c)
+      ? "We have demand data this week but nothing in your inventory lines up with it yet."
+      : "Not enough public searches in your area yet to price against. This sharpens as traffic grows.";
+    if(adv.unknown_age) why += " " + adv.unknown_age + " of your " + adv.considered +
+      " live units have no lot date — adding those in the console makes them eligible.";
+  }
+  return json({ ok:true, recs:open, considered:adv.considered, unknown_age:adv.unknown_age,
+    // The empty state is a feature. Three low-confidence cards would teach a dealer to ignore the
+    // whole surface, and they decide that once.
+    note: open.length ? null : (why||"Nothing has enough signal yet. We'd rather say that than guess.") });
+}
+
+// A human presses this. clearanceAdvisor never writes a price itself — L0, suggest-only.
+async function appReprice(request,env,_uid,d){
+  const b=await request.json().catch(()=>({}));
+  const vdpId=parseInt(b.vdp_id,10), mo=parseInt(b.price_mo,10);
+  if(!vdpId||!Number.isFinite(mo)||mo<=0) return json({ok:false,error:"bad_request"},400);
+  const own=await env.DB.prepare("SELECT id FROM vdps WHERE id=? AND dealer_id=? AND active=1").bind(vdpId,d.id).first().catch(()=>null);
+  if(!own) return json({ok:false,error:"not_found"},404);
+  // embedding_synced=0 so the next cron re-embeds it — a repriced car that still matches on its old
+  // price would put it back in front of exactly the wrong buyers.
+  await env.DB.prepare("UPDATE vdps SET price_mo=?, embedding_synced=0, updated_at=? WHERE id=?")
+    .bind(mo,new Date().toISOString(),vdpId).run().catch(()=>{});
+  await env.DB.prepare("UPDATE clearance_recs SET outcome='taken', resolved_at=datetime('now') WHERE dealer_id=? AND vdp_id=? AND outcome IS NULL")
+    .bind(d.id,vdpId).run().catch(()=>{});
+  await logEvent(env,{action:"dealer.recommendation_taken",source:"app",vehicle_id:vdpId,confidence:mo}).catch(()=>{});
+  return json({ok:true,price_mo:mo});
+}
+
+// A skip with a reason is training signal; a skip without one is noise. The reason is required.
+async function appRecSkip(request,env,_uid,d){
+  const b=await request.json().catch(()=>({}));
+  const vdpId=parseInt(b.vdp_id,10); const why=String(b.reason||"").slice(0,200);
+  if(!vdpId||!why) return json({ok:false,error:"reason_required"},400);
+  await env.DB.prepare("UPDATE clearance_recs SET outcome='skipped', skip_reason=?, resolved_at=datetime('now') WHERE dealer_id=? AND vdp_id=? AND outcome IS NULL")
+    .bind(why,d.id,vdpId).run().catch(()=>{});
+  await logEvent(env,{action:"dealer.recommendation_skipped",source:"app",vehicle_id:vdpId}).catch(()=>{});
+  return json({ok:true});
 }
