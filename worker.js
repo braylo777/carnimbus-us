@@ -2322,7 +2322,20 @@ async function dealerIngestUrl(request,env,uid,dealer){
 // migration. The credit_band path stays exactly as it was: the buyer search still reads
 // monthly/down by band (search()), and dealerAutoPlace() still places by band. Bands price a car
 // for a buyer; cells are how a dealer shops their own lot. Both are true at once.
-const V15_DOWN=[1000,2000,3000,4000], V15_MO=[100,200,300];
+// Tiers are derived from the live lot, not from a slide. The original $100/$200/$300 came from the
+// founder-call reference mechanic ("true floor $2K/$100 → listed $2K/$200"), which describes a
+// ~$12K car. The actual beachhead inventory averages $24,400 (94 priced units, $15,075–$56,083) and
+// its real monthly payments run $276–$3,109, averaging $450. Snapping that lot through the old tiers
+// put 68 of 96 units — 71% — into a single cell and left 8 of 12 cells empty: a grid that cannot
+// discriminate is just a list with extra steps.
+//
+// Measured against all 96 live placements:
+//   $100/$200/$300  →  4/12 cells used, largest holds 71%
+//   $300/$400/$500/$700 → 9/16 cells used, largest holds 38%
+//
+// The DOWN axis was already right — $1k–$4k covers 81% of the lot inside $1k–$3k — so it is
+// unchanged. Only the monthly axis moved. Re-derive these if the beachhead inventory changes.
+const V15_DOWN=[1000,2000,3000,4000], V15_MO=[300,400,500,700];
 const inCell=(dn,mo)=>V15_DOWN.indexOf(+dn)>=0 && V15_MO.indexOf(+mo)>=0;
 // Legacy rows carry auto-priced values (10% down, monthlyFor(...)) that land nowhere near a cell.
 // The grid READ snaps them to the nearest cell for display only -- it never writes the snapped
@@ -2348,8 +2361,10 @@ async function dealerGrid(request,env,uid,dealer){
     if(!vid) return json({ok:false,error:"bad_request"},400);
     // Exact cell membership, not snapping. Snapping a WRITE would silently move a dealer's number,
     // and the one thing the grid must never do is price on their behalf.
+    // Derived from the constants, not written out — the old copy said "$100-$300 a month" and would
+    // have kept saying it after the tiers moved.
     if(!inCell(dn,mo)) return json({ok:false,error:"bad_cell",
-      reason:"Pick a cell: $1,000-$4,000 down by $100-$300 a month."},422);
+      reason:`Pick a cell: $${V15_DOWN[0].toLocaleString()}–$${V15_DOWN[V15_DOWN.length-1].toLocaleString()} down by $${V15_MO[0]}–$${V15_MO[V15_MO.length-1]} a month.`},422);
     if(!(await env.DB.prepare("SELECT 1 FROM vdps WHERE id=? AND dealer_id=?").bind(vid,dealer.id).first()))
       return json({ok:false,error:"not_yours"},403);
     const now=new Date().toISOString();
@@ -2493,7 +2508,16 @@ async function dealerLeads(request,env,uid,dealer){
       pvm:x.pvm||"", cond:x.condition_grade||"", certified:x.certified?1:0 };
     // R20: economics computed from THIS store's real figures (dealer Settings). Defaults stay labeled (EST).
     var commPct=(dealer.commission_pct!=null?+dealer.commission_pct:25),
-        holdDay=(dealer.holding_per_day!=null?+dealer.holding_per_day:32),
+        // Default raised 32 → 40 to match the sourced figure on deck v15 slide 2: $40–75/day burned
+        // in holding cost, interest, depreciation and insurance on 60+ day units (Kinetic Advantage,
+        // May 2026). $32 had no citation and understated the dealer's own savings by 25–134%, which
+        // is the one number we most want to be defensible — it is the ROI we quote back to them.
+        // Taking the LOW end of the cited range on purpose: this codebase understates rather than
+        // flatters (see the first_seen age floor), and a dealer who checks our math should find we
+        // were conservative. A store that knows its real cost overrides it in Settings.
+        // NOTE: deck slide 5 implies $55–105/day ($3,300–6,300 saved over D-30 vs D-90), which does
+        // not reconcile with slide 2. Using the slide-2 figure because it carries the citation.
+        holdDay=(dealer.holding_per_day!=null?+dealer.holding_per_day:40),
         packFee=(+dealer.pack_fee||0),
         econReal=(dealer.commission_pct!=null||dealer.holding_per_day!=null);
     if(x.unit_cost&&price&&price>(+x.unit_cost+packFee)){
@@ -4362,12 +4386,30 @@ function json(obj, status = 200) {
 //     The deck's word "autonomous" is true about SPEED and false about AUTONOMY.
 // ============================================================================================
 
-const DEAL_FEE_CENTS   = 89500;    // $895 seller fee — deck v13 S-05 ARPU
-// Deck v13 S-04 step 1: "Deal closes; the program is funded." 20% of the seller fee = $179 per
-// closed deal, credited to that rooftop's creator program. Declared next to the fee it derives
-// from so the ratio is visible rather than a second magic number somewhere else in the file.
+// THE FEE IS A PERCENTAGE, NOT A CONSTANT. Deck v15 S-05/S-06: "2.5% FEE", "FEES = 2.5% OF GMV".
+// This was 89500 — a flat $895 pinned to "deck v13 S-05 ARPU", a deck retired on 2026-08-11. A flat
+// constant is also the wrong SHAPE: it earns the same on a $15,075 unit as on a $56,083 one, and
+// this lot spans exactly that range.
+//
+// ⚠ REVENUE IMPACT, stated plainly because it cuts against us. The deck models 2.5% of a $49,220
+// "average aging unit" = $1,230/unit. The actual beachhead lot averages $24,400 (94 priced units),
+// where 2.5% = $610 — LESS than the $895 flat fee this replaces. 2.5% only beats $895 above a
+// $35,800 sale price, and 71 of 94 live units sit below that. The deck's per-unit economics, ARPU,
+// LTV and LTV/CAC are all derived from the $49,220 figure and are therefore ~2x the observable
+// inventory. That is a deck problem, not a code problem, but the code should not quietly encode the
+// optimistic number: this computes from the REAL sale price, whatever it turns out to be.
+const DEAL_FEE_PCT     = 0.025;
+// Used only when a sale price is genuinely unknown (no market row, no offer). Not a floor — a
+// fallback. Applying a floor would be inventing pricing policy that no decision record supports.
+const DEAL_FEE_FALLBACK_CENTS = 89500;
+const feeCentsFor = (saleCents) => (saleCents > 0)
+  ? Math.round(saleCents * DEAL_FEE_PCT)
+  : DEAL_FEE_FALLBACK_CENTS;
+// Deck v13 S-04 step 1: "Deal closes; the program is funded." 20% of the seller fee, credited to
+// that rooftop's creator program. Now a function of the ACTUAL fee charged, so a cheap unit funds
+// proportionally less — when the fee was flat this was a flat $179 regardless of deal size.
 const PROGRAM_FUND_PCT   = 0.20;
-const PROGRAM_FUND_CENTS = Math.round(DEAL_FEE_CENTS * PROGRAM_FUND_PCT);   // 17900
+const programFundFor = (feeCents) => Math.round(feeCents * PROGRAM_FUND_PCT);
 const AGING_BENCHMARK  = 495400;   // $4,954 average discount to clear a prior-model-year unit
                                    // (S&P Global Mobility, Mar 2026 — deck v13 S-02)
 
@@ -4484,7 +4526,9 @@ async function appOffer(request, env, _uid, d) {
   // With no market row we have no defensible number and say so rather than inventing one — an offer
   // a dealer cannot trace is worse than no offer, and this whole product is sold on price honesty.
   const avgCents = s && s.market_price_avg ? Math.round(Number(s.market_price_avg) * 100) : 0;
-  const offerCents = avgCents ? Math.max(0, avgCents - DEAL_FEE_CENTS) : 0;
+  // Fee scales with the unit. Market value is the best sale-price basis we have at offer time.
+  const feeCents = feeCentsFor(avgCents);
+  const offerCents = avgCents ? Math.max(0, avgCents - feeCents) : 0;
   return json({ ok: true, vin: v.normalized, dealer: d.dealership || d.name || "",
     decoded: decoded || {},
     specs: s ? {
@@ -4493,7 +4537,7 @@ async function appOffer(request, env, _uid, d) {
       market_price_avg: s.market_price_avg, market_price_high: s.market_price_high,
       price_vs_market: s.price_vs_market,
     } : null,
-    offer: { offer_cents: offerCents, fee_cents: DEAL_FEE_CENTS, benchmark_cents: AGING_BENCHMARK,
+    offer: { offer_cents: offerCents, fee_cents: feeCents, fee_pct: DEAL_FEE_PCT, benchmark_cents: AGING_BENCHMARK,
              priced: !!avgCents } });
 }
 
@@ -4507,14 +4551,18 @@ async function appDealCreate(request, env, _uid, d) {
   const offer = parseInt(b.offer_cents, 10);
   if (!Number.isFinite(offer) || offer <= 0) return json({ ok: false, error: "bad_offer" }, 400);
   const salt = [...crypto.getRandomValues(new Uint8Array(32))].map(x => x.toString(16).padStart(2, "0")).join("");
+  // The offer is net of fee (appOffer subtracts it), so gross back up to recover the sale basis
+  // before taking the percentage. Computing 2.5% of the NET would silently under-charge on every
+  // deal, and deals.fee_cents is written once and never recomputed — it is a commitment, not a key.
+  const feeCents = feeCentsFor(Math.round(offer / (1 - DEAL_FEE_PCT)));
   const r = await env.DB.prepare("INSERT INTO deals (vin,vin_salt,seller_dealer_id,state,offer_cents,fee_cents) VALUES (?,?,?,'DRAFT',?,?)")
-    .bind(v.normalized, salt, d.id, offer, DEAL_FEE_CENTS).run().catch(() => null);
+    .bind(v.normalized, salt, d.id, offer, feeCents).run().catch(() => null);
   if (!r || !r.meta || !r.meta.last_row_id) return json({ ok: false, error: "create_failed" }, 500);
   const id = r.meta.last_row_id;
   await env.DB.prepare("INSERT INTO deal_events (deal_id,from_state,to_state,actor,actor_kind,reason) VALUES (?,NULL,'DRAFT',?,'dealer','deal created')")
     .bind(id, String(d.id)).run().catch(() => {});
   await logEvent(env, { action: "dealer.deal_created", source: "app", session_id: "deal:" + id, confidence: offer / 100 }).catch(() => {});
-  return json({ ok: true, deal: { id, vin: v.normalized, state: "DRAFT", offer_cents: offer, fee_cents: DEAL_FEE_CENTS } });
+  return json({ ok: true, deal: { id, vin: v.normalized, state: "DRAFT", offer_cents: offer, fee_cents: feeCents } });
 }
 
 // POST /api/app/stake — "funds locked before the sale".
@@ -4653,12 +4701,15 @@ async function appApprove(request, env, _uid, d) {
   // lose a race (changes!==1 → state_conflict). Crediting before it would fund a program off a deal
   // that never settled. The conflict target matches idx_programs_dealer exactly, which SQLite
   // requires. Budget movement stays L1 — a human pressed this button; nothing here is autonomous.
+  // Derived from THIS deal's stored fee, not a flat constant — a $15k unit now funds proportionally
+  // less than a $56k one, which is the point of moving the fee to a percentage.
+  const programCents = programFundFor(+deal.fee_cents || DEAL_FEE_FALLBACK_CENTS);
   await env.DB.prepare(
     "INSERT INTO dealer_programs (dealer_id,budget_cents) VALUES (?,?) "+
     "ON CONFLICT(dealer_id) DO UPDATE SET budget_cents=budget_cents+excluded.budget_cents, "+
     "updated_at=datetime('now')")
-    .bind(d.id, PROGRAM_FUND_CENTS).run().catch(() => {});
-  await logEvent(env, { action: "dealer.program_funded", source: "app", session_id: "deal:" + deal.id, confidence: PROGRAM_FUND_CENTS / 100 }).catch(() => {});
+    .bind(d.id, programCents).run().catch(() => {});
+  await logEvent(env, { action: "dealer.program_funded", source: "app", session_id: "deal:" + deal.id, confidence: programCents / 100 }).catch(() => {});
   await logEvent(env, { action: "dealer.deal_settled", source: "app", session_id: "deal:" + deal.id, confidence: stake.amount_cents / 100 }).catch(() => {});
   return json({ ok: true, state: "SETTLED" });
 }
@@ -4934,10 +4985,19 @@ async function clearanceAdvisor(env,dealerId){
                   : suggested<=cell.monthly_p75 ? Math.round(cell.unserved*0.35)
                   : Math.round(cell.unserved*0.15);
     const confidence=cell.scans>=30?"high":cell.scans>=12?"medium":"low";
+    // URGENCY, from deck v15 slide 2: "By Day 45, the dealer is underwater & out of options." The
+    // entry gate stays at 30 — that is when a unit becomes worth surfacing — but a flat gate told a
+    // dealer nothing about whether a car is drifting or bleeding, and those need different responses.
+    // 60+ is where the deck's $40–75/day burn figure is measured, so it is the band where the
+    // holding-cost argument is strongest and the discount is easiest to justify.
+    const urgency = age>=60 ? "burning" : age>=45 ? "underwater" : "aging";
+    // Dollars, not adjectives. holdDay defaults to the same 40 used on the leads view; a dealer who
+    // set their real figure in Settings gets theirs. This is the number that makes the case.
+    const burnToDate = age*40;
     out.push({ vdp_id:v.id, vin:v.vin, year:v.year, make:v.make, model:v.model, trim:v.trim,
       week, zip3, segment, band:cell.band, listed_mo:listed, suggested_mo:suggested,
       unserved:cell.unserved, cell_scans:cell.scans, reachable, age_days:age, age_source:ageSource,
-      prior_model_year:priorModelYear, confidence,
+      prior_model_year:priorModelYear, confidence, urgency, burn_to_date:burnToDate,
       p25:cell.monthly_p25, p50:cell.monthly_p50, p75:cell.monthly_p75,
       // +1 so a prior-model-year unit we have only observed briefly still ranks by demand rather
       // than collapsing to zero. Age is a multiplier on urgency, not a gate on it.
