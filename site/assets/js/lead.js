@@ -125,6 +125,13 @@ document.addEventListener("DOMContentLoaded",function(){
             :("Your "+carName+" test drive is set for "+slotText+". We'll text + email you the details."));
           var a=$("dnm-ics"); a.href=icsHref(c,slot); a.download="carnimbus-drive.ics";
           $("dn-modal").style.display="flex"; }
+        // A failed captcha is not a data problem. Telling a real buyer to "check your details"
+        // sends them re-reading a form that is already correct, which is how you lose them. The
+        // server used to answer {ok:true} here and show the success modal instead, silently
+        // discarding the lead -- that is why TURNSTILE_SECRET was never safe to set.
+        else if(d&&d.error==="captcha"){ msg.textContent=es()
+          ?"No pudimos verificar que eres humano. Actualiza la página e inténtalo de nuevo."
+          :"Couldn't verify you're human — refresh the page and try again."; }
         else { msg.textContent=es()?"Revisa tus datos e inténtalo de nuevo.":"Please check your details and try again."; } })
       .catch(function(){ dnSubmit.disabled=false; msg.textContent=es()?"No se pudo enviar.":"Couldn't submit — try again."; }); });
   // Confirmation pop-up: close on "Done" or on backdrop click.

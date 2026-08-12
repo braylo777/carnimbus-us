@@ -21,7 +21,15 @@ const ALLOWED_ORIGINS = [
 // redirect above this check and never reach it. Keep this in sync with `routes` in wrangler.jsonc.
 const SERVED_HOSTS = new Set([
   "carnimbus.us",
-  "www.carnimbus.us",          // pending: not yet bound as a custom domain
+  // "www.carnimbus.us",       // REMOVED 2026-08-12. Sat here since 08-01 as "pending: not yet bound
+                               // as a custom domain" — but it has no A, AAAA or CNAME record at all,
+                               // so it NXDOMAINs rather than reaching the Worker. Listing an unbound
+                               // host here is worse than omitting it: the deploy gate below tells you
+                               // to curl www.carnimbus.us and confirm no Netlify header comes back,
+                               // and that check has been "passing" purely because the name does not
+                               // resolve — not because Netlify was decommissioned. It was not:
+                               // www.carnimbus.com still answers from Netlify with a 404 today.
+                               // Re-add this line only in the same change that binds the DNS record.
   "dealer.carnimbus.us",       // RETIRED 2026-08-03 — 301s to app.; MUST stay bound in order to redirect
   "creator.carnimbus.us",      // RETIRED 2026-08-03 — portal archived; 301s to the apex. MUST stay bound.
   "ai.carnimbus.us",
@@ -217,7 +225,7 @@ export default {
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
     if (url.pathname === "/robots.txt")               return robotsTxt(url.hostname);
-    if (url.pathname === "/sitemap.xml")              return sitemapIndex();
+    if (url.pathname === "/sitemap.xml")              return sitemapIndex(env);
     if (url.pathname === "/sitemap-inventory.xml")    return inventorySitemap(env);
     if (url.pathname === "/sitemap-content.xml")      return contentSitemap();
     if (url.pathname.startsWith("/used/")) { const r = await usedPage(env, url.pathname); if (r) return sec(r); }
@@ -738,10 +746,24 @@ Sitemap: ${SEO_ORIGIN}/sitemap.xml
 }
 
 function xmlResponse(body,maxAge){ return new Response(body,{headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public, max-age="+maxAge}}); }
-function sitemapIndex(){
-  const now=new Date().toISOString();
+// Static pages change when the site deploys, not when someone fetches the sitemap. Bump this in the
+// same commit that meaningfully changes /, /browse, /about or /contact.
+const CONTENT_LASTMOD="2026-08-12T00:00:00.000Z";
+async function sitemapIndex(env){
+  // Real dates, not `new Date()`. Both of these stamped the CURRENT time on every request, so two
+  // fetches 90 seconds apart reported two different lastmods and every URL looked like it had just
+  // changed. A crawler that sees that on every visit learns the field is noise and stops using it —
+  // which is the opposite of what a sitemap is for, and it was costing us on the one signal we
+  // actually control during a domain migration.
+  //
+  // Inventory genuinely changes without a deploy, so it gets the newest vdps.updated_at (indexed
+  // MAX, negligible). Content only changes on deploy, so it gets the build constant.
+  let invMod=CONTENT_LASTMOD;
+  try{ const r=await env.DB.prepare("SELECT MAX(updated_at) m FROM vdps WHERE active=1").first();
+       if(r&&r.m) invMod=new Date(r.m).toISOString(); }catch(_){}
+  const mods={"sitemap-inventory.xml":invMod,"sitemap-content.xml":CONTENT_LASTMOD};
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`+
-    ["sitemap-inventory.xml","sitemap-content.xml"].map(c=>`  <sitemap><loc>${SEO_ORIGIN}/${c}</loc><lastmod>${now}</lastmod></sitemap>`).join("\n")+
+    ["sitemap-inventory.xml","sitemap-content.xml"].map(c=>`  <sitemap><loc>${SEO_ORIGIN}/${c}</loc><lastmod>${mods[c]}</lastmod></sitemap>`).join("\n")+
     `\n</sitemapindex>`,3600);
 }
 async function inventorySitemap(env){
@@ -753,10 +775,10 @@ async function inventorySitemap(env){
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls}\n</urlset>`,900);
 }
 function contentSitemap(){
-  const now=new Date().toISOString();
+  // CONTENT_LASTMOD, not `new Date()` — see sitemapIndex(). These four URLs change on deploy.
   const pages=["/","/browse","/about","/contact"];
   return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`+
-    pages.map(p=>`  <url><loc>${SEO_ORIGIN}${p}</loc><lastmod>${now}</lastmod></url>`).join("\n")+`\n</urlset>`,3600);
+    pages.map(p=>`  <url><loc>${SEO_ORIGIN}${p}</loc><lastmod>${CONTENT_LASTMOD}</lastmod></url>`).join("\n")+`\n</urlset>`,3600);
 }
 
 const VDP_FAQ=[
@@ -3998,8 +4020,21 @@ async function creatorQueue(request,env){
 }
 
 async function webLead(request,env){ const b=await request.json().catch(()=>({}));
-  if(b.website) return json({ok:true});                                    // honeypot: swallow silently
-  if(env.TURNSTILE_SECRET && !(await verifyTurnstile(b.cf_token, request.headers.get("CF-Connecting-IP")||"", env.TURNSTILE_SECRET))) return json({ok:true});   // bot: swallow silently
+  // Honeypot stays silent. A filled hidden field is a near-zero-false-positive bot signal, and a
+  // bot that learns it was caught just adapts.
+  if(b.website) return json({ok:true});
+  // Turnstile does NOT stay silent. A failed challenge is not the same signal as a filled honeypot:
+  // privacy browsers, extensions, corporate proxies and Turnstile outages all fail it, and this is
+  // the public lead form -- the one place a real buyer enters the funnel. Returning {ok:true} showed
+  // that buyer a success modal and threw the lead away, with no error anywhere to notice.
+  //
+  // This is why TURNSTILE_SECRET has never been set: arming it would have silently eaten real
+  // leads. The auth path (~962) is deliberately different -- there, an indistinguishable response
+  // is what stops account enumeration. A lead form has nothing to enumerate.
+  //
+  // 403 + "captcha" matches the other lead path (~4248) so the two behave the same way.
+  if(env.TURNSTILE_SECRET && !(await verifyTurnstile(b.cf_token, request.headers.get("CF-Connecting-IP")||"", env.TURNSTILE_SECRET)))
+    return json({ok:false,error:"captcha",reason:"Couldn't verify you're human — refresh and try again."},403);
   const car=String(b.dream_car||"").trim().slice(0,80);
   const deal=["cash","finance","lease"].includes(b.deal_type)?b.deal_type:"finance";
   const zip=String(b.zip||"").replace(/\D/g,"").slice(0,5);
