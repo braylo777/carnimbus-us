@@ -2,7 +2,7 @@
 
 Origin: 2026-07-14 Jono/CNMB infra call 2 (`08-exec/08E-decis/01aa68-mtng-v9/`). Goal, in the founder's words:
 own the whole stack in C and eventually run carnimbus off Cloudflare/GitHub, "from the flash drive." This plan
-takes that seriously **and** states what has to be true before customer traffic moves — because carnimbus.com is a
+takes that seriously **and** states what has to be true before customer traffic moves — because carnimbus.us is a
 live business (~34k visits/week, real PII), not a hobby endpoint.
 
 ## Where we are — Phase A (DONE this session): localhost sandbox
@@ -16,12 +16,12 @@ here touches the live Worker, its D1 data, or any public DNS.
    power, ISP NAT, a dynamic IP, no redundancy. The real version of "own the stack" is a controlled always-on box
    (a cheap VPS gives a static IP, better uptime, and a clean firewall). Same independence from Cloudflare/GitHub,
    without betting uptime on a laptop under a desk.
-2. **Serve a NON-production hostname** — e.g. `edge.carnimbus.com` — pointed at that host. Run `static` + `balancer`
+2. **Serve a NON-production hostname** — e.g. `edge.carnimbus.us` — pointed at that host. Run `static` + `balancer`
    in front of a copy of the `nimbus-local` gateway. No customer traffic yet.
 3. **Compare against prod** for a week: latency, error rate, correctness of the 48 API routes. Fix what diverges.
 
 ## Phase C — cutover gates (ALL must be green before ANY public traffic or PII leaves Cloudflare)
-1. **TLS termination — the #1 hard blocker.** These daemons speak plaintext HTTP; carnimbus.com is HTTPS-only.
+1. **TLS termination — the #1 hard blocker.** These daemons speak plaintext HTTP; carnimbus.us is HTTPS-only.
    Nothing public can move until the stack terminates TLS (ACME/Let's Encrypt for certs + a TLS layer in front of
    `static`/`balancer`). This is real, non-trivial work and gates everything else.
 2. **DDoS resilience / rate limiting** to rough Cloudflare parity. Today Cloudflare absorbs this for free; a home
@@ -35,7 +35,7 @@ sake — it is the difference between "we own our stack" and "we dropped a live 
 
 ## The wake trigger — flash-in boots the brain (Brandon's mental model, 2026-07-14)
 The idea: plugging the verified CNMB drive into a trusted machine is the trigger that "wakes the brain" — it opens
-Nimbus, brings up our own edge/VPS, and lands you in `ai.carnimbus.com`, the way waking from sleep switches your
+Nimbus, brings up our own edge/VPS, and lands you in `ai.carnimbus.us`, the way waking from sleep switches your
 awareness on. This is the right model, and most of it already exists — but one honest constraint sets the shape:
 
 - **A webpage cannot detect the drive being plugged in.** No browser API exposes USB/mass-storage mount events
@@ -46,14 +46,14 @@ awareness on. This is the right model, and most of it already exists — but one
      drive, machine holds only the pubkey) is exactly this "verified computer + verified drive" handshake;
   2. boots the stack — `nimbus-local/serve.js` (Node projection) and/or the `nimbus-edge` daemons, and in Phase B
      connects up to the always-on VPS;
-  3. opens `ai.carnimbus.com`. **Brain online.**
+  3. opens `ai.carnimbus.us`. **Brain online.**
 - **Unplug = sleep.** This half is already built and shipping: the site's 2s File-System-Access heartbeat wipes the
   key, locks, and hard-reloads within ~2.3s of the drive leaving (measured, live). The launch agent tears the local
   daemons down the same way. Plug in → wake; pull out → sleep.
 
 So the path is: **a signed `launchd` "wake agent" on the trusted machine** that does verify → boot → open. It is the
 missing 10% around parts we already own (Ed25519 custody + auto-lock). Scoped for tomorrow's "integrity" pass with
-Brandon; everything runs behind `ai.carnimbus.com` as he specified.
+Brandon; everything runs behind `ai.carnimbus.us` as he specified.
 
 ## Adjacent tracks (not blocking the cutover)
 - **eLEAD/CDK custom-API tunnel** (from the call): once `configd`/`tunnel` are hardened, build the custom API tunnel

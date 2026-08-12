@@ -7,19 +7,49 @@ are applied once per zone by an operator (or via API with a scoped token). The i
 headers, CSP, site-wide CSRF/Origin gate, Turnstile hook, per-IP scrape limiter, Twilio signature, cookie +
 cache hardening, screenshot shield) is already shipped. This runbook is the edge half.
 
-Zone: `carnimbus.com`. **carnimbus.us is archived as of 2026-07-28** and is no longer a trusted origin —
-it was removed from `ALLOWED_ORIGINS` and from the `sameOrigin()` CSRF gate in `worker.js`, which had been
-accepting any `*.carnimbus.us` host as first-party. DNS is proxied through Cloudflare (orange cloud) —
-required for everything below.
+Zone: **`carnimbus.us`** (as of the 2026-08-01 cutover).
 
-**Live hosts (4):** `carnimbus.com` · `dealer.` · `creator.` · `ai.` — `app.` and `admin.` were detached
-2026-07-28. Their in-Worker 301s remain as bookmark safety nets.
+> **⚠ EVERY CONTROL BELOW IS PER-ZONE AND NONE OF IT FOLLOWED THE WORKER.** The code moved to
+> `carnimbus.us` in one deploy; these dashboard settings did not. Until each is re-applied to the
+> `.us` zone, the new domain runs with **no WAF, no rate limiting, no bot protection, and no
+> Turnstile.** Re-do this entire file against `.us` and re-check the boxes as you go.
+>
+> **This is confirmed, not theoretical.** Verified 2026-08-01: `python3 urllib` requests to
+> `carnimbus.com` return **403** (Bot Fight Mode on the `.com` zone doing its job), while the
+> identical request to `carnimbus.us` is served normally. **The old domain is protected and the
+> live product is not.**
+>
+> **The lead form is the only inbound channel** and it currently sits on a public domain with no bot
+> protection and no Turnstile. Steps 1–4 below are the priority; they take about fifteen minutes.
+
+**Domain history — do not let a search-and-replace flatten this:**
+- **2026-07-28** — `carnimbus.us` was *removed* from `ALLOWED_ORIGINS` and the `sameOrigin()` CSRF
+  gate, which had been accepting any `*.carnimbus.us` host as first-party while the domain pointed
+  at a retired **Netlify** deploy we no longer controlled the surface of.
+- **2026-08-01** — full cutover. `carnimbus.us` is trusted again and is now the product;
+  `carnimbus.com` is dropped from the allowlist. **The 07-28 reason is the deploy gate:** the
+  Netlify deploy must be decommissioned *before* this ships. Verify with
+  `curl -sI https://www.carnimbus.us/ | grep -i x-nf-request-id` → must return nothing.
+
+DNS is proxied through Cloudflare (orange cloud) — required for everything below.
+
+**Live hosts (4):** `carnimbus.us` · `dealer.` · `creator.` · `ai.` — `app.` and `admin.` were
+detached 2026-07-28. Their in-Worker 301s remain as bookmark safety nets.
 
 ## 1. Turnstile (anti-bot on the lead form)
-- [x] Dashboard → **Turnstile** → **Add widget**. Mode: **Invisible** (or Managed). Hostnames: carnimbus.com, www.carnimbus.com.
-- [x] Copy the **Site Key** → paste into `<meta name="cf-turnstile-sitekey" content="…">` in `site/index.html` and ship.
-- [x] Copy the **Secret Key** → `npx wrangler secret put TURNSTILE_SECRET`.
-- Verified once both set: bot lead submits are silently dropped (`webLead()` gate, secret-gated so nothing breaks pre-config).
+> **⚠ These boxes were checked but the work was never finished.** Verified 2026-08-01:
+> `site/index.html` carries `<meta name="cf-turnstile-sitekey" content="">` — **empty** — and the
+> widget div in `site/waitlist.html` is commented out. `site/assets/js/shield.js` no-ops on an empty
+> key, so **Turnstile is not active and never was.** Boxes reset to unchecked; do this for real on
+> the `.us` zone.
+
+- [ ] Dashboard → **Turnstile** → **Add widget**. Mode: **Invisible** (or Managed). Hostnames: `carnimbus.us`, `www.carnimbus.us`.
+- [ ] Copy the **Site Key** → paste into `<meta name="cf-turnstile-sitekey" content="…">` in `site/index.html` and ship.
+- [ ] Copy the **Secret Key** → `npx wrangler secret put TURNSTILE_SECRET`.
+- [ ] Uncomment the `.cf-turnstile` div in `site/waitlist.html`.
+- **Verify by submitting a real lead and confirming the row lands in D1.** A blocked submit and a
+  successful one look identical in the browser — `webLead()` drops failures silently — so nothing
+  short of checking the table proves this works.
 
 ## 2. WAF Managed Rules
 - [x] Security → WAF → **Managed rules** → deploy **Cloudflare Managed Ruleset**.

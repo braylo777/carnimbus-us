@@ -76,7 +76,7 @@ Already live before the sprint, verified in source:
 - ✅ **Community feed** — `/api/feed` union matcher, comments.
 - ✅ **Auth** — OTP (mobile → SMS code), session cookies, fail-closed on missing `SESSION_SECRET`.
 - ✅ **CSP enforcing** — no inline JS; every script is a static file under `site/assets/`.
-- ✅ **5 subdomains** — `carnimbus.com`, `app.`, `dealer.`, `admin.`, `ai.` via path-prefix rewrite.
+- ✅ **5 subdomains** — `carnimbus.us`, `app.`, `dealer.`, `admin.`, `ai.` via path-prefix rewrite.
 
 ---
 

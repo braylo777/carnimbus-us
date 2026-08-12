@@ -13,12 +13,12 @@
 
 | Swarm Agent | Objective & Responsibilities | Host Gateway | Target Databases |
 |-------------|------------------------------|--------------|------------------|
-| **Recommend** | Matches prospective buyers with inventory based on twin profiles. | `ai.carnimbus.com` | Inventory DB (Hetzner) |
-| **Qualify**   | Handles FICO-band pre-qualification and soft checks. | `ai.carnimbus.com` | Profile DB (Hetzner) |
-| **Schedule**  | Books test drives at neighboring showrooms. | `ai.carnimbus.com` | Profile DB & Dealer DB |
-| **Notify**    | Issues SMS test-drive alerts and transaction receipts. | `ai.carnimbus.com` | Profile DB |
-| **Creator**   | Creator Network upkeep: closes drops whose car is gone, re-prices **unlocked** drops as units age, re-scores creators on measured performance. **KPI: attributed leads per dollar accrued.** | `ai.carnimbus.com` | Creator tables & Inventory DB |
-| **Attribute** | Computes lead generation ROI and dealer ad-tier slots. | `ai.carnimbus.com` | Profile DB & Inventory DB |
+| **Recommend** | Matches prospective buyers with inventory based on twin profiles. | `ai.carnimbus.us` | Inventory DB (Hetzner) |
+| **Qualify**   | Handles FICO-band pre-qualification and soft checks. | `ai.carnimbus.us` | Profile DB (Hetzner) |
+| **Schedule**  | Books test drives at neighboring showrooms. | `ai.carnimbus.us` | Profile DB & Dealer DB |
+| **Notify**    | Issues SMS test-drive alerts and transaction receipts. | `ai.carnimbus.us` | Profile DB |
+| **Creator**   | Creator Network upkeep: closes drops whose car is gone, re-prices **unlocked** drops as units age, re-scores creators on measured performance. **KPI: attributed leads per dollar accrued.** | `ai.carnimbus.us` | Creator tables & Inventory DB |
+| **Attribute** | Computes lead generation ROI and dealer ad-tier slots. | `ai.carnimbus.us` | Profile DB & Inventory DB |
 
 ---
 

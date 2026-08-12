@@ -72,7 +72,7 @@
 - **Assignee Node:** DevOps Swarm
 
 ### [CNMB-005] AI Swarm & LLM Deployment
-- **Objective:** Activate the 5-node agent swarm on the `ai.carnimbus.com` gateway.
+- **Objective:** Activate the 5-node agent swarm on the `ai.carnimbus.us` gateway.
 - **Integration Details:** 
   - Deploy GLM-5.2 in 'max mode' for self-hosted execution.
   - Connect the 5 distinct agents: `Recommend`, `Qualify`, `Schedule`, `Notify`, and `Attribute`.

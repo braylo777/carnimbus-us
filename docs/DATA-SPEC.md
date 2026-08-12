@@ -4,9 +4,9 @@
 human↔AI interaction flawless, clean, seamless? **Answer (from the live schemas, not theory):
 far less than assumed.** Everything below exists in `migrations/` today.
 
-## carnimbus.com — buyer
+## carnimbus.us — buyer
 
-*(2026-07-28: `app.carnimbus.com` was retired; the buyer surface is the apex site.)*
+*(2026-07-28: `app.carnimbus.us` was retired; the buyer surface is the apex site.)*
 
 | Field | Type | Why it's required |
 |---|---|---|
@@ -18,7 +18,7 @@ That's it. `sid` (SID-######-####) is **issued, not collected** — generated on
 (`genCode("SID")`, worker.js) and shown on the Account page. No email, no name, no address.
 **Buyer minimum: ~12 fields, one of which the buyer types.**
 
-## dealer.carnimbus.com — dealer
+## dealer.carnimbus.us — dealer
 
 | Field | Type | Why it's required |
 |---|---|---|
@@ -29,9 +29,9 @@ That's it. `sid` (SID-######-####) is **issued, not collected** — generated on
 
 **Dealer minimum: 4 identity fields + 5 per car.**
 
-## ai.carnimbus.com — internal (DEX-SUB-03 security model)
+## ai.carnimbus.us — internal (DEX-SUB-03 security model)
 
-*(2026-07-28: `admin.carnimbus.com` was retired; `ai.` is the single NIMBUS door. The `/admin` PATH prefix still resolves under `ai.`.)*
+*(2026-07-28: `admin.carnimbus.us` was retired; `ai.` is the single NIMBUS door. The `/admin` PATH prefix still resolves under `ai.`.)*
 
 Stores **zero data**. Every request carries `x-admin-key` = the `ADMIN_KEY` Worker secret.
 Key custody: operator copy at `~/.carnimbus-admin-key` (chmod 600, never printed/committed);
@@ -40,7 +40,7 @@ accepted because the strict CSP (`script-src 'self'` + two Cloudflare hosts, no 
 prevents script injection; revisit if CSP ever loosens. Rotation = `npx wrangler secret put
 ADMIN_KEY` + update the local file.
 
-## ai.carnimbus.com — the Nimbus layer
+## ai.carnimbus.us — the Nimbus layer
 
 Consumes **derived text only**: `profileText(answers)` and `vdpText(vdp)` → embeddings keyed by
 opaque ids (`profile:{user_id}`, `vdp:{id}`). Zero PII crosses the seam — no phone, no name.

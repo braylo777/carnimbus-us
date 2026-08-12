@@ -1,11 +1,11 @@
 # nimbus-edge / wake — the flash-in wake protocol
 
 Plug the verified CNMB drive into this machine → the brain wakes: the nimbus-edge C daemons + the nimbus-local
-gateway boot from the flash, and `ai.carnimbus.com` opens. Pull the drive → sleep: the local daemons tear down
+gateway boot from the flash, and `ai.carnimbus.us` opens. Pull the drive → sleep: the local daemons tear down
 (the site itself already auto-locks ~2.3s after unplug via its own heartbeat).
 
 ## Honest boundary
-This runs the stack **locally / on your LAN**. It is NOT a public cutover: carnimbus.com stays on Cloudflare
+This runs the stack **locally / on your LAN**. It is NOT a public cutover: carnimbus.us stays on Cloudflare
 (TLS, DDoS, PII). See `../MASTER-PLAN.md` for the gated path to ever serving public traffic from this stack.
 
 ## How it works

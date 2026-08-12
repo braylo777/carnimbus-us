@@ -7,16 +7,16 @@ SEO car pages (`/used/*`) and creator tracked links (`/c/*`) are host-agnostic �
 
 | Host | Prefix | `/` resolves to | Surface |
 |---|---|---|---|
-| carnimbus.com | — | site/index.html | Marketing + public car pages (`/used/*`, `/browse`) |
-| dealer.carnimbus.com | /dealer | site/dealer/signin.html | Dealer console — upload a VIN, work leads |
-| creator.carnimbus.com | /creator | site/creator/signin.html | **Creator Network** — claim drops, post, get paid |
-| ai.carnimbus.com | /ai | site/ai/index.html | NIMBUS — the control tower over all three |
+| carnimbus.us | — | site/index.html | Marketing + public car pages (`/used/*`, `/browse`) |
+| dealer.carnimbus.us | /dealer | site/dealer/signin.html | Dealer console — upload a VIN, work leads |
+| creator.carnimbus.us | /creator | site/creator/index.html | **Creator Network** — one page, two tabs, claim drops, post, get paid |
+| ai.carnimbus.us | /ai | site/ai/index.html | NIMBUS — the control tower over all three |
 
 **Four hosts, as of 2026-07-28.** `app.` (the buyer app) and `admin.` (folded into `ai.`) were detached
 from the Worker in `wrangler.jsonc`. Their in-Worker 301s at worker.js:69/72 remain as bookmark safety
 nets, and legacy `/app/*` paths on the apex 301 to `/browse`.
 
-⚠ **The `/admin` PATH prefix is NOT retired** — only the `admin.` HOST is. `ai.carnimbus.com/<page>`
+⚠ **The `/admin` PATH prefix is NOT retired** — only the `admin.` HOST is. `ai.carnimbus.us/<page>`
 still resolves to `site/admin/<page>` (worker.js). Don't conflate the two.
 
 Repo visibility ≠ routing visibility: all surfaces are raw files in one repo; the Worker is the only

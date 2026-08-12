@@ -42,14 +42,15 @@ nodes and the segmented-control buttons — no component re-render, no vDOM diff
 ## Styling
 Class attributes pass through unchanged, so any CSS system works. We ship hand-written vanilla CSS.
 
-## Deploy (GitHub → Cloudflare → carnimbus.com)
+## Deploy (GitHub → Cloudflare → carnimbus.us)
 Auto-deploy via **Cloudflare Workers Git integration**:
 Cloudflare dash → Workers & Pages → `carnimbus-com` → Settings → Build → **Connect to Git** →
 repo `braylo777/carnimbus-com`, branch `main`, deploy command `npx wrangler deploy`. Every push to
-`main` deploys to carnimbus.com.
+`main` deploys to carnimbus.us.
 
 **D1 migrations are manual and deliberate** — never auto-run on push:
-`npx wrangler d1 migrations apply carnimbus-waitlist --remote` (only when `migrations/` changed).
+`npx wrangler d1 execute carnimbus-waitlist --remote --file=migrations/<file>.sql`, one file at a time.
+**Never** `d1 migrations apply --remote` — the tracker is at 0055 and the schema is at 0075, so it would replay 18 files of non-idempotent `ALTER TABLE ADD COLUMN`.
 
 ## Migration path (if a real JSX→WASM compiler lands)
 `site/*.html` → `src/app/*/page.jsx`; `runtime.js` renderers → components; state already uses
@@ -77,7 +78,7 @@ vector store; `/api/feed` queries it and ranks cars per buyer.
 store; `/api/feed` (buyer app) and `/api/dealer/console` (dealer dashboard) read them. That is
 how ai. "surfaces results" into the other subdomains — plain request/response through one seam.
 
-**Cutover to ai.carnimbus.com** (when the box exists): 1 DNS A record +
-`npx wrangler secret put AI_BACKEND_URL` → `https://ai.carnimbus.com`. The Worker already
+**Cutover to ai.carnimbus.us** (when the box exists): 1 DNS A record +
+`npx wrangler secret put AI_BACKEND_URL` → `https://ai.carnimbus.us`. The Worker already
 branches on `AI_BACKEND_URL` (`/embed` and `/chat` endpoints) — no code change. Until then,
 nothing to buy or run.

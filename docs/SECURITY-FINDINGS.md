@@ -69,7 +69,7 @@ throw/deny rather than sign with `"dev"`. Rotating it invalidates all sessions (
 ## 🟡 P2 — noted, low risk
 - **DEV_MODE OTP echo** (`authStart` returns the code when `DEV_MODE=1` AND SMS dark) — fine for
   demos, but ensure `DEV_MODE` is unset in production once Twilio is live.
-- **Host-only session cookie** (no `Domain=.carnimbus.com`) — sessions don't span subdomains;
+- **Host-only session cookie** (no `Domain=.carnimbus.us`) — sessions don't span subdomains;
   acceptable today (each surface re-auths), revisit if a unified SSO model is wanted.
 
 ## Twilio Verify (spec Component 4) — upgrade path, wired dark

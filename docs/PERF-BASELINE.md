@@ -7,8 +7,8 @@
 
 | Page | Median TTFB | Median total |
 |---|---|---|
-| `carnimbus.com/` (marketing) | **~0.20 s** | **~0.27 s** |
-| `app.carnimbus.com/` → Discover (incl. 307 clean-URL redirect) | **~0.31 s** | **~0.34 s** |
+| `carnimbus.us/` (marketing) | **~0.20 s** | **~0.27 s** |
+| `app.carnimbus.us/` → Discover (incl. 307 clean-URL redirect) | **~0.31 s** | **~0.34 s** |
 
 ## Payload (entire client runtime)
 

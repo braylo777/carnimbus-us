@@ -68,7 +68,7 @@ transiently to pick the band and is then discarded. No table, log, or event row 
   same T0/T1 fields. T2 fields require the buyer's active financial consent to (re)populate.
 - **Tier gates access.** An agent operating at a given autonomy level may only read the tiers its task
   requires; `dealer.*`-facing surfaces never see T2.
-- **Creator-facing surfaces see T0 only** *(added 2026-07-28 with `creator.carnimbus.com`)*. Dealers are
+- **Creator-facing surfaces see T0 only** *(added 2026-07-28 with `creator.carnimbus.us`)*. Dealers are
   contracted counterparties and see T0+T1; **creators are not**, so the creator surface gets car data and
   the creator's own measured numbers, and nothing else. Attribution tells a creator **that** their link
   produced a lead — never who the buyer is, what they can afford, or what they asked for. In practice:

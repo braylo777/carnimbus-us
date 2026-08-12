@@ -37,4 +37,4 @@ the hedge — and the demand we serve never goes away: people always need to buy
 
 ## Where it lives in the product
 Everything already runs behind one seam (`embed()`/`llm()` in the Worker). Cutover to the box
-= point `ai.carnimbus.com` DNS at it + set one secret (`AI_BACKEND_URL`). Zero code change.
+= point `ai.carnimbus.us` DNS at it + set one secret (`AI_BACKEND_URL`). Zero code change.

@@ -1,6 +1,6 @@
 # carnimbus-com — Beyond.js
 
-Source of the **live [carnimbus.com](https://carnimbus.com)**: a consumer AI car-buying **superagent**
+Source of the **live [carnimbus.us](https://carnimbus.us)**: a consumer AI car-buying **superagent**
 for LAcarGUY dealers, paired with a dealer-side **Drive Now** dashboard. **94 real LAcarGUY
 certified-used cars are live** (verified against production D1: `COUNT(*) WHERE active=1` = 94), with
 full specs vision-ingested from **100 LAcarGUY listing PDFs**.
@@ -99,7 +99,7 @@ target of **42 rooftops** — not a hand-wavy TAM slide.
 - **Vectorize** — `carnimbus-match` (768-dim bge-base) for inventory similarity.
 - **Workers AI** — llama-3.3-70b (chat/reasoning) + bge-base (embeddings). No external model APIs.
 - **Cron** — 5-minute schedule drives embedding sync, matching, and agent batches.
-- **5 surfaces** via path-prefix rewrite: `carnimbus.com`, `app.`, `dealer.`, `admin.`, `ai.` — **46**
+- **5 surfaces** via path-prefix rewrite: `carnimbus.us`, `app.`, `dealer.`, `admin.`, `ai.` — **46**
   routed endpoints.
 
 ## Layout
@@ -109,7 +109,7 @@ target of **42 rooftops** — not a hand-wavy TAM slide.
 - `site/` — page-per-file routing; vanilla HTML/JS/CSS; `<x-import>` placeholders via
   `site/assets/runtime.js`; reactive state via `site/assets/signals.js`.
 - `migrations/` — D1 schema (through `0035_auth_ip_log`).
-- `wrangler.jsonc` — Worker config; custom domain `carnimbus.com`.
+- `wrangler.jsonc` — Worker config; custom domain `carnimbus.us`.
 - `nimbus-local/` — the **off-grid projection**: the real, unmodified `worker.js` run on Node builtins
   (`node:http`/`node:sqlite`/`node:crypto`), serving the whole site + 48 API routes straight from the flash —
   no Cloudflare, no GitHub, no npm in the path. Beyond.js proven off the edge. CNMB drive = Ed25519 hardware key.
@@ -128,18 +128,24 @@ target of **42 rooftops** — not a hand-wavy TAM slide.
 ## Deploy
 
 ```sh
-npx wrangler d1 migrations apply carnimbus-waitlist --remote   # only when migrations/ changed
+# ⚠ NEVER run `wrangler d1 migrations apply --remote`.
+# The d1_migrations tracker's newest row is 0055_demo_guardrails.sql; the live schema is at 0075.
+# That command would replay 0056→0075 — 18 files, most containing bare ALTER TABLE ADD COLUMN on
+# columns that already exist. SQLite has no ADD COLUMN IF NOT EXISTS, there is no transaction, and
+# there is no rollback: it errors partway and leaves the schema half-applied.
+npx wrangler d1 execute carnimbus-waitlist --remote --file=migrations/<file>.sql   # one file, in order
 npx wrangler deploy
 ```
 
 Post-deploy spot-check:
 
 ```sh
-curl -sI https://carnimbus.com | grep -iE 'content-security|strict-transport'   # expect headers
-curl -s -o /dev/null -w '%{http_code}\n' https://carnimbus.com/waitlist          # expect 200
+curl -sI https://carnimbus.us | grep -iE 'content-security|strict-transport'   # expect headers
+curl -s -o /dev/null -w '%{http_code}\n' https://carnimbus.us/waitlist          # expect 200
 ```
 
-Deploy **only** when the founder says "ship." Remote D1 migrations apply in order. Admin key is compared
+Deploy **only** when the founder says "ship." Migrations are applied one file at a time with
+`d1 execute --remote --file`, never with `migrations apply` (see above). Admin key is compared
 in **constant time**; `SESSION_SECRET` must stay set (the Worker fail-closes without it). No mass remote
 `DELETE` on D1.
 
@@ -172,7 +178,7 @@ covers `sendBeacon`/`fetch` to `/api/events`.
 
 - `main` is the release branch — Cloudflare auto-deploys from it. Never force-push.
 - Feature work happens on branches; merges via reviewed PR.
-- Deploys gated on explicit sign-off; migrations apply in order before the Worker deploy.
+- Deploys gated on explicit sign-off; migrations applied one file at a time with `d1 execute --remote --file` before the Worker deploy.
 
 ## The Nimbus platform, in one line
 

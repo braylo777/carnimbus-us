@@ -1,4 +1,4 @@
-# NIMBUS appliance — run ai.carnimbus.com on your own Mac
+# NIMBUS appliance — run ai.carnimbus.us on your own Mac
 
 The site runs in Cloudflare's cloud, so it **cannot** reach `localhost` on your laptop directly.
 This folder is the bridge: Ollama (your RAM) → a tiny local server → a Cloudflare tunnel → the Worker.

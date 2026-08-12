@@ -27,6 +27,13 @@ a page that can be unpublished) may climb to L2/L3.
 | Action | Why it can never graduate |
 |---|---|
 | `creator_payout` | A Stripe transfer moves real money out of the platform. It cannot be reversed from inside this system — a mistake becomes a collections problem, not an `UPDATE`. |
+| `settlement_release` | Capturing a vehicle escrow authorization pays a seller. Identical reasoning to `creator_payout`: once the capture lands the money is gone, and the correction belongs in Stripe. Enforced in `appApprove()` — `adjudications.approved_by` stays `NULL` until a person clicks, and it is the only path to `SETTLED`. |
+
+**A note on the deck.** Slide S-07 says *"Autonomous agents adjudicate release — no 10-day
+arbitration window."* That is **true about speed and false about autonomy.** The adjudicator produces
+a decision, a rationale and a confidence in seconds rather than days, which is the whole competitive
+claim against Manheim's arbitration window — but it **recommends**; a person releases. Anyone
+tempted to close that gap to make the slide literal should read the row above first.
 
 Everything else in `NIMBUS_ACTIONS` is reversible by construction (`engine_on` toggle, `active` flip,
 `is_demo=1` soft-hide, `status` transitions, `clawed_back`), which is what makes the confirm gate a safety

@@ -8,7 +8,7 @@ Nothing breaks before then: existing inventory shows normally, no emails send, n
 ## 1. Stripe (turns the engine on/off from real payments)
 - [x] Create a Product + recurring monthly Price in Stripe (e.g. $1,500/mo).
 - [x] Enable the Billing customer portal.
-- [x] Add a webhook endpoint → `https://carnimbus.com/api/stripe/webhook`, subscribe to:
+- [x] Add a webhook endpoint → `https://carnimbus.us/api/stripe/webhook`, subscribe to:
       `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`,
       `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
 - [x] `npx wrangler secret put STRIPE_SECRET_KEY` and `npx wrangler secret put STRIPE_WEBHOOK_SECRET`.

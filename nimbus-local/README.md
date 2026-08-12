@@ -1,4 +1,4 @@
-# nimbus-local — project carnimbus.com straight from the CNMB flash
+# nimbus-local — project carnimbus.us straight from the CNMB flash
 
 A zero-dependency, zero-Cloudflare, zero-GitHub projection of the live CarNimbus site + NIMBUS AI,
 served directly from this USB drive. Pure Node builtins (`node:http`, `node:sqlite`, `node:crypto`,
@@ -45,7 +45,7 @@ Use the session: `curl -H "Authorization: Bearer <session>" http://<lan-ip>:8787
 
 ## Going public (own hardware, still no Cloudflare)
 See `PROJECTION.md` for the sovereignty runbook: owned box with a public IP → DNS A record for
-`ai.carnimbus.com` → Let's Encrypt TLS. Cutover of NIMBUS to the GLM-5.2 rig = point `AI_BACKEND_URL`
+`ai.carnimbus.us` → Let's Encrypt TLS. Cutover of NIMBUS to the GLM-5.2 rig = point `AI_BACKEND_URL`
 at the rig; zero code change.
 
 ## Notes

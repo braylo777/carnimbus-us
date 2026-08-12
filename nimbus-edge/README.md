@@ -4,7 +4,7 @@ A suite of small, single-purpose network daemons written in C — the C-level ex
 `../nimbus-local` (run CarNimbus without depending on a managed cloud), one layer closer to the metal. Each daemon
 is one file, compiles warns-clean, and does exactly one job.
 
-> **This is an R&D sandbox, not the production path — today.** carnimbus.com is a live business (real traffic, real
+> **This is an R&D sandbox, not the production path — today.** carnimbus.us is a live business (real traffic, real
 > customer data) and stays on Cloudflare (managed TLS, DDoS protection, global edge). The founder's goal is to
 > *migrate off* that onto this self-hosted stack; `MASTER-PLAN.md` sequences that cutover honestly, with the gates
 > that must pass before any public traffic or customer PII moves. In Phase A every daemon binds `127.0.0.1` only.

@@ -1,15 +1,15 @@
 # AD-MANAGER-RUNBOOK — autonomous Meta ad pipeline
 
-**Goal:** one Claude prompt → Higgsfield creative → Meta FB/IG campaign → traffic to carnimbus.com →
+**Goal:** one Claude prompt → Higgsfield creative → Meta FB/IG campaign → traffic to carnimbus.us →
 web-leads that reach the team. Trial with an approval gate, then hands-off.
 **Companion:** `AUTONOMY-POLICY.md` (spend/authority) · `EVENT-TAXONOMY.md` (funnel events) ·
 `DEALER-CRM-RUNBOOK.md` (lead routing). Skill: `.claude/skills/ad-campaign/`.
 **Status legend:** ☐ todo · ◐ in progress · ☑ done. Owner: **[YOU]** dashboard · **[CC]** Claude Code.
 
 ## Live status checklist
-### Phase 0 — work email `braylo@carnimbus.com` (send+receive)
-- ☐ [YOU] Cloudflare → carnimbus.com → Email → Email Routing → address `braylo@carnimbus.com` → forward to Gmail
-- ☐ [CC] Confirm SPF `include:_spf.resend.com`, Resend DKIM CNAMEs, `_dmarc` TXT on carnimbus.com
+### Phase 0 — work email `braylo@carnimbus.us` (send+receive)
+- ☐ [YOU] Cloudflare → carnimbus.us → Email → Email Routing → address `braylo@carnimbus.us` → forward to Gmail
+- ☐ [CC] Confirm SPF `include:_spf.resend.com`, Resend DKIM CNAMEs, `_dmarc` TXT on carnimbus.us
 - ☐ [YOU] Gmail "Send mail as" → SMTP `smtp.resend.com:465` user `resend` pass=<Resend API key>
 
 ### Phase 1 — Meta API access (Page/BM/Ad-Account/payment already exist)
@@ -26,7 +26,7 @@ web-leads that reach the team. Trial with an approval gate, then hands-off.
 - ☐ [CC] secret `META_CAPI_TOKEN` + var `META_PIXEL_ID` + var `LEAD_NOTIFY_EMAILS`
 - ☐ [CC] `metaCapi()` helper → fire `Lead` in `webLead()` (worker.js:1960), `Schedule` in `book()` (worker.js:1318)
 - ☐ [CC] capture `fbclid`/`utm_*` → `web_leads` columns (D1 migration) → derive `fbc`
-- ☐ [CC] Ad-lead email: make `/api/webleads` (cold ad traffic) email the **LAcarGUY `gm_email`** (Sid & Max's work address) — reuse the EXISTING Resend + `gm_email` path that drive-now/booking already uses (`from CarNimbus <hello@carnimbus.com>`). Today the web-lead form only SMS's `ADMIN_PHONE`; the drive-now booking already reaches the dealer (SMS to `dl.phone` + Resend to `gm_email`). Ads land on the lead form, so wire it to the same LAcarGUY inbox.
+- ☐ [CC] Ad-lead email: make `/api/webleads` (cold ad traffic) email the **LAcarGUY `gm_email`** (Sid & Max's work address) — reuse the EXISTING Resend + `gm_email` path that drive-now/booking already uses (`from CarNimbus <hello@carnimbus.us>`). Today the web-lead form only SMS's `ADMIN_PHONE`; the drive-now booking already reaches the dealer (SMS to `dl.phone` + Resend to `gm_email`). Ads land on the lead form, so wire it to the same LAcarGUY inbox.
 
 ### Phase 4 — autonomous skill + workflow (approval gate → hands-off)
 - ◐ [CC] `.claude/skills/ad-campaign/SKILL.md` scaffolded (guardrail constants + pipeline); wiring pending MCP OAuth
@@ -40,8 +40,8 @@ web-leads that reach the team. Trial with an approval gate, then hands-off.
 ## YOUR STEP-BY-STEP (human-only — do in this order; after #7 Claude is in control)
 1. **Start Meta Business Verification NOW** (the long pole, 1–2 days). business.facebook.com →
    Business Settings → Security Center → complete verification. → *hand me:* nothing yet, just start it.
-2. **Turn on the work email.** Cloudflare → carnimbus.com → Email → Email Routing → enable → add
-   `braylo@carnimbus.com` → forward to your Gmail → click the confirm link Gmail receives.
+2. **Turn on the work email.** Cloudflare → carnimbus.us → Email → Email Routing → enable → add
+   `braylo@carnimbus.us` → forward to your Gmail → click the confirm link Gmail receives.
    → *hand me:* "email routing on."
 3. **Grab 3 Meta IDs.** Events Manager → your dataset: **Pixel ID**. Business Settings → Ad Accounts:
    **Ad Account ID (`act_…`)**. Business Settings → Pages: **Page ID**. → *hand me:* those 3 numbers (safe to paste).
@@ -69,6 +69,6 @@ good trial runs I flip `APPROVAL_GATE=off` and it's prompt → live, hands-off (
 ## Code anchors (from repo map)
 - Landing/ad target: `site/index.html` ZIP-first lead form → `POST /api/webleads` → `webLead()` worker.js:1960 → D1 `web_leads`.
 - Booking/appointments: `book()` worker.js:1318 → event `action.appointment_set` (Meta `Schedule`).
-- Email transport: Resend, from `CarNimbus <hello@carnimbus.com>` (only outbound today: `dealerContact` ~worker.js:770).
+- Email transport: Resend, from `CarNimbus <hello@carnimbus.us>` (only outbound today: `dealerContact` ~worker.js:770).
 - Funnel events to map → Meta: `intent.web_lead` → Lead · `action.appointment_set` → Schedule.
 - Beachhead geo: ZIP 90277 (South Bay) — `assets/data/zip-centroids-socal.json`.

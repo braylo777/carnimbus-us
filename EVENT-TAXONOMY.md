@@ -35,19 +35,33 @@ at ingest.
 | `action.*` | Real-world commitments | `scheduled_test_drive` · `completed_test_drive` · `purchased_vehicle` |
 | `social.*` | Community activity | `posted` · `commented` · `referred` · `reviewed` · **`claimed`** |
 | `ai.*` | Agent-originated events | `asked_nimbus` · `conversation_turn` · `recommendation_shown` · `recommendation_clicked` |
-| `dealer.*` | Dealer / Drive Now lifecycle | `lead_delivered` · `lead_contacted` · `lead_converted` · `lead_lost` · **`drop_created`** |
+| `dealer.*` | Dealer / Drive Now lifecycle | `lead_delivered` · `lead_contacted` · `lead_converted` · `lead_lost` · **`drop_created`** · **`deal_created`** · **`deal_staked`** · **`deal_titled`** · **`deal_settled`** · **`deal_disputed`** |
 
 ### Creator Network additions (2026-07-28)
 
-The Creator Network (`creator.carnimbus.com`) emits **no new prefix**. It reuses the locked set, which is
+The Creator Network (`creator.carnimbus.us`) emits **no new prefix**. It reuses the locked set, which is
 exactly what extension rule 1 below permits:
 
 | Event | Action | Emitted by |
 |---|---|---|
 | A dealer VIN upload mints a drop | `dealer.drop_created` | `dropForListing()` — `confidence` carries the rate in dollars |
+| A dealer confirms a scanned unit | `dealer.deal_created` | `appDealCreate()` — app.carnimbus.us |
+| Buyer capital is authorized | `dealer.deal_staked` | `appStake()` — `confidence` carries dollars |
+| Title document uploaded | `dealer.deal_titled` | `appTitleUpload()` |
+| A **person** approves release | `dealer.deal_settled` | `appApprove()` — never emitted by an agent; see AUTONOMY-POLICY.md |
+| A deal is disputed | `dealer.deal_disputed` | `appDispute()` — the authorization is cancelled, not captured |
+| Clearance queue rendered | `dealer.recommendation_shown` | `appClear()` — `confidence` carries the card count |
+| A dealer repriced on a rec | `dealer.recommendation_taken` | `appReprice()` — `confidence` carries the new monthly |
+| A dealer skipped a rec | `dealer.recommendation_skipped` | `appRecSkip()` — the reason is training signal |
+
+> The five `deal_*` events are an **analytics** signal only. The settlement ledger of record is the
+> `deal_events` table, which is append-only and is what `deals.state` is derived from. `events`
+> has no payload column and `vehicle_id` is an INTEGER, so deal identity rides in `session_id`
+> as `deal:<id>`.
 | A creator claims a drop | `social.claimed` | `creatorClaim()` |
 | A creator submits a post | `social.posted` | `creatorPost()` |
-| A buyer clicks a creator's tracked link | `social.referred` | `creatorRedirect()` — carries `vehicle_id` |
+| A buyer clicks a creator's **car** link | `social.referred` | `creatorRedirect()` — `source:"creator-link"`, carries `vehicle_id` |
+| A buyer clicks a creator's **personal** link | `social.referred` | `creatorRedirect()` — `source:"creator-ref"`, no `vehicle_id` (it lands on `/browse`) |
 | NIMBUS records a post verdict | `ai.recommendation_shown` | `creatorPost()` — `source` carries the verdict |
 
 **There is deliberately no `creator.*` prefix.** `logEvent()` does not gate prefixes (only `postEvents()`

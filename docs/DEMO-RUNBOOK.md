@@ -7,12 +7,12 @@
 - [x] Your dealer lead ACTIVE with CN number (admin → Activate) and dealership renamed
       "Westside Test Drive Center" (submit a fresh dealer request with that name, then Activate it)
 - [x] DEV_MODE=1 set if Twilio number still absent (OTP code returns on-screen)
-- [x] Dealer device: dealer.carnimbus.com signed in, camera permission pre-granted
+- [x] Dealer device: dealer.carnimbus.us signed in, camera permission pre-granted
       (visit /dealer/scan.html once), brightness max
 - [x] Buyer phone: signed OUT (fresh onboarding is the wow)
 
 ## The script
-1. **Marketing** (10s): carnimbus.com — "consumer-grade site, zero framework, quarter-second loads."
+1. **Marketing** (10s): carnimbus.us — "consumer-grade site, zero framework, quarter-second loads."
 2. **Onboarding** (60s): Sign Up → phone → code → 10 quick questions → "pre-qualified, 97% match."
 3. **Talk to the car** (60s): Discover → 330i → Talk to it → "am I qualified?" → "can I drive
    it today?" → pass drops. "The car sold itself."
@@ -21,7 +21,7 @@
    phone → "✓ checked in — keys ready" → card flips ARRIVED on the big screen (30s
    auto-refresh; reload if impatient) → Scan QR · mark sold → KPIs tick. "GM does three
    taps a day."
-6. **The brain** (30s): ai.carnimbus.com Jarvis screen — "this is Nimbus; today projected from
+6. **The brain** (30s): ai.carnimbus.us Jarvis screen — "this is Nimbus; today projected from
    Cloudflare edge, cutover to our 1TB rig is one DNS record." Close on admin wall.
 
 ## If something breaks

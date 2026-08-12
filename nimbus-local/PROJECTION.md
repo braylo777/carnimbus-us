@@ -1,4 +1,4 @@
-# PROJECTION.md — sovereignty runbook: carnimbus.com / NIMBUS to the public internet, no Cloudflare
+# PROJECTION.md — sovereignty runbook: carnimbus.us / NIMBUS to the public internet, no Cloudflare
 
 `serve.js` already projects the site from the flash to your LAN. To reach the **public internet on
 hardware you own** (digital sovereignty), you add three things Cloudflare used to provide: a reachable
@@ -15,18 +15,18 @@ Run `serve.js` on a machine that the internet can reach on ports 80/443. Options
 > the drive plugged into that box (or copy `site/` + `nimbus.sqlite` to it and keep the key on the drive).
 
 ### 2. DNS you control → point the name at the box
-carnimbus.com's DNS is **currently on Cloudflare**. Going fully off-Cloudflare means moving the zone to a
+carnimbus.us's DNS is **currently on Cloudflare**. Going fully off-Cloudflare means moving the zone to a
 registrar/nameserver you control (Namecheap, Porkbun, self-hosted, etc.) — a one-time external step, your
 call. Once you control the zone:
-- `A   ai.carnimbus.com   → <box public IP>`   (NIMBUS)
-- optionally `A   carnimbus.com   → <box public IP>` and `A www` to project the whole apex from the flash.
+- `A   ai.carnimbus.us   → <box public IP>`   (NIMBUS)
+- optionally `A   carnimbus.us   → <box public IP>` and `A www` to project the whole apex from the flash.
 - residential/rotating IP → run a tiny dynamic-DNS updater (a cron `curl` to the registrar API).
 
 ### 3. TLS (HTTPS) without Cloudflare — Let's Encrypt / ACME
 - **Easiest:** put **Caddy** in front of `serve.js` (`reverse_proxy localhost:8787`) — Caddy auto-obtains
   + renews Let's Encrypt certs. One binary, no npm. *(Only external tool in this path; optional.)*
 - **Pure-Node:** obtain a cert via any ACME client (or `certbot` once), then
-  `node serve.js --tls /etc/letsencrypt/live/ai.carnimbus.com/fullchain.pem  .../privkey.pem`.
+  `node serve.js --tls /etc/letsencrypt/live/ai.carnimbus.us/fullchain.pem  .../privkey.pem`.
 - Renewals: cron the ACME renew + `serve.js` restart (or let Caddy handle it).
 
 ## Bring-up order
@@ -34,7 +34,7 @@ call. Once you control the zone:
 2. `ollama serve` + `node ai-backend.js` (or point `AI_BACKEND_URL` at the GLM-5.2 rig).
 3. `node serve.js --tls <fullchain> <privkey> --port 443` (or Caddy in front on 8787).
 4. Move the DNS zone off Cloudflare; add the A records; wait for propagation.
-5. Verify: `curl -I https://ai.carnimbus.com` → 200 + your headers; `node nimbus-key.js login https://ai.carnimbus.com`.
+5. Verify: `curl -I https://ai.carnimbus.us` → 200 + your headers; `node nimbus-key.js login https://ai.carnimbus.us`.
 
 ## NIMBUS AI cutover (the $52K GLM-5.2 rig)
 The worker already routes every AI call through `AI_BACKEND_URL` (`embed()`/`llm()`), so when the rig is

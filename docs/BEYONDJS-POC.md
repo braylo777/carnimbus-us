@@ -17,7 +17,7 @@ running proof that the own-the-runtime discipline works end to end:
 | Discipline | `LINUX-JS.md` | "what you write is what runs"; no build artifacts |
 
 ## Acceptance criteria (definition of done) — all met
-1. **No build/npm/bundler** in the serving path — vanilla HTML/CSS/JS is the artifact. ✅ (live on carnimbus.com)
+1. **No build/npm/bundler** in the serving path — vanilla HTML/CSS/JS is the artifact. ✅ (live on carnimbus.us)
 2. **Single readable pass** renders + serves + routes + queries + runs models. ✅ (`worker.js`)
 3. **Runtime portability — the new proof:** the exact same `worker.js` runs **off Cloudflare entirely**,
    projected straight from the CNMB flash drive by `nimbus-local/serve.js` using only Node builtins. ✅
