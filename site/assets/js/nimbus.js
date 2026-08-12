@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded",function(){
   var memKey="", flashHandle=null, tether=null, reloading=false, tetherMiss=0;
   var panelTimers=[], CUR_PANEL=null, chatHistory=[], typing=null;
 
+  // With a cn_adm cookie the header is empty and the cookie authenticates instead — adminOnly()
+  // accepts either. Sending an empty x-admin-key is harmless: the constant-time compare fails and
+  // the cookie branch runs.
   function hdr(){return {"x-admin-key":memKey,"content-type":"application/json"};}
   function showLock(m){ lock.style.display="flex"; cons.style.display="none"; if(m!=null) nlmsg.textContent=m; }
   function hideLock(){ lock.style.display="none"; cons.style.display="block"; }
@@ -56,7 +59,36 @@ document.addEventListener("DOMContentLoaded",function(){
   });
   $("nl-fileinput").addEventListener("change",function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return;
     var rd=new FileReader(); rd.onload=function(){ unlockFlash(String(rd.result||""),null); }; rd.readAsText(f); });
-  $("klock").addEventListener("click",function(){ lockNow("Locked."); });
+  // ---------- PASSPHRASE UNLOCK ----------
+  // The flash key needs showOpenFilePicker, which does not exist in Safari, Firefox, or ANY iOS
+  // browser — so until now this console could not be opened on a phone at all, and the failure
+  // said "Invalid", blaming the key. This path uses a signed HttpOnly cn_adm cookie instead, so
+  // there is no key in memory to tether to and no drive to pull. The flash key still works
+  // exactly as before for whoever prefers it.
+  function unlockPass(){
+    var el=$("nl-pass"); var pw=el?el.value:""; if(!pw){ nlmsg.textContent="Enter your passphrase."; return; }
+    nlmsg.textContent="Verifying…";
+    fetch("/api/admin/login",{method:"POST",credentials:"include",
+      headers:{"content-type":"application/json"},body:JSON.stringify({pass:pw})})
+      .then(function(r){
+        if(r.status!==200){ nlmsg.textContent="Invalid passphrase."; return; }
+        if(el) el.value="";
+        memKey="";                       // cookie-authenticated: nothing to hold, nothing to lose
+        flashHandle=null; nlmsg.textContent="";
+        hideLock(); loadPulse();
+        pollHealth(); panelTimers.push(setInterval(pollHealth,30000));
+        if(!chatHistory.length) greet();
+        var h=(location.hash||"").replace("#",""); if(h && $("panel-"+h)) showPanel(h);
+      }).catch(function(){ nlmsg.textContent="Invalid passphrase."; });
+  }
+  if($("nl-pass-go")) $("nl-pass-go").addEventListener("click",unlockPass);
+  if($("nl-pass")) $("nl-pass").addEventListener("keydown",function(e){ if(e.key==="Enter") unlockPass(); });
+  // Say plainly when flash custody cannot work here, instead of letting the button do nothing.
+  if(!window.showOpenFilePicker && $("nl-flashnote"))
+    $("nl-flashnote").textContent="This browser can't read a flash key (Safari, Firefox and iOS don't support it). Use your passphrase.";
+  $("klock").addEventListener("click",function(){
+    fetch("/api/admin/logout",{credentials:"include"}).catch(function(){});
+    lockNow("Locked."); });
 
   // ---------- metrics ----------
   // R15: model-health heartbeat → wordmark dot + "running on reflexes" banner (build-list #9/#12).
@@ -98,7 +130,7 @@ document.addEventListener("DOMContentLoaded",function(){
         var card=mA.closest(".m"); if(card) card.classList.remove("pending");
         var lab=card&&card.querySelector(".l"); if(lab) lab.textContent="CREATOR LEADS";
         var sub=card&&card.querySelector(".s"); if(sub){ sub.style.color="";
-          sub.textContent=fmt(d.openDrops)+" open drops · "+fmt(d.postsPending)+" to review"+
+          sub.textContent=fmt(d.openDrops)+" open drops · "+fmt(d.refClicks)+" link clicks"+
             ((d.owedCents||0)?" · $"+((d.owedCents/100).toFixed(0))+" owed":""); } }
       // R5: on login, give the high-level read right after the greeting.
       if($("log").childElementCount<=1){ addMsg("n", fmt(d.scansToday)+" scans today · "+fmt(d.driveNowsToday)+" drive-nows · "+fmt(d.liveInventory)+" live in inventory."); }
@@ -362,7 +394,7 @@ document.addEventListener("DOMContentLoaded",function(){
     document.querySelectorAll(".panel").forEach(function(p){ p.classList.remove("on"); });
     var el=$("panel-"+name); if(!el) return; el.classList.add("on");
     try{ if(location.hash!=="#"+name) history.pushState({panel:name},"","#"+name); }catch(_){}
-    ({inventory:invLoad,buyers:buyLoad,trends:trLoad,graph:graphOpen,map:mapOpen,creators:creLoad}[name]||function(){})();
+    ({inventory:invLoad,buyers:buyLoad,trends:trLoad,graph:graphOpen,map:mapOpen,creators:creLoad,demand:dmLoad,clearance:clrLoad}[name]||function(){})();
     window.scrollTo(0,el.offsetTop-10);
   }
   function closePanels(){ clearPanelTimers(); CUR_PANEL=null; graphOn=false;
@@ -373,6 +405,145 @@ document.addEventListener("DOMContentLoaded",function(){
   document.querySelectorAll("[data-panel]").forEach(function(b){ b.addEventListener("click",function(){ showPanel(b.dataset.panel); }); });
   document.querySelectorAll("[data-back]").forEach(function(b){ b.addEventListener("click",function(){ history.back(); }); });
   window.addEventListener("popstate",function(){ if(CUR_PANEL) closePanels(); });
+
+  // ---------- DEMAND ----------
+  // The middle of the loop. carnimbus.us records every public search and whether we could serve it;
+  // demandRollup aggregates the failures into cells; this reads them; app./clear turns a cell into a
+  // price change. The headline is the FAILURE number on purpose — a busy ZIP you already serve is
+  // not a problem, and volume charts have been telling us nothing actionable for months.
+  function dmLoad(){
+    var m=$("dm-msg"); m.textContent="";
+    fetch("/api/ai/demand",{headers:hdr()}).then(authOr).then(function(r){return r?r.json():null;}).then(function(d){
+      if(!d||!d.ok){ m.textContent="Could not read demand."; return; }
+      if(d.note){ m.textContent=d.note; }
+      $("dm-read").innerHTML =
+        '<div style="font:800 34px Manrope;color:#18C8FF;letter-spacing:-.02em">'+d.totals.unserved.toLocaleString()+'</div>'+
+        '<div style="font:600 12px Manrope;color:#8ca0c4;margin-top:2px">searches we could not serve · week '+esc(d.week)+'</div>'+
+        '<div style="font:600 11px Manrope;color:#6f8bb0;margin-top:6px">'+d.totals.scans.toLocaleString()+' scans · '+d.unserved_pct+'% unserved</div>';
+      dmGrid(d); dmTrend(d.trend||[]); $("dm-detail").innerHTML='<div style="font:600 11px Manrope;color:#6f8bb0">Pick a cell above.</div>';
+      window.__dmCells=d.cells||[];
+    }).catch(function(){ m.textContent="Could not read demand."; });
+  }
+  // ---------- CLEARANCE (deck v13 — the loop's receipt) ----------
+  // Take rate BY CONFIDENCE is the number that matters. If dealers take our high-confidence calls
+  // and refuse our low-confidence ones, the confidence label is honest and the ladder can move.
+  // If take rate is flat across confidence, the label means nothing and L0 is where this stays.
+  function clrLoad(){
+    var m=$("clr-msg"); m.textContent="";
+    fetch("/api/ai/clearance",{headers:hdr()}).then(authOr).then(function(r){return r?r.json():null;}).then(function(d){
+      if(!d||!d.ok){ m.textContent="Could not read clearance."; return; }
+      $("clr-chip").textContent=d.autonomy||"L0";
+      var t=d.totals||{};
+      $("clr-read").innerHTML =
+        '<div style="font:800 34px Manrope;color:#18C8FF;letter-spacing:-.02em">'+(t.take_rate==null?"—":t.take_rate+"%")+'</div>'+
+        '<div style="font:600 12px Manrope;color:#8ca0c4;margin-top:2px">of recommendations taken · week '+esc(d.week)+'</div>'+
+        '<div style="font:600 11px Manrope;color:#6f8bb0;margin-top:6px">'+(t.issued||0)+' issued · '+(t.taken||0)+' taken · '+
+          (t.skipped||0)+' skipped · '+(t.open||0)+' open'+(t.avg_drop!=null?' · avg drop $'+t.avg_drop+'/mo':'')+'</div>';
+      var bc=d.by_confidence||[];
+      $("clr-conf").innerHTML = bc.length ? bc.map(function(r){
+        var pct=r.n?Math.round((r.taken/r.n)*100):0;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:5px 0">'+
+          '<span style="width:70px;font:700 11px Manrope;color:#e2e9f2">'+esc(String(r.confidence||"—").toUpperCase())+'</span>'+
+          '<span style="flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden">'+
+            '<span style="display:block;height:100%;width:'+pct+'%;background:#18C8FF"></span></span>'+
+          '<span style="width:96px;text-align:right;font:600 11px Manrope;color:#8ca0c4">'+r.taken+'/'+r.n+' · '+pct+'%</span></div>';
+      }).join("") : '<div style="font:600 11px Manrope;color:#6f8bb0">Nothing issued yet this week.</div>';
+      var sk=d.skip_reasons||[];
+      $("clr-skips").innerHTML = sk.length ? sk.map(function(r){
+        return '<div style="display:flex;justify-content:space-between;padding:4px 0;font:600 11px Manrope">'+
+          '<span style="color:#e2e9f2">'+esc(r.reason)+'</span><span style="color:#8ca0c4">'+r.n+'</span></div>';
+      }).join("") : '<div style="font:600 11px Manrope;color:#6f8bb0">No skips recorded. Every skip carries a reason, which is training signal — an empty list this early means nobody has looked, not that everything landed.</div>';
+      var rc=d.recent||[];
+      $("clr-recent").innerHTML = rc.length ? '<table style="width:100%;border-collapse:collapse;font:600 11px Manrope">'+
+        '<tr><th style="text-align:left;color:#8ca0c4;padding:4px">UNIT</th><th style="color:#8ca0c4;padding:4px">LISTED</th>'+
+        '<th style="color:#8ca0c4;padding:4px">SUGGESTED</th><th style="color:#8ca0c4;padding:4px">UNSERVED</th>'+
+        '<th style="color:#8ca0c4;padding:4px">CONF</th><th style="color:#8ca0c4;padding:4px">OUTCOME</th></tr>'+
+        rc.map(function(r){
+          return '<tr><td style="color:#e2e9f2;padding:4px">'+esc([r.year,r.make,r.model].filter(Boolean).join(" ")||("#"+r.vdp_id))+'</td>'+
+            '<td style="text-align:center;color:#8ca0c4;padding:4px">$'+(r.listed_mo||"—")+'</td>'+
+            '<td style="text-align:center;color:#18C8FF;padding:4px">$'+(r.suggested_mo||"—")+'</td>'+
+            '<td style="text-align:center;color:#8ca0c4;padding:4px">'+(r.unserved||0)+'</td>'+
+            '<td style="text-align:center;color:#8ca0c4;padding:4px">'+esc(String(r.confidence||"—"))+'</td>'+
+            '<td style="text-align:center;color:'+(r.outcome==="taken"?"#34C77B":r.outcome==="skipped"?"#f5a623":"#6f8bb0")+';padding:4px">'+esc(r.outcome||"open")+'</td></tr>';
+        }).join("")+'</table>'
+        : '<div style="font:600 11px Manrope;color:#6f8bb0">No recommendations this week.</div>';
+    }).catch(function(){ m.textContent="Could not read clearance."; });
+  }
+  // ---------- INVENTORY BY CREDIT BAND (deck v13 screen 2) ----------
+  // Renders above the CSV table, which keeps working untouched — upload, export and reindex are how
+  // inventory actually gets managed, and this is a second view of the same rows, not a replacement.
+  function bandsLoad(){
+    fetch("/api/ai/bands",{headers:hdr()}).then(authOr).then(function(r){return r?r.json():null;}).then(function(d){
+      if(!d||!d.ok||!d.bands||!d.bands.length){ $("inv-bands").innerHTML=""; return; }
+      $("inv-bands").innerHTML=d.bands.map(function(b,i){
+        var open=i===0;
+        return '<section class="bandsec'+(open?" open":"")+'" style="border:1px solid rgba(24,200,255,.16);border-radius:12px;margin-bottom:8px;overflow:hidden">'+
+          '<h4 data-band="'+esc(b.band)+'" tabindex="0" role="button" aria-expanded="'+(open?"true":"false")+'" '+
+            'style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin:0;padding:10px 12px;background:rgba(24,200,255,.05);font:700 12px Manrope;color:#e2e9f2">'+
+            '<span>'+esc(b.band)+'</span><span style="font:600 11px Manrope;color:#8ca0c4">'+b.count+' car'+(b.count===1?"":"s")+'</span></h4>'+
+          '<div class="body" style="display:'+(open?"block":"none")+';padding:8px 12px">'+
+            b.cars.slice(0,8).map(function(c){
+              return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font:600 11px Manrope">'+
+                '<span style="color:#e2e9f2">'+esc([c.year,c.make,c.model,c.trim].filter(Boolean).join(" "))+'</span>'+
+                '<span style="color:#8ca0c4;white-space:nowrap">$'+c.monthly+'/mo · '+esc(c.dealer)+(c.days!=null?" · day "+c.days:"")+'</span></div>';
+            }).join("")+
+            (b.count>8?'<div style="font:600 11px Manrope;color:#18C8FF;padding-top:6px">See all '+b.count+' in the table below ›</div>':'')+
+          '</div></section>';
+      }).join("");
+      $("inv-bands").querySelectorAll("h4[data-band]").forEach(function(h){
+        h.addEventListener("click",function(){
+          var body=h.nextElementSibling, on=body.style.display!=="none";
+          body.style.display=on?"none":"block"; h.setAttribute("aria-expanded",on?"false":"true"); });
+      });
+    }).catch(function(){ $("inv-bands").innerHTML=""; });
+  }
+  function dmShade(v,max){ if(!v) return "rgba(255,255,255,.04)";
+    var t=Math.min(1,v/(max||1)); return "rgba(24,200,255,"+(0.10+t*0.62).toFixed(3)+")"; }
+  function dmGrid(d){
+    var zips=Object.keys(d.grid).sort(); if(!zips.length){ $("dm-grid").innerHTML='<div style="font:600 11px Manrope;color:#6f8bb0">No cells this week.</div>'; return; }
+    var segs={}; zips.forEach(function(z){ Object.keys(d.grid[z]).forEach(function(s){ segs[s]=(segs[s]||0)+d.grid[z][s]; }); });
+    var cols=Object.keys(segs).sort(function(a,b){return segs[b]-segs[a];}).slice(0,7);
+    var max=0; zips.forEach(function(z){ cols.forEach(function(s){ max=Math.max(max,d.grid[z][s]||0); }); });
+    var h='<table style="width:100%;border-collapse:collapse;font:600 11px Manrope"><tr><th></th>';
+    cols.forEach(function(s){ h+='<th style="color:#8ca0c4;font-weight:700;padding:4px;text-align:center;letter-spacing:.08em">'+esc(s.toUpperCase())+'</th>'; });
+    h+='</tr>';
+    zips.slice(0,14).forEach(function(z){
+      h+='<tr><td style="color:#e2e9f2;font-weight:800;padding:4px 8px 4px 0">'+esc(z)+'xx</td>';
+      cols.forEach(function(s){ var v=d.grid[z][s]||0;
+        h+='<td data-z="'+esc(z)+'" data-s="'+esc(s)+'" style="cursor:pointer;text-align:center;padding:7px 4px;border-radius:6px;background:'+dmShade(v,max)+';color:'+(v?"#fff":"#3d4d68")+'">'+(v||"·")+'</td>'; });
+      h+='</tr>';
+    });
+    $("dm-grid").innerHTML=h+'</table>';
+    $("dm-grid").querySelectorAll("td[data-z]").forEach(function(td){
+      td.addEventListener("click",function(){ dmDetail(td.dataset.z,td.dataset.s); }); });
+  }
+  function dmTrend(t){
+    if(!t.length){ $("dm-trend").innerHTML=""; return; }
+    var max=Math.max.apply(null,t.map(function(x){return x.c;}))||1;
+    $("dm-trend").innerHTML='<div style="display:flex;align-items:flex-end;gap:6px;height:70px">'+t.map(function(x){
+      return '<div style="flex:1;text-align:center"><div style="height:'+Math.round(60*x.c/max)+'px;background:linear-gradient(180deg,#18C8FF,rgba(24,200,255,.25));border-radius:3px"></div>'+
+             '<div style="font:600 8px Manrope;color:#6f8bb0;margin-top:4px">'+esc(String(x.t).slice(-3))+'</div></div>';
+    }).join("")+'</div>';
+  }
+  function dmDetail(z,s){
+    var rows=(window.__dmCells||[]).filter(function(c){return c.zip3===z&&c.segment===s;});
+    if(!rows.length){ $("dm-detail").innerHTML='<div style="font:600 11px Manrope;color:#6f8bb0">No detail for that cell.</div>'; return; }
+    var tot=rows.reduce(function(a,r){return a+r.unserved;},0);
+    var h='<div style="font:800 15px Manrope;color:#e2e9f2">'+esc(z)+'xx · '+esc(s)+' — '+tot+' unserved</div>'+
+          '<table style="width:100%;border-collapse:collapse;font:600 11px Manrope;margin-top:10px">'+
+          '<tr><th style="text-align:left;color:#8ca0c4;padding:4px">BAND</th><th style="color:#8ca0c4">SCANS</th><th style="color:#8ca0c4">UNSERVED</th>'+
+          '<th style="color:#8ca0c4">p25</th><th style="color:#8ca0c4">p50</th><th style="color:#8ca0c4">p75</th></tr>';
+    rows.sort(function(a,b){return b.unserved-a.unserved;}).forEach(function(r){
+      h+='<tr><td style="color:#e2e9f2;padding:5px 4px">'+esc(r.band)+'</td>'+
+         '<td style="text-align:center;color:#aebfdf">'+r.scans+'</td>'+
+         '<td style="text-align:center;color:#18C8FF;font-weight:800">'+r.unserved+'</td>'+
+         '<td style="text-align:center;color:#aebfdf">$'+(r.monthly_p25||"—")+'</td>'+
+         '<td style="text-align:center;color:#fff;font-weight:800">$'+(r.monthly_p50||"—")+'</td>'+
+         '<td style="text-align:center;color:#aebfdf">$'+(r.monthly_p75||"—")+'</td></tr>';
+    });
+    $("dm-detail").innerHTML=h+'</table>'+
+      '<div style="font:500 10px/1.6 Manrope;color:#6f8bb0;margin-top:10px">Cells below 5 scans are never written \u2014 a single scan in a 3-digit ZIP with a credit band attached is a person, not a data point.</div>';
+  }
 
   // ---------- INVENTORY ----------
   function parseCSV(text){ var rows=[],i=0,f="",row=[],q=false;
@@ -393,7 +564,7 @@ document.addEventListener("DOMContentLoaded",function(){
   }
   function invLoad(){ $("inv-msg").textContent="Loading inventory…";
     fetch("/api/admin/export?pool=vdps",{headers:hdr()}).then(authOr).then(function(r){ if(!r)return null; if(!r.ok)throw r.status; return r.text(); }).then(function(csv){
-      if(csv==null)return; INV=toObjects(parseCSV(csv)).filter(function(c){return (c.active==null||c.active==="1"||c.active==="");}); $("inv-msg").textContent=""; invRender();
+      if(csv==null)return; INV=toObjects(parseCSV(csv)).filter(function(c){return (c.active==null||c.active==="1"||c.active==="");}); $("inv-msg").textContent=""; invRender(); bandsLoad();
     }).catch(function(e){ $("inv-msg").textContent=e===403?"Locked / bad key.":"Load failed."; });
     fetch("/api/ai/pulse",{headers:hdr()}).then(authOr).then(function(r){return r?r.json():null;}).then(function(d){ if(d&&d.ok) $("inv-io").textContent="+"+fmt(d.inToday)+" in · −"+fmt(d.outToday)+" out · "+fmt(d.liveInventory)+" live"; }).catch(function(){});
   }
@@ -458,6 +629,20 @@ document.addEventListener("DOMContentLoaded",function(){
       if(!d||!d.ok){ $("cre-msg").textContent="Load failed."; return; }
       $("cre-msg").textContent = d.stripe_ready ? "" : "Stripe isn't configured — earnings accrue but no transfer can be sent yet.";
       $("cre-chip").textContent=(d.posts||[]).length+" to review · "+(d.payouts||[]).length+" to pay";
+      // Deck v13 S-04 step 1 — "Deal closes; the program is funded." The budget is credited in
+      // appApprove() on every settled deal; until now nothing displayed it anywhere.
+      var pg=d.programs||[];
+      if($("cre-programs")) $("cre-programs").innerHTML = pg.length ? pg.map(function(p){
+        var b=(p.budget_cents||0)/100, c=(p.committed_cents||0)/100, left=b-c;
+        var pct=b>0?Math.min(100,Math.round((c/b)*100)):0;
+        return '<div style="border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
+          '<div style="display:flex;justify-content:space-between;font:600 12px Manrope">'+
+            '<span>'+esc(p.dealership||("dealer #"+p.dealer_id))+'</span>'+
+            '<span style="color:'+(left<0?"#ff8080":"#3ddc84")+'">$'+left.toFixed(0)+' left</span></div>'+
+          '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.07);margin:7px 0 4px;overflow:hidden">'+
+            '<span style="display:block;height:100%;width:'+pct+'%;background:'+(left<0?"#ff8080":"#18C8FF")+'"></span></div>'+
+          '<div style="font:500 10px Manrope;color:var(--mut)">$'+c.toFixed(0)+' committed of $'+b.toFixed(0)+' funded</div></div>';
+      }).join("") : '<div style="color:var(--mut);font:600 11px Manrope">No funded programs yet — a program is funded when a deal settles.</div>';
 
       $("cre-posts").innerHTML=(d.posts||[]).length ? d.posts.map(function(p){
         var why=(p.why||[]).map(function(w){return esc(w.f);}).join(" · ");
@@ -477,14 +662,28 @@ document.addEventListener("DOMContentLoaded",function(){
       $("cre-payouts").innerHTML=(d.payouts||[]).length ? d.payouts.map(function(e){
         var amt="$"+(((e.amount_cents||0)/100).toFixed(2));
         var blocked=!e.payouts_enabled;
+        // 'paying' = the transfer was claimed and may already have landed at Stripe, but the
+        // settle-write did not complete. NEVER offer a Pay button for these: the obvious human
+        // response to a stuck row is to click again, and that is exactly how a creator gets paid
+        // twice. It needs reconciling against Stripe by hand.
+        var stuck=(e.status==="paying");
         return '<div style="border:1px solid rgba(24,200,255,.18);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">'+
           '<div><div style="font:600 12px Manrope">'+esc(e.handle||"—")+' · '+amt+'</div>'+
-          '<div style="font:500 11px Manrope;color:'+(blocked?"#ffce54":"var(--mut)")+';margin-top:2px">'+
-            (blocked?"Stripe onboarding incomplete":"earning #"+esc(e.id)+" · ready")+'</div></div>'+
-          (blocked?'' :
+          '<div style="font:500 11px Manrope;color:'+(stuck?"#ff8080":blocked?"#ffce54":"var(--mut)")+';margin-top:2px">'+
+            (stuck?"⚠ IN FLIGHT — reconcile against Stripe before touching this":
+             blocked?"Stripe onboarding incomplete":"earning #"+esc(e.id)+" · ready")+'</div></div>'+
+          (blocked||stuck?'' :
             '<button class="btn2 ghost sm" style="color:#3ddc84" data-cre-act="creator_payout" data-cre-label="'+esc(e.handle+" — "+amt)+'" data-cre-args=\''+JSON.stringify({earning_id:String(e.id)})+'\'>Pay '+amt+'</button>')+
         '</div>';
       }).join("") : '<div style="color:var(--mut);font:600 11px Manrope">Nothing approved for payout.</div>';
+
+      // Every affiliate link, traceable from here — personal links first, then per-car claim links.
+      $("cre-links").innerHTML="<tr><th>Kind</th><th>Link</th><th>Creator</th><th>Unit</th><th>Clicks</th><th>Leads</th></tr>"+
+        ((d.links||[]).map(function(x){
+          var kind=x.kind==="personal"?'<span class="chip" style="color:var(--cy)">PERSONAL</span>':'<span class="chip">CAR</span>';
+          return "<tr><td>"+kind+"</td><td>carnimbus.us/c/"+esc(x.token)+"</td><td>"+esc(x.handle||"—")+
+            "</td><td>"+esc(x.vin||"—")+"</td><td>"+esc(x.clicks||0)+"</td><td>"+esc(x.leads||0)+"</td></tr>";
+        }).join("")||'<tr><td colspan="6" style="color:var(--mut)">No links yet.</td></tr>');
 
       $("cre-drops").innerHTML="<tr><th>#</th><th>Unit</th><th>Rate</th><th>Why</th><th>Claims</th><th></th></tr>"+
         (d.drops||[]).map(function(x){

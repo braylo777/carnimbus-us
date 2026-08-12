@@ -110,8 +110,42 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
     <button data-panel="trends">▲ TRENDS</button>
     <button data-panel="graph">◕ NEURAL NET</button>
     <button data-panel="map">◍ LIVE DEMAND</button>
+    <button data-panel="demand">◈ DEMAND</button>
+    <button data-panel="clearance">◈ CLEARANCE</button>
     <button data-panel="creators">◈ CREATORS</button>
   </div>
+
+  <!-- The loop's middle. carnimbus.us records what people wanted and whether we could serve it;
+       this panel reads the failures; app./clear turns them into a price change. -->
+  <section class="panel" id="panel-demand">
+    <div class="phead"><h2>DEMAND</h2><span class="spacer"></span><button class="btn2 ghost sm" data-back>← Console</button></div>
+    <div class="pmsg" id="dm-msg"></div>
+    <div id="dm-read" class="readout"></div>
+    <div class="charts">
+      <div class="card" style="grid-column:1/-1"><h3>UNSERVED BY ZIP3 × SEGMENT</h3><div id="dm-grid"></div></div>
+      <div class="card" style="grid-column:1/-1"><h3>UNSERVED · LAST 8 WEEKS</h3><div id="dm-trend"></div></div>
+      <div class="card" style="grid-column:1/-1"><h3>CELL DETAIL</h3><div id="dm-detail"></div></div>
+    </div>
+  </section>
+
+  <!-- The loop's receipt. DEMAND shows what we could not serve; app./clear turns that into a
+       suggested price; this panel is the only place that says whether the dealer took it.
+       AUTONOMY-POLICY.md:62 graduates clearanceAdvisor off L0 on MEASURED accuracy — until this
+       existed, clearance_recs was written every week and read by nothing. -->
+  <section class="panel" id="panel-clearance">
+    <div class="phead"><h2>CLEARANCE</h2>
+      <span class="chip" id="clr-chip">L0 · suggest only</span>
+      <span class="spacer"></span>
+      <button class="btn2 ghost sm" data-back>← Console</button>
+    </div>
+    <div class="pmsg" id="clr-msg"></div>
+    <div id="clr-read" class="readout"></div>
+    <div class="charts">
+      <div class="card" style="grid-column:1/-1"><h3>TAKE RATE BY CONFIDENCE</h3><div id="clr-conf"></div></div>
+      <div class="card" style="grid-column:1/-1"><h3>WHY DEALERS SKIPPED</h3><div id="clr-skips"></div></div>
+      <div class="card" style="grid-column:1/-1"><h3>THIS WEEK'S RECOMMENDATIONS</h3><div id="clr-recent"></div></div>
+    </div>
+  </section>
 
   <section class="panel" id="panel-creators">
     <div class="phead"><h2>CREATOR NETWORK</h2>
@@ -119,10 +153,14 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
       <button class="btn2 ghost sm" data-back>← Console</button>
     </div>
     <div class="pmsg" id="cre-msg"></div>
+    <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:14px 0 8px">DEALER PROGRAM BUDGETS</h3>
+    <div id="cre-programs"></div>
     <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:14px 0 8px">POSTS AWAITING REVIEW</h3>
     <div id="cre-posts"></div>
     <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">PAYOUT QUEUE — CONFIRM RELEASES REAL MONEY</h3>
     <div id="cre-payouts"></div>
+    <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">AFFILIATE LINKS</h3>
+    <div class="tbl-wrap"><table class="t" id="cre-links"></table></div>
     <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">OPEN DROPS</h3>
     <div class="tbl-wrap"><table class="t" id="cre-drops"></table></div>
     <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">CREATORS</h3>
@@ -139,6 +177,10 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
       <input id="inv-file" type="file" accept=".csv" style="display:none">
     </div>
     <input id="inv-search" type="text" placeholder="Filter make / model / vin…" style="width:100%;background:rgba(0,0,0,.25);border:1px solid rgba(24,200,255,.24);border-radius:10px;padding:9px 12px;color:#fff;font:500 12px Manrope;margin-bottom:10px;outline:none">
+    <!-- Deck v13 S-04 screen 2: the data lake grouped the way a shopper meets it — by credit band.
+         Bands come from listing_placements.credit_band, the value the dealer placed and the value
+         search() prices against; nothing here is inferred from price. -->
+    <div id="inv-bands" style="margin-bottom:12px"></div>
     <div class="pmsg" id="inv-msg"></div>
     <div class="tbl-wrap"><table class="t" id="inv-table"></table></div>
   </section>
@@ -192,6 +234,17 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
   <div class="lk-pill"><span class="pd"></span>LOCKED</div>
   <button id="nl-file" class="btn2" type="button">Load Key</button>
   <input id="nl-fileinput" type="file" style="display:none">
+  <!-- Flash custody needs showOpenFilePicker: Chrome/Edge desktop only. Safari, Firefox and every
+       iOS browser fall through to a passphrase, which is the only way this console opens on a
+       phone. nimbus.js fills nl-flashnote when the API is missing, so the button never just
+       silently does nothing. -->
+  <div id="nl-flashnote" style="font:500 11px Manrope;color:#7b8fab;max-width:300px;text-align:center;margin-top:6px"></div>
+  <div style="display:flex;align-items:center;gap:8px;margin:14px 0 8px;width:260px;color:#5d7196;font:600 10px 'IBM Plex Mono';letter-spacing:.16em">
+    <span style="flex:1;height:1px;background:rgba(24,200,255,.18)"></span>OR<span style="flex:1;height:1px;background:rgba(24,200,255,.18)"></span>
+  </div>
+  <input id="nl-pass" type="password" autocomplete="current-password" placeholder="Passphrase"
+    style="width:260px;background:rgba(0,0,0,.3);border:1px solid rgba(24,200,255,.28);border-radius:10px;padding:11px 13px;color:#fff;font:500 13px Manrope;outline:none">
+  <button id="nl-pass-go" class="btn2" type="button" style="margin-top:8px;width:260px">Unlock</button>
   <div id="nl-msg"></div>
 </div>
 <script src="/assets/js/nimbus-web.js" defer></script>

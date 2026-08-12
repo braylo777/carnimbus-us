@@ -45,6 +45,13 @@
         <h1 class="disp" style="font-size:24px;margin:0 0 4px">Monthly budget?</h1>
         <label for="mo" style="display:block;font:500 13px Manrope;color:#aebfdf;margin-bottom:18px">What feels comfortable each month.</label>
         <input id="mo" class="pill" inputmode="numeric" placeholder="e.g. 500" style="width:100%;height:50px;font-size:16px">
+        <!-- REQUIRED. /api/search returns need_inputs before it matches anything if zip is absent
+             (worker.js:1315), so until 2026-08-06 every visitor to this page was told "nothing under
+             that budget yet" no matter what they typed — including everyone arriving from a /used/
+             SEO page. The field is also what makes the search visible to the demand sensor. -->
+        <label for="zip" style="display:block;font:500 13px Manrope;color:#aebfdf;margin:16px 0 8px">Where are you shopping?</label>
+        <input id="zip" class="pill" inputmode="numeric" maxlength="5" placeholder="ZIP code" autocomplete="postal-code" style="width:100%;height:50px;font-size:16px">
+        <div id="zip-msg" style="display:none;font:600 12px Manrope;color:#ff8080;margin-top:8px"></div>
         <button id="s3-go" class="btn primary lg" type="button" style="width:100%;margin-top:14px">See my cars →</button>
       </div>
 

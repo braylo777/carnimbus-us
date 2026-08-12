@@ -204,7 +204,7 @@
 "Static on the line — try that again.":"Se cortó la señal: inténtalo de nuevo.",
 "Your matches. Talk when you’re ready.":"Tus matches. Habla cuando estés listo.",
 "Sign in":"Iniciar sesión","I'm buying a car":"Quiero comprar un auto","I'm a dealer":"Soy concesionario","Request access":"Solicitar acceso","Welcome to CarNimbus.":"Bienvenido a CarNimbus.","Buyers and dealers both drive here.":"Aquí manejan compradores y concesionarios.","Talk to this car →":"Habla con este auto →","My Deals":"Mis tratos","Account":"Cuenta","matches":"resultados","No Drive Now pass yet.":"Aún no tienes pase Drive Now.","Browse your matches":"Explora tus matches","Open full pass":"Abrir pase completo","Reschedule in chat":"Reagendar en el chat","Pre-qualified":"Precalificado","0 FICO impact":"0 impacto en FICO"
-,"Choose your financing, payment, & location.":"Elige tu financiamiento, pago y ubicación.","We'll match you to the best deal.":"Te conectamos con la mejor oferta.","No haggling or negotiations. Our price guaranteed.":"Sin regateos ni negociaciones. Nuestro precio garantizado.","Buy your dream car":"Compra el auto de tus sueños","on your terms.":"a tu manera.","~$300 / mo":"~$300 / mes","~$500 / mo":"~$500 / mes","~$700 / mo":"~$700 / mes","$900+ / mo":"$900+ / mes","$0 down":"$0 de enganche","$500 down":"$500 de enganche","$1,000 down":"$1,000 de enganche","$2,000 down":"$2,000 de enganche","$3,000 down":"$3,000 de enganche","$5,000+ down":"$5,000+ de enganche","COMING SOON TO LA COUNTY:":"MUY PRONTO EN EL CONDADO DE LA:","STEP 5 · CHOOSE YOUR CAR":"PASO 5 · ELIGE TU AUTO","Show My Matches":"Ver mis matches","The Power's In Your Hands.":"El Poder Está En Tus Manos.","Schedule Test Drive":"Agendar prueba de manejo","STEP 4 · WHAT'S YOUR TYPE?":"PASO 4 · ¿CUÁL ES TU TIPO?","Truck":"Camioneta","Sport":"Deportivo","STEP 1 · CASH, FINANCE, OR LEASE?":"PASO 1 · ¿EFECTIVO, FINANCIADO O LEASING?","STEP 2 · MONTHLY & DOWN PAYMENT":"PASO 2 · MENSUALIDAD Y ENGANCHE","STEP 3 · ZIP & RADIUS":"PASO 3 · CÓDIGO POSTAL Y RADIO","e.g. 2020 Toyota Tacoma":"p. ej. 2020 Toyota Tacoma","ZIP code":"Código postal","STEP 2 · WHAT'S YOUR CASH BUDGET?":"PASO 2 · ¿CUÁL ES TU PRESUPUESTO EN EFECTIVO?","STEP 3 · MONTHLY & DUE AT SIGNING":"PASO 3 · MENSUALIDAD Y PAGO INICIAL","Up to $10k":"Hasta $10k","5 miles":"5 millas","10 miles":"10 millas","15 miles":"15 millas","30 miles":"30 millas","50 miles":"50 millas","Following":"Siguiendo","For You":"Para ti","Browse all →":"Ver todo →","Talk to it":"Háblale","Post":"Publicar","Sign out":"Cerrar sesión","UPCOMING":"PRÓXIMO","YOUR MATCHES":"TUS MATCHES","Edit my 10 answers":"Editar mis 10 respuestas","Be the first — say something about a car you talked to.":"Sé el primero: comenta sobre un auto con el que hablaste.","Ask the community or an AI agent…":"Pregunta a la comunidad o a un agente de IA…","Sign in to see your account.":"Inicia sesión para ver tu cuenta.","Open pass":"Abrir pase","Reschedule":"Reagendar","Feed":"Comunidad","Hot":"Popular","New":"Nuevo",
+,"Choose your financing, payment, & location.":"Elige tu financiamiento, pago y ubicación.","We'll match you to the best deal.":"Te conectamos con la mejor oferta.","No haggling or negotiations. Our price guaranteed.":"Sin regateos ni negociaciones. Nuestro precio garantizado.","Control your car":"Controla tu","buying experience.":"experiencia de compra de auto.","Buy your dream car":"Compra el auto de tus sueños","on your terms.":"a tu manera.","~$300 / mo":"~$300 / mes","~$500 / mo":"~$500 / mes","~$700 / mo":"~$700 / mes","$900+ / mo":"$900+ / mes","$0 down":"$0 de enganche","$500 down":"$500 de enganche","$1,000 down":"$1,000 de enganche","$2,000 down":"$2,000 de enganche","$3,000 down":"$3,000 de enganche","$5,000+ down":"$5,000+ de enganche","COMING SOON TO LA COUNTY:":"MUY PRONTO EN EL CONDADO DE LA:","STEP 5 · CHOOSE YOUR CAR":"PASO 5 · ELIGE TU AUTO","Show My Matches":"Ver mis matches","The Power's In Your Hands.":"El Poder Está En Tus Manos.","Schedule Test Drive":"Agendar prueba de manejo","STEP 4 · WHAT'S YOUR TYPE?":"PASO 4 · ¿CUÁL ES TU TIPO?","Truck":"Camioneta","Sport":"Deportivo","STEP 1 · CASH, FINANCE, OR LEASE?":"PASO 1 · ¿EFECTIVO, FINANCIADO O LEASING?","STEP 2 · MONTHLY & DOWN PAYMENT":"PASO 2 · MENSUALIDAD Y ENGANCHE","STEP 3 · ZIP & RADIUS":"PASO 3 · CÓDIGO POSTAL Y RADIO","e.g. 2020 Toyota Tacoma":"p. ej. 2020 Toyota Tacoma","ZIP code":"Código postal","STEP 2 · WHAT'S YOUR CASH BUDGET?":"PASO 2 · ¿CUÁL ES TU PRESUPUESTO EN EFECTIVO?","STEP 3 · MONTHLY & DUE AT SIGNING":"PASO 3 · MENSUALIDAD Y PAGO INICIAL","Up to $10k":"Hasta $10k","5 miles":"5 millas","10 miles":"10 millas","15 miles":"15 millas","30 miles":"30 millas","50 miles":"50 millas","Following":"Siguiendo","For You":"Para ti","Browse all →":"Ver todo →","Talk to it":"Háblale","Post":"Publicar","Sign out":"Cerrar sesión","UPCOMING":"PRÓXIMO","YOUR MATCHES":"TUS MATCHES","Edit my 10 answers":"Editar mis 10 respuestas","Be the first — say something about a car you talked to.":"Sé el primero: comenta sobre un auto con el que hablaste.","Ask the community or an AI agent…":"Pregunta a la comunidad o a un agente de IA…","Sign in to see your account.":"Inicia sesión para ver tu cuenta.","Open pass":"Abrir pase","Reschedule":"Reagendar","Feed":"Comunidad","Hot":"Popular","New":"Nuevo",
 "WHY IT FITS YOU":"POR QUÉ TE QUEDA","In budget":"En presupuesto","Top pick for your profile.":"La mejor opción para tu perfil.","Schedule your test drive":"Agenda tu prueba de manejo","PICK A DAY":"ELIGE UN DÍA","PICK A TIME":"ELIGE UNA HORA","Confirm test drive":"Confirmar prueba de manejo","↺ Start over":"↺ Empezar de nuevo","Message the car":"Escríbele al auto","Send":"Enviar","See your pass →":"Ver tu pase →","Drive booked · pass ready":"Manejo agendado · pase listo","Soft check · 0 credit hit":"Consulta suave · 0 impacto al crédito","Ask me anything — I answer straight.":"Pregúntame lo que sea — respondo directo.","Fresh listing":"Recién publicado","Ask me anything":"Pregúntame lo que sea","Today":"Hoy","Tomorrow":"Mañana","Sunday":"Domingo","Monday":"Lunes","Tuesday":"Martes","Wednesday":"Miércoles","Thursday":"Jueves","Friday":"Viernes","Saturday":"Sábado","Pick a time to lock it in.":"Elige una hora para confirmar.","Couldn't book that slot — try another.":"No se pudo reservar ese horario — elige otro.","Sign in first so I remember you.":"Inicia sesión primero para que te recuerde.","Sign in →":"Iniciar sesión →","Static on the line — try that again.":"Se cortó la señal — inténtalo de nuevo.","Car not found.":"Auto no encontrado.","Couldn't load this car — refresh to retry.":"No se pudo cargar este auto — recarga para reintentar.","Back to browse":"Volver a explorar","your nearest CarNimbus center":"tu centro CarNimbus más cercano",
 "Nimbus found your top matches.":"Nimbus encontró tus mejores opciones.","Ranked to your profile. Tap any car to talk to it — then pick the one you want to drive.":"Ordenados según tu perfil. Toca cualquier auto para hablar con él — luego elige el que quieras manejar.","Finish your profile to unlock ranked matches.":"Completa tu perfil para desbloquear tus opciones.","Answer a few questions →":"Responde unas preguntas →","Talk to this Car":"Habla con este auto","Certified":"Certificado","Top match":"Mejor opción","No matches yet — finish your profile to rank inventory.":"Aún no hay opciones — completa tu perfil para ordenar el inventario.","Matches unavailable — refresh to retry.":"Opciones no disponibles — recarga para reintentar.",
 "Talk":"Hablar","Your conversations. Every car here talks back.":"Tus conversaciones. Cada auto aquí te responde.","Tap to talk to this car":"Toca para hablar con este auto","Tap to keep talking":"Toca para seguir hablando","Finish your profile to meet your matches.":"Completa tu perfil para conocer tus opciones.","See matches →":"Ver opciones →","Couldn't load your matches — refresh to retry.":"No se pudieron cargar tus opciones — recarga para reintentar.",
@@ -239,7 +239,7 @@
     if(CTA_WAIT.indexOf(t)>=0) return "/waitlist";
     // Every product CTA funnels to signup — you can't browse into the app without an account.
     if(CTA_SIGNUP.indexOf(t)>=0 || el.classList.contains("vcta")) return "/browse";
-    if(t==="email the team") return "mailto:partner@carnimbus.com";
+    if(t==="email the team") return "mailto:partner@carnimbus.us";
     return null;
   }
   function stampNav(){ document.querySelectorAll(".navlink,.btn,.vcta,span,a").forEach(function(el){
@@ -278,7 +278,7 @@
         el.style.zIndex="70";   // lift the whole bar above sibling .z layers so the dropdown is actually clickable
         var detail=/\/(car|talk|edit-profile)/.test(here) && !onSignin;   // N5: detail pages get a back chevron
         el.innerHTML=(detail?'<button id="appnav-back" type="button" aria-label="Back" style="background:none;border:none;color:#cbd5e1;font:700 15px Manrope;cursor:pointer;margin-right:6px">‹ Back</button>':'')+
-          '<a href="'+(onSignin?"https://carnimbus.com/":"/browse")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
+          '<a href="'+(onSignin?"https://carnimbus.us/":"/browse")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
           '<img src="/assets/logo-96.png" alt="" width="26" height="26" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
           '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
           (onSignin?'':'<div style="position:relative"><button class="avatar" style="width:28px;height:28px;font-size:11px;border:none;cursor:pointer" id="appnav-av" aria-label="Account menu">·</button>'+
@@ -338,24 +338,16 @@
       // Delegate menu clicks: navigate explicitly so nothing (overlay, re-render, bubbling) can eat the tap.
       mn.addEventListener("click",function(e){ e.stopPropagation();
         var out=e.target.closest("#appnav-out");
-        if(out){ var bye=function(){ try{sessionStorage.clear();}catch(_){ } location.replace("https://carnimbus.com/"); };
+        if(out){ var bye=function(){ try{sessionStorage.clear();}catch(_){ } location.replace("https://carnimbus.us/"); };
           fetch("/api/logout",{method:"POST"}).then(bye).catch(bye); return; }
         var a=e.target.closest("a"); if(a&&a.href){ e.preventDefault(); location.href=a.href; } }); }
   }
-  function wireTabbar(){
-    var here=location.pathname;
-    if(!/^app\./.test(location.hostname)) return;   // V1: the tab bar belongs to the app only, never the marketing/dealer/admin sites
-    if(here.indexOf("/signin")>-1) return;   // not inside the app yet — no tab bar on the front door
-    if(document.querySelector(".tabbar")) return;
-    var T=[["Browse","/browse","feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
-           ["Browse","/browse","matches",'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>'],
-           ["Browse","/browse","profile",'<path d="M3 11l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>']];
-    var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
-    bar.innerHTML=T.map(function(t){ var key=t[2];
-      var on=here.indexOf("/"+key)>-1||(key==="matches"&&(here.indexOf("/car")>-1||here.indexOf("/talk")>-1||here.indexOf("/chat")>-1))||(key==="profile"&&here.indexOf("/you")>-1);
-      return '<a class="tab'+(on?' on':'')+'" href="'+t[1]+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+t[3]+'</svg>'+t[0]+'</a>'; }).join('');
-    document.body.appendChild(bar);
-  }
+  // REMOVED 2026-08-06. This injected a three-tab bottom bar on every app.* page that was not
+  // /signin. All three tabs were labelled "Browse" and all three pointed at /browse — leftovers
+  // from the BUYER app, which was retired 2026-07-28. app.carnimbus.us is the dealer and creator
+  // surface now, so the bar sat on top of /clear, /scan, /offer, /deal, /deals, /console and
+  // /creators, overlapping the creator console's own fixed bottom bucket bar and sending anyone who
+  // tapped it out of the product. Nothing replaces it: each surface has its own navigation.
   function wireForms(){ document.querySelectorAll(".wl-form").forEach(function(f){
     if(f.dataset.wired) return; f.dataset.wired="1";
     // returning visitor: show joined card instead of the form
@@ -401,9 +393,9 @@
         '<button type="button" class="btn ghost sm wl-share">'+L("Share with a friend")+'</button></div></div>';
       var card=f2.querySelector(".wl-done"); if(card&&focus)card.focus();
       var sh=f2.querySelector(".wl-share"); if(sh)sh.addEventListener("click",function(){
-        var txt="Skip the dealership games — carnimbus.com";
-        if(navigator.share){ navigator.share({text:txt,url:"https://carnimbus.com"}).catch(function(){}); }
-        else { try{navigator.clipboard.writeText(txt+" https://carnimbus.com"); sh.textContent=L("Copied ✓");}catch(_){} }
+        var txt="Skip the dealership games — carnimbus.us";
+        if(navigator.share){ navigator.share({text:txt,url:"https://carnimbus.us"}).catch(function(){}); }
+        else { try{navigator.clipboard.writeText(txt+" https://carnimbus.us"); sh.textContent=L("Copied ✓");}catch(_){} }
       });
     }
   }); }
@@ -505,7 +497,7 @@
     document.getElementById("cn-chat-x").addEventListener("click",function(){wrap.remove();});
   }
 
-  (function boot(){ function go(){ stampNav(); wireNav(); wireBurger(); wireAppNav(); wireTabbar(); wireForms(); initI18n(); wireFeed();
+  (function boot(){ function go(){ stampNav(); wireNav(); wireBurger(); wireAppNav(); wireForms(); initI18n(); wireFeed();
       if(location.pathname.replace(/\/$/,"")==="/waitlist"&&matchMedia("(pointer:fine)").matches){var pi=document.querySelector("input[type=tel]");if(pi)pi.focus();} }
     if(!document.querySelector("x-import")) return go();   // app pages have no x-import → fire immediately
     var t=0, iv=setInterval(function(){ if(!document.querySelector("x-import")||t++>60){ clearInterval(iv); go(); } },16); })();

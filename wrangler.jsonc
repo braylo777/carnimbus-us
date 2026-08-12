@@ -3,9 +3,26 @@
   "name": "carnimbus-com",
   "compatibility_date": "2025-01-01",
   "main": "worker.js",
-  // 2026-07-28: four hosts. app. (buyer app, retired) and admin. (folded into ai.) are detached —
-  // their in-worker 301s survive as bookmark safety nets. creator. is the Creator Network.
+  // 2026-08-01 CUTOVER COMPLETE. carnimbus.us is the product. carnimbus.com is ARCHIVED —
+  // it serves no content and only 301s to the .us equivalent (see the redirect block at the top of
+  // route() in worker.js).
+  // 2026-08-03: app.carnimbus.us is THE DEALER wAPP (deck v13 S-04) and dealer.carnimbus.us is
+  // RETIRED — it 301s to app. admin. was folded into ai. earlier.
+  // ⚠ THE FOUR .com ENTRIES AND dealer.carnimbus.us MUST STAY. wrangler reconciles custom domains
+  // against this list, so removing one DETACHES that host — and a detached host cannot redirect.
+  // For .com that would break every SMS pass link and printed QR code already in customers' hands.
+  // For dealer. it would break every console link already emailed to a dealer. Both are
+  // archived-but-bound, deliberately and permanently.
   "routes": [
+    { "pattern": "carnimbus.us", "custom_domain": true },
+    // RETIRED 2026-08-03 — 301/308s to app.carnimbus.us. Bound so it can redirect. Do not remove.
+    { "pattern": "dealer.carnimbus.us", "custom_domain": true },
+    // RETIRED 2026-08-03 — the self-serve creator portal is archived. Bound so it can 301, and
+    // because live /c/<token> links printed in @nimbusbros video descriptions must keep resolving.
+    { "pattern": "creator.carnimbus.us", "custom_domain": true },
+    { "pattern": "ai.carnimbus.us", "custom_domain": true },
+    // THE DEALER wAPP — scan → offer → title → settle. Serves site/app/ via the PREFIX map.
+    { "pattern": "app.carnimbus.us", "custom_domain": true },
     { "pattern": "carnimbus.com", "custom_domain": true },
     { "pattern": "dealer.carnimbus.com", "custom_domain": true },
     { "pattern": "creator.carnimbus.com", "custom_domain": true },
@@ -26,8 +43,23 @@
       "database_id": "43d0dc1a-96c1-49dd-98da-e4f865b7a013"
     }
   ],
+  // Title documents. PRIVATE — never a public bucket, never a presigned browser URL. Objects are
+  // served only through withDealer() with a tenancy check (appTitleGet in worker.js). Titles are
+  // images and cannot live in D1; this is the only reason R2 exists here.
+  "r2_buckets": [
+    { "binding": "DOCS", "bucket_name": "carnimbus-docs" }
+  ],
   "ai": { "binding": "AI" },
   "vars": { "DEV_MODE": "0" },
+  // aiHealth reports the deployed version id. The console's "new version available — tap to
+  // refresh" banner compared against a hardcoded build:"R17" string, so it could never fire and
+  // the stale-page confusion it was written to fix stayed live. This makes the value real.
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  // Without this, the only place a thrown error is visible is a live `wrangler tail` that nobody
+  // is running. 291 handlers in worker.js swallow their errors; the four that reach console.error
+  // include settlement drift, which the code itself calls the most likely way this system quietly
+  // lies to a dealer.
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vectorize": [
     { "binding": "MATCH_INDEX", "index_name": "carnimbus-match" }
   ],

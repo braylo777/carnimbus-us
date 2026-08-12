@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded",function(){
     document.getElementById("p-when").textContent=d.slot;
     document.getElementById("p-cid").textContent="CID# "+(d.cid||"");
     document.getElementById("p-code").textContent=String(d.pass_token).slice(0,6).toUpperCase();
-    var qr=qrcodegen.QrCode.encodeText("https://carnimbus.com/pass/"+d.pass_token,qrcodegen.QrCode.Ecc.MEDIUM);
+    var qr=qrcodegen.QrCode.encodeText("https://carnimbus.us/pass/"+d.pass_token,qrcodegen.QrCode.Ecc.MEDIUM);
     var cv=document.getElementById("p-qr"),s=6,b=2,n=qr.size;cv.width=cv.height=(n+2*b)*s;var g=cv.getContext("2d");
     g.fillStyle="#fff";g.fillRect(0,0,cv.width,cv.height);g.fillStyle="#06163b";
     for(var y=0;y<n;y++)for(var x=0;x<n;x++)if(qr.getModule(x,y))g.fillRect((x+b)*s,(y+b)*s,s,s);
