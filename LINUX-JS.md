@@ -45,8 +45,19 @@ Class attributes pass through unchanged, so any CSS system works. We ship hand-w
 ## Deploy (GitHub → Cloudflare → carnimbus.us)
 Auto-deploy via **Cloudflare Workers Git integration**:
 Cloudflare dash → Workers & Pages → `carnimbus-com` → Settings → Build → **Connect to Git** →
-repo `braylo777/carnimbus-com`, branch `main`, deploy command `npx wrangler deploy`. Every push to
-`main` deploys to carnimbus.us.
+repo `braylo777/carnimbus-us`, branch `main`, deploy command `npx wrangler deploy`.
+
+⚠ **This integration is NOT currently firing.** Verified 2026-08-12: five pushes to `main` produced
+zero deployments — the live version is still the 2026-08-06 build while `main` is many commits
+ahead. Reconnect it, or deploy manually with `npx wrangler deploy`. The failure mode is silent:
+pushes succeed, the repo looks healthy, and production quietly stops updating.
+
+The repo was renamed `carnimbus-com` → `carnimbus-us` on 2026-08-12. GitHub redirects the old path,
+but the Cloudflare Git binding is by repo name and must be re-pointed when you reconnect.
+
+**The Worker script stays named `carnimbus-com`** — deliberately. Renaming it creates a new empty
+script, orphans 13 secrets (`SESSION_SECRET` unset ⇒ every request 500s), and would require
+detaching and re-attaching all nine custom domains.
 
 **D1 migrations are manual and deliberate** — never auto-run on push:
 `npx wrangler d1 execute carnimbus-waitlist --remote --file=migrations/<file>.sql`, one file at a time.

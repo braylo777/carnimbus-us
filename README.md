@@ -1,4 +1,4 @@
-# carnimbus-com — Beyond.js
+# carnimbus-us — Beyond.js
 
 Source of the **live [carnimbus.us](https://carnimbus.us)**: a consumer AI car-buying **superagent**
 for LAcarGUY dealers, paired with a dealer-side **Drive Now** dashboard. **94 real LAcarGUY
