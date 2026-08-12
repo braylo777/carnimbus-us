@@ -280,6 +280,7 @@ export default {
     if (url.pathname === "/api/dealer/listing-status" && request.method==="POST") return sec(await withDealer(request, env, dealerListingStatus));
     if (url.pathname === "/api/dealer/lead-thread")                        return sec(await withDealer(request, env, dealerLeadThread));
     if (url.pathname === "/api/dealer/placements")                        return sec(await withDealer(request, env, dealerPlacements));
+    if (url.pathname === "/api/dealer/grid")                              return sec(await withDealer(request, env, dealerGrid));
     if (url.pathname === "/api/dealer/leads")                             return sec(await withDealer(request, env, dealerLeads));
     if (url.pathname === "/api/dealer/lead-brief" && request.method==="POST") return sec(await withDealer(request, env, dealerLeadBrief));
     if (url.pathname === "/api/dealer/lead-status" && request.method==="POST") return sec(await withDealer(request, env, dealerLeadStatus));
@@ -2291,6 +2292,92 @@ async function dealerIngestUrl(request,env,uid,dealer){
   if(draft.price && !draft.price_mo){ draft.price_mo=monthlyFor(+draft.price, Math.round(+draft.price*0.1), aprFor("670-739"), 72); draft.price_mo_est=1; }
   draft.source_url=url;   // R7: persisted on publish so the cron can re-check the page for sold/removed
   return json({ok:true,draft});
+}
+// ===== v15: the down × monthly bucket grid =====
+// The v15 listing primitive. NOT a new table -- listing_placements has carried `monthly` and `down`
+// per (dealer_id, vdp_id) since migration 0049. v14 keyed placement on credit_band; v15 keys it on
+// the cell. Same two columns, different axis, so this is a validator and a read shape, not a
+// migration. The credit_band path stays exactly as it was: the buyer search still reads
+// monthly/down by band (search()), and dealerAutoPlace() still places by band. Bands price a car
+// for a buyer; cells are how a dealer shops their own lot. Both are true at once.
+const V15_DOWN=[1000,2000,3000,4000], V15_MO=[100,200,300];
+const inCell=(dn,mo)=>V15_DOWN.indexOf(+dn)>=0 && V15_MO.indexOf(+mo)>=0;
+// Legacy rows carry auto-priced values (10% down, monthlyFor(...)) that land nowhere near a cell.
+// The grid READ snaps them to the nearest cell for display only -- it never writes the snapped
+// value back, because a dealer's own number is not ours to quietly round.
+const nearest=(v,cells)=>cells.reduce((a,b)=>Math.abs(b-v)<Math.abs(a-v)?b:a,cells[0]);
+const snapCell=(dn,mo)=>({down:nearest(+dn||0,V15_DOWN),monthly:nearest(+mo||0,V15_MO)});
+// GET /api/dealer/grid — the twelve cells, each with its units. Aging rides along because the whole
+// point of the grid is deciding what to move, and a unit's age is the reason to move it.
+// POST /api/dealer/grid {vdp_id,down,monthly} — place a unit into a cell.
+//
+// ⚠ SEMANTICS TO CONFIRM (Brandon): a cell placement writes the SAME monthly/down across every one
+// of that unit's credit_band rows. That is the v15 reading -- one listed payment per unit, the same
+// number for every buyer, which is what "the price you see is the price you pay" means and what
+// makes a clearance rack a clearance rack. It does change the buyer surface: today a 580-669 buyer
+// and an 800+ buyer can see different payments for the same car (auto-priced per band via
+// aprFor()); after a cell placement they see one. The per-band APR estimate still runs everywhere
+// else and is untouched. If v15 actually intends per-band cells, this is the line to change and
+// nothing else moves.
+async function dealerGrid(request,env,uid,dealer){
+  if(request.method==="POST"){
+    const b=await request.json().catch(()=>({}));
+    const vid=parseInt(b.vdp_id,10), dn=parseInt(b.down,10), mo=parseInt(b.monthly,10);
+    if(!vid) return json({ok:false,error:"bad_request"},400);
+    // Exact cell membership, not snapping. Snapping a WRITE would silently move a dealer's number,
+    // and the one thing the grid must never do is price on their behalf.
+    if(!inCell(dn,mo)) return json({ok:false,error:"bad_cell",
+      reason:"Pick a cell: $1,000-$4,000 down by $100-$300 a month."},422);
+    if(!(await env.DB.prepare("SELECT 1 FROM vdps WHERE id=? AND dealer_id=?").bind(vid,dealer.id).first()))
+      return json({ok:false,error:"not_yours"},403);
+    const now=new Date().toISOString();
+    // locked=1 -- a cell placement is the dealer's deliberate choice, so auto-bucketing must not
+    // move it. Same contract dealerPlacements() already uses for a manual placement.
+    const up=await env.DB.prepare("UPDATE listing_placements SET monthly=?,down=?,locked=1,updated_at=? WHERE dealer_id=? AND vdp_id=?")
+      .bind(mo,dn,now,dealer.id,vid).run();
+    // A unit with no placement row yet (never auto-bucketed) still needs to land somewhere.
+    if(!up.meta.changes){
+      const band=bandForCar(await env.DB.prepare("SELECT price,price_mo FROM vdps WHERE id=?").bind(vid).first().catch(()=>({})) || {});
+      await env.DB.prepare("INSERT INTO listing_placements (dealer_id,vdp_id,credit_band,category,monthly,down,rate_markup,locked,created_at,updated_at) VALUES (?,?,?,?,?,?,0,1,?,?)")
+        .bind(dealer.id,vid,band,band,mo,dn,now,now).run();
+    }
+    // NOT validated against local p50 on purpose. v15: "Platform does not validate whether the math
+    // is favorable to the dealer -- mispricing is the dealer's, and the console must make that
+    // visible rather than prevent it." Visibility is the product; prevention is the liability.
+    await logEvent(env,{action:"dealer.cell_placed",source:"app",vehicle_id:vid,confidence:mo}).catch(()=>{});
+    return json({ok:true,down:dn,monthly:mo});
+  }
+  const r=await env.DB.prepare(
+    "SELECT p.id,p.vdp_id,p.monthly,p.down,p.locked, v.year,v.make,v.model,v.trim,v.price,v.photos,v.lot_date "+
+    "FROM listing_placements p JOIN vdps v ON v.id=p.vdp_id "+
+    "WHERE p.dealer_id=? AND v.active=1 ORDER BY v.lot_date IS NULL, v.lot_date ASC")
+    .bind(dealer.id).all().catch(()=>({results:[]}));
+  const cells={}; for(const d of V15_DOWN) for(const m of V15_MO) cells[d+"x"+m]={down:d,monthly:m,units:[]};
+  let unplaced=0;
+  // One card per CAR, not per placement row. dealerPlacements() allows one car in many credit
+  // bands, so a unit can carry several rows; without this the same car appears three times in the
+  // grid and the lot looks bigger than it is. Oldest-first ordering above means the row we keep is
+  // deterministic.
+  const seen=new Set();
+  for(const x of (r.results||[])){
+    if(seen.has(x.vdp_id)) continue; seen.add(x.vdp_id);
+    const exact=inCell(x.down,x.monthly);
+    const c=exact?{down:+x.down,monthly:+x.monthly}:snapCell(x.down,x.monthly);
+    if(!exact) unplaced++;
+    // Age is REAL or ABSENT — never inferred. lot_date is now required on new listings, but the
+    // backlog predates that, and a guessed age is worse than a blank one on a screen a dealer
+    // prices from.
+    const days=x.lot_date&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.lot_date))
+      ? Math.max(0,Math.floor((Date.now()-Date.parse(x.lot_date+"T00:00:00Z"))/864e5)) : null;
+    const k=c.down+"x"+c.monthly; if(!cells[k]) continue;
+    cells[k].units.push({id:x.id,vdp_id:x.vdp_id,year:x.year,make:x.make,model:x.model,trim:x.trim,
+      price:x.price,photos:JSON.parse(x.photos||"[]"),days_on_lot:days,
+      exact:exact?1:0,locked:x.locked,listed_down:+x.down||0,listed_monthly:+x.monthly||0});
+  }
+  return json({ok:true,down:V15_DOWN,monthly:V15_MO,cells:Object.values(cells),
+    // `approx` is how many units are only in a cell because we rounded them there. A dealer seeing
+    // "38 units are approximate" knows the grid is a suggestion until they place them.
+    approx:unplaced});
 }
 // T-102: drag-drop credit/price placements. One car → many bands (credit-tier pre-staging). rate_markup is dealer-facing only.
 async function dealerPlacements(request,env,uid,dealer){
