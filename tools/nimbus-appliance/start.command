@@ -1,5 +1,5 @@
 #!/bin/zsh
-# NIMBUS appliance — double-click to power ai.carnimbus.com from this Mac's RAM.
+# NIMBUS appliance — double-click to power ai.carnimbus.us from this Mac's RAM.
 cd "$(dirname "$0")"
 set -e
 

@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 const COLS = ["phone","full_name","zip","buy_method","max_down","max_monthly","fico","income","dream_car","reason","hobbies",
   "current_year","current_make","current_model","current_miles","trade_in","trade_value","timeline","body_pref","must_haves"];
-const ORIGIN = process.argv[3] || "https://carnimbus.com";
+const ORIGIN = process.argv[3] || "https://carnimbus.us";
 const file = process.argv[2];
 if(!file){ console.error("usage: node tools/import-buyers.mjs <buyers.csv> [origin]"); process.exit(1); }
 const KEY = readFileSync(join(homedir(),".carnimbus-admin-key"),"utf8").trim();
@@ -36,4 +36,4 @@ for(let i=0;i<buyers.length;i+=50){
   const d=await r.json().catch(()=>({}));
   console.log(`batch ${i/50+1}: HTTP ${r.status} ${JSON.stringify(d)}`);
 }
-console.log("done. Now POST /api/admin/reindex (or hit Reindex on ai.carnimbus.com/pools) to embed them.");
+console.log("done. Now POST /api/admin/reindex (or hit Reindex on ai.carnimbus.us/pools) to embed them.");

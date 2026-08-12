@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Talk to the car</title>
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.tdots{display:inline-flex;gap:4px;align-items:center;height:12px}
+.tdots i{width:6px;height:6px;border-radius:50%;background:#9fb4dd;animation:tblink 1s infinite}
+.tdots i:nth-child(2){animation-delay:.15s}.tdots i:nth-child(3){animation-delay:.3s}
+@keyframes tblink{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+@media(max-width:700px){.app-rail{display:none!important}.app-split{flex-direction:column!important}.app-split>*{border-right:none!important}}
+.bopt{font:600 11px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:7px 12px;cursor:pointer;background:transparent}
+.bopt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 16px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:calc(100vh - 96px);display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(11,99,229,.16);top:-60px;left:-40px"></div><div class="cine-vig"></div></div>
+    <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
+    <div class="z row app-split" style="flex:1;min-height:0" id="vdp">
+      <div style="flex:1.1;padding:16px;border-right:1px solid rgba(24,200,255,.12);min-width:0">
+        <div style="border-radius:14px;overflow:hidden;height:min(340px,42vh);background:linear-gradient(135deg,#0a1f4d,#06163b)"><img id="v-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+        <div class="disp" id="v-title" style="font-size:18px;font-weight:600;margin-top:13px"></div>
+        <div class="cy" id="v-price" style="font:700 17px Manrope;margin:2px 0"></div>
+        <div id="v-meta" style="font:500 10px Manrope;color:#8ca0c4"></div>
+        <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-top:14px">SPECS</div>
+        <div id="v-specs" class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:7px"></div>
+        <div class="mono" id="v-feats-h" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-top:14px;display:none">FEATURES</div>
+        <div id="v-feats" class="col" style="gap:4px;margin-top:7px"></div>
+        <div class="mono" style="font-size:9px;color:#8ca0c4;letter-spacing:.1em;margin-top:14px">YOUR NUMBERS</div>
+        <div id="v-money" class="glass pd" style="margin-top:7px;padding:11px 13px;font:600 11px Manrope;color:#e2e9f2"></div>
+      </div>
+      <div class="col" style="flex:1;min-width:0;height:100%">
+        <div class="row" style="align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid rgba(24,200,255,.12)">
+          <span style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex:none;border:1px solid rgba(24,200,255,.3)"><img id="c-img" src="" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"></span>
+          <div style="flex:1;min-width:0"><div id="c-name" style="font:700 11px Manrope"></div><div id="c-tag" style="font:600 8px Manrope;color:#cfe0ff;font-style:italic"></div></div>
+          <button id="ask-feed" type="button" class="btn ghost sm" style="flex:none">💬 Ask the Feed</button>
+        </div>
+        <div class="col" id="thread" style="flex:1;padding:13px 14px;gap:8px;overflow-y:auto;min-height:0"></div>
+        <div id="approved" style="display:none;margin:0 14px;border:1px solid rgba(31,138,91,.5);background:rgba(31,138,91,.1);border-radius:12px;padding:9px 11px;align-items:center;gap:9px"><span class="ic-sm" style="color:#54d699"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></span><div style="flex:1"><div style="font:700 11px Manrope;color:#fff">Drive booked · pass ready</div><div style="font:500 9px Manrope;color:#9fd9b8">Soft check · 0 credit hit</div></div></div>
+        <div style="padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)" class="row">
+          <label class="vh" for="chat-in">Message the car</label>
+          <input id="chat-in" class="pill" style="flex:1;height:44px" placeholder="Ask me anything.">
+          <button id="chat-send" class="btn primary md" type="button" style="margin-left:8px">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js?v=3" defer></script>
+<script src="/assets/js/car.js?v=6" defer></script>
+<script src="/assets/nimbus-sensor.js" defer></script>
+</body>
+</html>

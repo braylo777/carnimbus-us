@@ -1,5 +1,5 @@
 #!/bin/bash
-# nimbus-edge WAKE agent — plugging the verified CNMB drive boots the brain and opens ai.carnimbus.com.
+# nimbus-edge WAKE agent — plugging the verified CNMB drive boots the brain and opens ai.carnimbus.us.
 # Guarded (launchd StartOnMount fires on every mount), fail-closed (needs the drive's Ed25519 key),
 # idempotent (skips anything already listening), local-only (no deploy, no public cutover).
 set -u
@@ -57,8 +57,8 @@ fi
 
 # 4. OPEN THE DOOR — brain online.
 sleep 1
-open "https://ai.carnimbus.com"
-log "awake — opened ai.carnimbus.com"
+open "https://ai.carnimbus.us"
+log "awake — opened ai.carnimbus.us"
 
 # 5. SLEEP ON UNPLUG — background watcher tears the local daemons down when the drive leaves.
 if [ ! -f "$RUN/watcher.pid" ] || ! kill -0 "$(cat "$RUN/watcher.pid" 2>/dev/null)" 2>/dev/null; then

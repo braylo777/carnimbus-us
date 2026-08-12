@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // CarNimbus inventory importer — loads a LAcarGUY export (CSV or JSON) into vdps via /api/vdp/ingest.
-// Usage: node tools/import-inventory.mjs <export.csv|export.json> [https://carnimbus.com]
+// Usage: node tools/import-inventory.mjs <export.csv|export.json> [https://carnimbus.us]
 // Admin key is read from ~/.carnimbus-admin-key (never printed). Edit COLMAP for the real headers.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -11,7 +11,7 @@ const COLMAP = { // export-header -> vdp field. Adjust to LAcarGUY's actual colu
   price_mo:"price_mo", price_total:"price_total", miles:"miles", mileage:"mileage", drivetrain:"drivetrain", body:"body", location_zip:"location_zip",
   description:"description", photo:"photo", features:"features"
 };
-const ORIGIN = process.argv[3] || "https://carnimbus.com";
+const ORIGIN = process.argv[3] || "https://carnimbus.us";
 const file = process.argv[2];
 if(!file){ console.error("usage: node tools/import-inventory.mjs <export.csv|export.json> [origin]"); process.exit(1); }
 const KEY = readFileSync(join(homedir(),".carnimbus-admin-key"),"utf8").trim();

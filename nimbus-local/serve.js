@@ -1,4 +1,4 @@
-// serve.js — the Beyond.js projection server. Projects carnimbus.com straight from the CNMB flash to
+// serve.js — the Beyond.js projection server. Projects carnimbus.us straight from the CNMB flash to
 // the network with ZERO dependencies and NO Cloudflare/GitHub in the path. It loads the real, unmodified
 // worker.js as ESM in-memory (no repo package.json needed), builds a sovereign `env` (SQLite/local-vector/
 // local-AI), and bridges the CNMB hardware-key admin session to the worker's existing x-admin-key gate.
@@ -96,7 +96,7 @@ if (certPath) {
 }
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌩️  NIMBUS projection live — carnimbus.com served from the CNMB flash`);
+  console.log(`🌩️  NIMBUS projection live — carnimbus.us served from the CNMB flash`);
   console.log(`   ${certPath ? 'https' : 'http'}://0.0.0.0:${PORT}  (LAN-reachable; no Cloudflare, no GitHub in path)`);
   console.log(`   AI backend: ${env.AI_BACKEND_URL}   |   cron: ${has('--cron') ? 'ON (5m)' : 'off'}`);
 });

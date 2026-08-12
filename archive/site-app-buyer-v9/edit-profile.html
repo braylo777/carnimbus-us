@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="canonical" href="https://carnimbus.us/browse">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/assets/favicon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Your profile</title>
+<meta name="description" content="Ten quick questions. Your matches do the rest.">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+.pw{max-width:520px;margin:0 auto;padding:40px 20px;color:#e2e9f2}
+.pw h1{font:700 26px 'Space Grotesk';margin:14px 0 4px}
+.pw .sub{font:500 13px/1.5 Manrope;color:#aebfdf}
+.pw .card{margin-top:18px;border:1px solid rgba(24,200,255,.28);border-radius:18px;background:rgba(255,255,255,.03);padding:6px 20px 20px}
+.pw .q{font:700 14px Manrope;margin-bottom:10px}
+.pw .opts{display:flex;flex-wrap:wrap;gap:8px}
+.pw .opt{font:600 12px Manrope;color:#cbd5e1;border:1px solid rgba(24,200,255,.25);border-radius:999px;padding:9px 14px;cursor:pointer;background:transparent}
+.pw .opt.on{background:rgba(24,200,255,.16);color:#18C8FF;border-color:#18C8FF}
+.pw input.pill{width:100%}
+.pw section{display:block;padding:16px 0;border-bottom:1px solid rgba(24,200,255,.1)}
+.pw section:last-of-type{border-bottom:none}
+.pw .qnum{font:700 9px ui-monospace,Menlo,monospace;color:#18C8FF;letter-spacing:.16em;margin-bottom:5px}
+</style>
+</head>
+<body style="background:#06163b">
+<noscript><div style="max-width:640px;margin:0 auto;padding:40px;font-family:system-ui;color:#e2e9f2;text-align:center"><h1>CarNimbus profile</h1><p>This flow needs JavaScript. Email <a style="color:#18C8FF" href="mailto:hello@carnimbus.us">hello@carnimbus.us</a>.</p></div></noscript>
+<main class="pw">
+  <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 4px;margin:-20px 0 14px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
+
+  <!-- the Worker's page gate guarantees a session — the quiz is the whole page (no in-page OTP; /signin is the only door) -->
+  <div id="ph-quiz">
+    <form id="quiz" class="card" style="margin-top:0">
+      <section data-q="full_name"><div class="qnum">01 · YOU</div><div class="q">Name</div><label class="vh" for="f-name">Full name</label><input id="f-name" class="pill tin" type="text" placeholder="Brandon Lopez" maxlength="60"></section>
+      <section data-q="zip"><div class="qnum">02 · LOCATION</div><div class="q">ZIP code</div><label class="vh" for="f-zip">ZIP</label><input id="f-zip" class="pill tin" type="text" inputmode="numeric" placeholder="90064" maxlength="5"></section>
+      <section data-q="buy_method"><div class="qnum">03 · MONEY</div><div class="q">How are you buying?</div><div class="opts" data-single><button type="button" class="opt" data-v="cash">Cash</button><button type="button" class="opt" data-v="finance">Finance</button><button type="button" class="opt" data-v="lease">Lease</button></div></section>
+      <section data-q="max_down"><div class="q">Max down payment</div><div class="opts" data-single><button type="button" class="opt" data-v="0">$0</button><button type="button" class="opt" data-v="500">$500</button><button type="button" class="opt" data-v="1000">$1k</button><button type="button" class="opt" data-v="2000">$2k</button><button type="button" class="opt" data-v="3000">$3k</button><button type="button" class="opt" data-v="5000">$5k+</button></div></section>
+      <section data-q="max_monthly"><div class="q">Max monthly payment</div><div class="opts" data-single><button type="button" class="opt" data-v="150">~$150</button><button type="button" class="opt" data-v="300">~$300</button><button type="button" class="opt" data-v="500">~$500</button><button type="button" class="opt" data-v="700">~$700</button><button type="button" class="opt" data-v="900">$900+</button></div></section>
+      <section data-q="fico"><div class="q">FICO range</div><div class="opts" data-single><button type="button" class="opt" data-v="800+">800+</button><button type="button" class="opt" data-v="770-799">770–799</button><button type="button" class="opt" data-v="740-769">740–769</button><button type="button" class="opt" data-v="710-739">710–739</button><button type="button" class="opt" data-v="680-709">680–709</button><button type="button" class="opt" data-v="650-679">650–679</button><button type="button" class="opt" data-v="620-649">620–649</button><button type="button" class="opt" data-v="under 620">Under 620</button></div></section>
+      <section data-q="income"><div class="q">Household income</div><div class="opts" data-single><button type="button" class="opt" data-v="under 25k">Under $25k</button><button type="button" class="opt" data-v="25-50k">$25–50k</button><button type="button" class="opt" data-v="50-75k">$50–75k</button><button type="button" class="opt" data-v="75-100k">$75–100k</button><button type="button" class="opt" data-v="100-150k">$100–150k</button><button type="button" class="opt" data-v="150-300k">$150–300k</button><button type="button" class="opt" data-v="300k+">$300k+</button></div></section>
+      <section data-q="dream_car"><div class="qnum">04 · THE CAR</div><div class="q">Your dream car, in one line</div><label class="vh" for="f-dream">Dream car</label><input id="f-dream" class="pill tin" type="text" placeholder="Blacked-out Porsche Macan" maxlength="140"></section>
+      <section data-q="body_pref"><div class="q">Body style</div><div class="opts" data-single><button type="button" class="opt" data-v="SUV">SUV</button><button type="button" class="opt" data-v="Sedan">Sedan</button><button type="button" class="opt" data-v="EV">EV</button><button type="button" class="opt" data-v="Truck">Truck</button><button type="button" class="opt" data-v="any">Surprise me</button></div>
+        <div class="q" style="margin-top:14px;font-size:12px">Must-haves (up to 3)</div><div class="opts" data-multi data-q2="must_haves"><button type="button" class="opt" data-v="AWD">AWD</button><button type="button" class="opt" data-v="3rd row">3rd row</button><button type="button" class="opt" data-v="CarPlay">CarPlay</button><button type="button" class="opt" data-v="Panoramic roof">Panoramic roof</button><button type="button" class="opt" data-v="Tow package">Tow package</button><button type="button" class="opt" data-v="Heated seats">Heated seats</button><button type="button" class="opt" data-v="Low miles">Low miles</button><button type="button" class="opt" data-v="Certified">Certified</button></div></section>
+      <section data-q="current_car"><div class="qnum">05 · TODAY</div><div class="q">What are you driving now? <span style="font:500 10px Manrope;color:#8ca0c4">(optional)</span></div>
+        <div class="row" style="gap:8px"><input id="f-cyear" class="pill tin" type="text" inputmode="numeric" placeholder="Year" maxlength="4" style="flex:1"><input id="f-cmake" class="pill tin" type="text" placeholder="Make" maxlength="30" style="flex:2"></div>
+        <div class="row" style="gap:8px;margin-top:8px"><input id="f-cmodel" class="pill tin" type="text" placeholder="Model" maxlength="40" style="flex:2"><input id="f-cmiles" class="pill tin" type="text" inputmode="numeric" placeholder="Miles" maxlength="7" style="flex:1"></div>
+        <div class="row" style="gap:8px;margin-top:8px"><input id="f-ccolor" class="pill tin" type="text" placeholder="Color" maxlength="24" style="flex:1"><input id="f-cdetails" class="pill tin" type="text" placeholder="Other details" maxlength="60" style="flex:2"></div></section>
+      <section data-q="trade_in"><div class="q">Trade it in?</div><div class="opts" data-single><button type="button" class="opt" data-v="yes">Yes</button><button type="button" class="opt" data-v="maybe">Maybe</button><button type="button" class="opt" data-v="no">No</button></div>
+        <div class="q" style="margin-top:10px;font:500 11px Manrope;color:#8ca0c4">We estimate your trade-in value from your car's specs above — shown in your Garage.</div></section>
+      <section data-q="timeline"><div class="q">When do you need it?</div><div class="opts" data-single><button type="button" class="opt" data-v="this_week">This week</button><button type="button" class="opt" data-v="this_month">This month</button><button type="button" class="opt" data-v="1_3_months">1–3 months</button><button type="button" class="opt" data-v="browsing">Just looking</button></div></section>
+      <section data-q="reason"><div class="q">Why are you looking now?</div><div class="opts" data-single><button type="button" class="opt" data-v="my current car broke down">Car broke down</button><button type="button" class="opt" data-v="growing family">Growing family</button><button type="button" class="opt" data-v="ready to upgrade">Upgrade</button><button type="button" class="opt" data-v="lease ending">Lease ending</button><button type="button" class="opt" data-v="new job">New job</button><button type="button" class="opt" data-v="other">Other</button></div><input class="pill tin other-in" type="text" placeholder="Tell us…" maxlength="120" style="display:none;margin-top:10px"></section>
+      <section data-q="hobbies"><div class="qnum">06 · LIFE</div><div class="q">Top hobbies (up to 5)</div><div class="opts" data-multi data-max="5"><button type="button" class="opt" data-v="Weightlifting">Weightlifting</button><button type="button" class="opt" data-v="Chess">Chess</button><button type="button" class="opt" data-v="Traveling">Traveling</button><button type="button" class="opt" data-v="Filmmaking">Filmmaking</button><button type="button" class="opt" data-v="Gaming">Gaming</button><button type="button" class="opt" data-v="Cooking">Cooking</button><button type="button" class="opt" data-v="Hiking">Hiking</button><button type="button" class="opt" data-v="Music">Music</button><button type="button" class="opt" data-v="Sports">Sports</button><button type="button" class="opt" data-v="Reading">Reading</button><button type="button" class="opt" data-v="Cars">Cars</button><button type="button" class="opt" data-v="Photography">Photography</button></div></section>
+      <section data-q="td_pref"><div class="qnum">07 · TEST DRIVE</div><div class="q">When's ideal for a test drive?</div><div class="opts" data-single><button type="button" class="opt" data-v="mornings">Mornings (9–12)</button><button type="button" class="opt" data-v="afternoons">Afternoons (12–4)</button><button type="button" class="opt" data-v="after_work">After work (4–7)</button><button type="button" class="opt" data-v="weekends">Weekends</button></div></section>
+    </form>
+    <button type="button" id="qz-save" class="btn primary md" style="width:100%;margin-top:16px">Save my profile</button>
+    <div class="wl-msg" id="qz-msg" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <!-- phase 3: done -->
+  <div id="ph-done" style="display:none">
+    <div class="wl-done" style="margin-top:20px"><div class="wl-done-h">Profile saved. 🔑</div>
+    <div class="wl-done-p">Your matches are re-ranking right now.</div>
+    <div class="wl-done-row"><a class="btn primary" href="/profile" style="text-decoration:none">Back to my profile →</a></div></div>
+  </div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/runtime.js?v=3" defer></script>
+<script src="/assets/js/edit-profile.js?v=4" defer></script>
+<script src="/assets/nimbus-sensor.js" defer></script>
+</body>
+</html>

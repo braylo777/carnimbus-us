@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<meta name="theme-color" content="#06163b">
+<title>CarNimbus — Feed</title>
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+@media(max-width:700px){.app-rail{display:none!important}.app-split{flex-direction:column!important}.app-split>*{border-right:none!important}}
+</style>
+</head>
+<body>
+<main class="stage">
+<div style="padding:0 20px 40px"><div class="bw cv">
+  <div style="position:relative;background:#06163b;min-height:calc(100dvh - 96px);display:flex;flex-direction:column">
+    <div class="cine"><div class="cine-grid"></div><div class="glow" style="width:300px;height:300px;background:rgba(24,200,255,.12);top:-80px;right:-40px"></div><div class="cine-vig"></div></div>
+    <div class="z row" id="appnav" style="height:52px;align-items:center;padding:0 18px;border-bottom:1px solid rgba(24,200,255,.12);gap:16px"></div>
+    <div class="z col" style="flex:1;min-height:0">
+      <div class="row" style="gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid rgba(24,200,255,.12)">
+        <input id="nm-zip" class="pill" style="flex:1;height:38px" placeholder="ZIP near you" inputmode="numeric" maxlength="5">
+        <button id="nm-loc" class="btn ghost sm" type="button">📍 Use my location</button>
+        <span id="nm-live" style="display:none;align-items:center;gap:5px;font:700 10px Manrope;color:#4ade80"><span style="width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80"></span>live</span>
+      </div>
+      <div id="posts" style="flex:1;overflow-y:auto;min-height:0"></div>
+      <div class="row" style="gap:8px;padding:12px 14px;border-top:1px solid rgba(24,200,255,.12)">
+        <label class="vh" for="post-in">Post to the community</label>
+        <input id="post-in" class="pill" style="flex:1;height:44px" placeholder="What's on your mind?" maxlength="500">
+        <button id="post-send" class="btn primary md" type="button">Post</button>
+      </div>
+      <div class="wl-msg" id="post-msg" style="display:none;padding:0 16px 10px"></div>
+    </div>
+  </div>
+</div></div>
+</main>
+<script src="/assets/signals.js" defer></script>
+<script src="/assets/zip3.js" defer></script>
+<script src="/assets/runtime.js?v=3" defer></script>
+<script src="/assets/js/feed.js?v=4" defer></script>
+<script src="/assets/nimbus-sensor.js" defer></script>
+</body>
+</html>
