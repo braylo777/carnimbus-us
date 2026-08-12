@@ -18,9 +18,24 @@ decisions, and promote only on evidence. Autonomy is a privilege backed by data,
 | **L3** | Fully autonomous | Agent acts without per-decision oversight, within eval gates | Human monitors aggregate metrics only |
 
 **Reversibility cap:** irreversible actions never reach L3. A real vehicle purchase, an outbound SMS to a
-non-consented number, or any action a buyer can't undo caps at **L1** by policy — no accuracy score buys
-past it. Reversible actions (showing an enrichment, drafting a reply, publishing a page that can be
-unpublished) may climb to L2/L3.
+non-consented number, **a payout to a creator**, or any action a buyer can't undo caps at **L1** by policy
+— no accuracy score buys past it. Reversible actions (showing an enrichment, drafting a reply, publishing
+a page that can be unpublished) may climb to L2/L3.
+
+**Named L1-forever actions**, enumerated so nobody re-derives the judgement later:
+
+| Action | Why it can never graduate |
+|---|---|
+| `creator_payout` | A Stripe transfer moves real money out of the platform. It cannot be reversed from inside this system — a mistake becomes a collections problem, not an `UPDATE`. |
+
+Everything else in `NIMBUS_ACTIONS` is reversible by construction (`engine_on` toggle, `active` flip,
+`is_demo=1` soft-hide, `status` transitions, `clawed_back`), which is what makes the confirm gate a safety
+net rather than the only line of defence. `creator_clawback` refuses on an already-`paid` earning for the
+same reason: once money has left, the correction belongs in Stripe, not here.
+
+**The Creator agent** (`creatorAgent`, added 2026-07-28) runs at **L2 for reversible upkeep only** —
+closing dead drops, re-pricing drops where `locked=0`, re-scoring creators. It may not approve a post,
+suspend a creator, claw back an earning, or pay anyone; all of those route through `aiAct`'s confirm gate.
 
 ---
 

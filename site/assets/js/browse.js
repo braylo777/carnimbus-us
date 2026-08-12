@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded",function(){
   var CARS=[],AUTHED=false,F={body:"All",maxMo:800,makes:{},q:""};
   var grid=document.getElementById("grid"),count=document.getElementById("count");
   function slug(c){return String(c.year+'-'+c.make+'-'+c.model).toLowerCase().replace(/[^a-z0-9]+/g,'-');}
-  function hrefFor(c){return AUTHED?("https://app.carnimbus.com/talk/"+slug(c)):"https://app.carnimbus.com/signin";}   // anon → signup, authed → the car
+  function hrefFor(c){return "/used/"+slug(c)+"-"+c.id;}   // the public car page (same target as a creator tracked link)
   function card(c){return '<a class="glass vcard hoverable" href="'+hrefFor(c)+'" style="text-decoration:none;display:block">'+
     '<div class="vphoto">'+(c.photos&&c.photos[0]?'<img src="'+c.photos[0]+'" alt="'+c.year+' '+c.make+' '+c.model+'" loading="lazy" onerror="this.remove()">':'')+
     '<span class="vbadge cert">Certified</span>'+(c.match!=null?'<span class="vbadge best">'+c.match+'% match</span>':'')+'</div>'+

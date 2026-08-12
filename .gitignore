@@ -6,6 +6,9 @@ node_modules/
 .walkthroughs/
 
 .claude/brain/
+# Loose brain notes that live one dir up from brain/. Same content, same intent:
+# local knowledge base, not published. .claude/skills/ stays tracked.
+.claude/*.md
 nimbus-local/nimbus.sqlite*
 nimbus-local/.env.local
 **/*.ed25519.key

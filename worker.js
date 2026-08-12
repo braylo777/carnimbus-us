@@ -13,15 +13,15 @@ import { scoreCar, segOf, typeOf, condOf } from "./site/assets/match.js";   // A
 const ALLOWED_ORIGINS = [
   "https://carnimbus.com",
   "https://www.carnimbus.com",
-  "https://carnimbus.us",
-  "https://www.carnimbus.us",
 ];
 // H-CSRF: same-origin gate for state-changing POSTs. Empty Origin allowed (same-origin nav + server-to-server);
-// browsers always attach Origin on cross-site POST — the actual CSRF vector we reject. Any carnimbus subdomain
-// (app./dealer./admin./ai.) is first-party — they POST same-origin to /api/* — so accept the whole domain family,
+// browsers always attach Origin on cross-site POST — the actual CSRF vector we reject. Any carnimbus.com subdomain
+// (dealer./creator./ai.) is first-party — they POST same-origin to /api/* — so accept the whole domain family,
 // not just the ALLOWED_ORIGINS apex list (which is for the marketing waitlist only).
+// 2026-07-28: carnimbus.us removed. It was trusted as first-party here while pointing at a retired Netlify
+// site we no longer control the surface of — a strict tightening, not cosmetic cleanup.
 function sameOrigin(request){ const o=request.headers.get("Origin")||""; if(!o) return true;
-  try{ const h=new URL(o).hostname; return h==="carnimbus.com"||h==="carnimbus.us"||h.endsWith(".carnimbus.com")||h.endsWith(".carnimbus.us"); }
+  try{ const h=new URL(o).hostname; return h==="carnimbus.com"||h.endsWith(".carnimbus.com"); }
   catch(_){ return false; } }
 
 const SEC = {
@@ -36,7 +36,7 @@ const SEC = {
   "Permissions-Policy": "geolocation=(), microphone=(), camera=(self), interest-cohort=()",
   "Content-Security-Policy": [
     "default-src 'self'",
-    "img-src 'self' data:",
+    "img-src 'self' data: https:",   // R8: listing photos live on dealer CDNs — images only; scripts/connect stay locked
     // 'unsafe-inline' required by the many inline style= attributes in the exported HTML.
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
@@ -62,11 +62,16 @@ export default {
     let url = new URL(request.url);
     // Subdomain doors: one Worker, path-prefixed surfaces.
     const sub=url.hostname.split(".")[0];
-    const PREFIX={app:"/app",dealer:"/dealer",admin:"/admin",ai:"/ai"}[sub];
+    // 2026-07-28: four hosts only — carnimbus.com · dealer. · creator. · ai.
+    // app. and admin. are detached in wrangler.jsonc; their 301s below survive as bookmark safety nets.
+    const PREFIX={dealer:"/dealer",creator:"/creator",ai:"/ai"}[sub];
     // AG: ai.carnimbus.com serves the NIMBUS ops HUD again (admin-gated at the API). APIs (/api/ai/*) resolve here.
     // (redirect removed — the /ai PREFIX + /index.html fallback serves site/ai/index.html; noindex via asset header.)
     // AH2: admin.carnimbus.com is retired — ai.carnimbus.com is the single NIMBUS access point.
     if(sub==="admin" && !url.pathname.startsWith("/api/")) return Response.redirect("https://ai.carnimbus.com"+url.pathname.replace(/^\/admin/,"")+url.search,301);
+    // R3: app.carnimbus.com (the buyer app) is retired — "only a website for now". Redirect all pages to the site;
+    // /app/* routes + site/app/* code stay intact for a future relaunch. APIs still resolve (nothing else depends on them).
+    if(sub==="app" && !url.pathname.startsWith("/api/")) return Response.redirect("https://carnimbus.com"+(url.pathname==="/"?"":url.pathname)+url.search,301);
     // Renamed app routes: /chat → /matches, /you → /profile (301). /talk/<slug> = clean car URL (resolved below).
     if(sub==="app"){ const rn={"/chat":"/matches","/you":"/profile","/app/chat":"/matches","/app/you":"/profile"};
       if(rn[url.pathname]) return Response.redirect(url.origin+rn[url.pathname]+url.search,301);
@@ -89,10 +94,12 @@ export default {
         else return Response.redirect(url.origin+"/matches",302); } }
     // Vanity URLs: legacy prefixed or .html paths 301 to the clean form on the right subdomain.
     { const P=url.pathname;
-      if(!P.startsWith("/api/")&&!P.startsWith("/assets/")&&!P.startsWith("/pass/")&&!P.startsWith("/used/")){
-        if(!PREFIX && (P.startsWith("/app/")||P.startsWith("/dealer/"))){
-          const s2=P.startsWith("/app/")?"app":"dealer";
-          let clean=P.replace(/^\/(app|dealer)/,"").replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
+      if(!P.startsWith("/api/")&&!P.startsWith("/assets/")&&!P.startsWith("/pass/")&&!P.startsWith("/used/")&&!P.startsWith("/c/")){
+        // 2026-07-28: app.carnimbus.com is retired — legacy /app/* paths land on the public browse page.
+        if(!PREFIX && P.startsWith("/app/")) return Response.redirect(url.origin+"/browse"+url.search,301);
+        if(!PREFIX && (P.startsWith("/dealer/")||P.startsWith("/creator/"))){
+          const s2=P.startsWith("/dealer/")?"dealer":"creator";
+          let clean=P.replace(/^\/(dealer|creator)/,"").replace(/\.html$/,"")||"/"; if(clean==="/index")clean="/";
           return Response.redirect("https://"+s2+".carnimbus.com"+clean+url.search,301);
         }
         if(PREFIX && (P.startsWith(PREFIX+"/")||/\.html$/.test(P))){
@@ -102,14 +109,16 @@ export default {
       } }
     if(PREFIX && !url.pathname.startsWith(PREFIX) && !url.pathname.startsWith("/api/") &&
        !url.pathname.startsWith("/assets/") && !url.pathname.startsWith("/pass/") && !url.pathname.startsWith("/used/") &&
+       !url.pathname.startsWith("/c/") &&      // creator tracked links resolve on every host
        !url.pathname.startsWith("/sitemap") && url.pathname!=="/robots.txt" &&
        url.pathname!=="/favicon.ico" && url.pathname!=="/site.webmanifest"){
       // AG-fix: root serves the DIRECTORY form ("/ai/","/admin/") not "/index.html" — Assets canonicalizes an
       // explicit index.html to its dir with a 307, which then hit the clean-URL rule below and looped.
       // AH2: ai.carnimbus.com is the ONLY console door — root serves the NIMBUS HUD (site/ai/index.html);
       // deeper ai paths (/pools,/events,/growth,/wall) serve the admin tool pages from site/admin/.
+      // NOTE: the /admin PATH prefix stays even though the admin. HOST is gone — ai. deep paths serve site/admin/*.
       url.pathname = sub==="ai" ? (url.pathname==="/" ? "/ai/" : "/admin"+url.pathname)
-                   : PREFIX + (url.pathname==="/" ? (sub==="app"?"/discover.html":sub==="dealer"?"/signin":"/") : url.pathname);
+                   : PREFIX + (url.pathname==="/" ? ((sub==="dealer"||sub==="creator")?"/signin":"/") : url.pathname);
       request = new Request(url, request);
     }
     // ---- SEO surface (host-aware, apex-canonical) ----
@@ -170,8 +179,16 @@ export default {
     if (url.pathname === "/api/dealer/roi")                               return sec(await withDealer(request, env, dealerRoi));
     if (url.pathname === "/api/dealer/listing" && request.method === "POST") return sec(await withDealer(request, env, dealerListing));
     if (url.pathname === "/api/dealer/ingest-url" && request.method === "POST") return sec(await withDealer(request, env, dealerIngestUrl));
+    if (url.pathname === "/api/dealer/placements/auto" && request.method==="POST") return sec(await withDealer(request, env, dealerAutoPlace));
+    if (url.pathname === "/api/dealer/listing-status" && request.method==="POST") return sec(await withDealer(request, env, dealerListingStatus));
+    if (url.pathname === "/api/dealer/lead-thread")                        return sec(await withDealer(request, env, dealerLeadThread));
     if (url.pathname === "/api/dealer/placements")                        return sec(await withDealer(request, env, dealerPlacements));
     if (url.pathname === "/api/dealer/leads")                             return sec(await withDealer(request, env, dealerLeads));
+    if (url.pathname === "/api/dealer/lead-brief" && request.method==="POST") return sec(await withDealer(request, env, dealerLeadBrief));
+    if (url.pathname === "/api/dealer/lead-status" && request.method==="POST") return sec(await withDealer(request, env, dealerLeadStatus));
+    if (url.pathname === "/api/dealer/lead-history")                       return sec(await withDealer(request, env, dealerLeadHistory));
+    if (url.pathname === "/api/dealer/settings" && request.method==="POST") return sec(await withDealer(request, env, dealerSettings));
+    if (url.pathname === "/api/dealer/lead-ics")                          return sec(await withDealer(request, env, dealerLeadIcs));
     if (url.pathname === "/api/dealer/checkin" && request.method === "POST") return sec(await withDealer(request, env, dealerCheckin));
     if (url.pathname === "/api/dealer/feedback")                             return sec(await withDealer(request, env, dealerFeedback));
     if (url.pathname === "/api/admin/stats")                              return sec(await adminOnly(request, env, adminStats));
@@ -184,10 +201,25 @@ export default {
     if (url.pathname === "/api/chats/recent")                             return sec(await withUser(request, env, recentChat));
     if (url.pathname === "/api/chats")                                    return sec(await withUser(request, env, chatList));
     if (url.pathname === "/api/dealer/chat")                              return sec(await withDealer(request, env, dealerChat));
+    // ---- Creator Network (creator.carnimbus.com) ----
+    if (url.pathname === "/api/creator/signup" && request.method === "POST")  return sec(await creatorSignup(request, env));
+    if (url.pathname === "/api/creator/login"  && request.method === "POST")  return sec(await creatorLogin(request, env));
+    if (url.pathname === "/api/creator/feed")                                 return sec(await withCreator(request, env, creatorFeed));
+    if (url.pathname === "/api/creator/claim"  && request.method === "POST")  return sec(await withCreator(request, env, creatorClaim));
+    if (url.pathname === "/api/creator/post"   && request.method === "POST")  return sec(await withCreator(request, env, creatorPost));
+    if (url.pathname === "/api/creator/earnings")                             return sec(await withCreator(request, env, creatorEarnings));
+    if (url.pathname === "/api/creator/connect/start" && request.method === "POST") return sec(await withCreator(request, env, creatorConnectStart));
+    if (url.pathname === "/api/creator/connect/return")                       return sec(await withCreator(request, env, creatorConnectReturn));
+    if (url.pathname === "/api/admin/creator/queue")                          return sec(await adminOnly(request, env, (req,e)=>creatorQueue(req,e)));
+    // Public tracked link — host-agnostic, no auth. Redirects to the car and drops the cn_ref cookie.
+    { const cm=url.pathname.match(/^\/c\/([A-Za-z0-9_-]{4,40})$/); if(cm) return await creatorRedirect(request, env, cm[1]); }
+    if (url.pathname === "/api/ai/verify")                                return sec(await adminOnly(request, env, (req,e)=>aiVerify(req,e)));
     if (url.pathname === "/api/ai/pulse")                                 return sec(await adminOnly(request, env, (req,e)=>aiPulse(e)));
     if (url.pathname === "/api/ai/graph")                                 return sec(await adminOnly(request, env, (req,e)=>aiGraph(e)));
     if (url.pathname === "/api/ai/trends")                                return sec(await adminOnly(request, env, (req,e)=>aiTrends(e)));
     if (url.pathname === "/api/ai/ask" && request.method === "POST")      return sec(await adminOnly(request, env, (req,e)=>aiAsk(req,e)));
+    if (url.pathname === "/api/ai/map")                                   return sec(await adminOnly(request, env, (req,e)=>aiMap(req,e)));
+    if (url.pathname === "/api/ai/health")                                return sec(await adminOnly(request, env, (req,e)=>aiHealth(req,e)));
     if (url.pathname === "/api/ai/act" && request.method === "POST")      return sec(await adminOnly(request, env, (req,e)=>aiAct(req,e)));
     if (url.pathname === "/api/admin/buyers")                             return sec(await adminOnly(request, env, (req,e)=>adminBuyers(e)));
     if (url.pathname === "/api/events" && request.method === "POST")      return sec(await postEvents(request, env));
@@ -195,7 +227,7 @@ export default {
     if (url.pathname === "/api/admin/growth")                             return sec(await adminOnly(request, env, adminGrowth));
     let assetRes = await env.ASSETS.fetch(request);
     { const h = new Headers(assetRes.headers);
-      if (["app","dealer","admin","ai"].includes(url.hostname.split(".")[0])) h.set("X-Robots-Tag", "noindex, nofollow");
+      if (["app","dealer","creator","admin","ai"].includes(url.hostname.split(".")[0])) h.set("X-Robots-Tag", "noindex, nofollow");
       const ct=h.get("content-type")||"";
       // HTML + JS always revalidate — stale app shells were serving old code for days. Images/fonts stay cached.
       if (ct.includes("text/html")||ct.includes("javascript")) {
@@ -218,7 +250,9 @@ export default {
     await enrichInventory(env).catch(()=>{});   // Wave E1: inventory intelligence, 3 vehicles/run
     await growthRollup(env).catch(()=>{});      // Wave E4: funnel snapshot, ≤1/day
     await syncDealerFeeds(env).catch(()=>{});   // AF: pull each subscribed dealer's authorized feed, ≤1/day
+    await checkSourceListings(env).catch(()=>{});   // R7: auto-archive link-ingested cars whose page is gone/sold
     await driveReminders(env).catch(()=>{});    // Wave H1: enqueue T-2h test-drive reminders
+    await creatorAgent(env).catch(()=>{});      // Creator Network: L2 — close dead drops, re-price unlocked, re-score. Never pays.
   },
 };
 
@@ -328,9 +362,30 @@ async function smsInbound(request,env){ const form=await request.formData().catc
   if(!form || !(await twilioValid(request,env,form))) return new Response('<?xml version="1.0"?><Response/>',{status:403,headers:{"content-type":"text/xml"}});
   const from=form?String(form.get("From")||""):"", rawText=form?String(form.get("Body")||"").trim():"", text=rawText.toUpperCase();
   let reply="";
-  if(/^(STOP|STOPALL|UNSUBSCRIBE|CANCEL|END|QUIT)$/.test(text)){
+  // R23 P6: CANCEL from a phone holding a live confirmed lead = booking cancel, NOT unsubscribe.
+  // (STOP/UNSUBSCRIBE stay carrier opt-outs below; CANCEL only falls through when no lead matches.)
+  const cancelLead=(text==="CANCEL")?await env.DB.prepare(
+    "SELECT id,dealer_id,status,phone,first_name,matched_car,dream_car FROM web_leads WHERE phone=? AND status='confirmed' ORDER BY id DESC LIMIT 1")
+    .bind(from).first().catch(()=>null):null;
+  if(cancelLead){
+    await leadTransition(env,cancelLead,"cancelled","sms",rawText);
+    reply="No problem — your drive's cancelled. Want me to move it instead? Reply with a day that works."; }
+  else if(/^(STOP|STOPALL|UNSUBSCRIBE|CANCEL|END|QUIT)$/.test(text)){
     await env.DB.prepare("UPDATE waitlist SET sms_consent=0 WHERE phone=?").bind(from).run().catch(()=>{});
+    // P10: STOP kills any pending follow-up sequence dead, forever.
+    await env.DB.prepare("DELETE FROM sms_queue WHERE phone=? AND sent=0 AND template LIKE 'lead_followup:%'").bind(from).run().catch(()=>{});
+    await env.DB.prepare("UPDATE web_leads SET followup_stage=99 WHERE phone=?").bind(from).run().catch(()=>{});
     reply="You're unsubscribed from CarNimbus texts. No more messages. Reply START to rejoin."; }
+  // R23 P8: a no-show/cancelled lead replying with a day = win-back → straight back to confirmed.
+  // Prefetched so a day-word in an ordinary message never swallows the car-voice/relay branches below.
+  else if(await (async()=>{ if(!rawText||!from||/^(HELP|INFO|START)$/.test(text)) return false;
+    if(!/(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}\/\d{1,2})/i.test(rawText)) return false;
+    const wb=await env.DB.prepare(
+      "SELECT id,dealer_id,status,phone,first_name,matched_car,dream_car FROM web_leads WHERE phone=? AND status IN ('no_show','cancelled') ORDER BY id DESC LIMIT 1")
+      .bind(from).first().catch(()=>null);
+    if(!wb) return false;
+    await leadTransition(env,wb,"confirmed","sms",rawText);
+    reply="You're back on the books — we'll confirm the exact time shortly."; return true; })()){/* handled */}
   else if(/^(HELP|INFO)$/.test(text)) reply="CarNimbus: AI car buying, LA. Up to 4 msgs/mo. Msg&data rates may apply. Reply STOP to cancel. hello@carnimbus.com";
   else if(text==="START"){ await env.DB.prepare("UPDATE waitlist SET sms_consent=1 WHERE phone=?").bind(from).run().catch(()=>{}); reply="Welcome back to CarNimbus. Reply STOP anytime."; }
   else if(rawText && from && from!==env.TWILIO_FROM && env.SMS_MATCH_LIVE &&
@@ -378,9 +433,17 @@ async function runQueue(env){ const now=new Date().toISOString();
 async function embed(env,text){ if(env.AI_BACKEND_URL){ try{ const r=await fetch(env.AI_BACKEND_URL+"/embed",{method:"POST",body:JSON.stringify({text})});
     if(r.ok){ const d=await r.json().catch(()=>null); if(d&&Array.isArray(d.vector)&&d.vector.length===768) return d.vector; } }catch(_){} }  // fall back to Workers AI if the appliance is down/wrong-dim
   const r=await env.AI.run("@cf/baai/bge-base-en-v1.5",{text:[text]}); return r.data[0]; }
-async function llm(env,messages){ if(env.AI_BACKEND_URL){ try{ const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages})});
-    if(r.ok){ const d=await r.json().catch(()=>null); if(d&&typeof d.text==="string") return d.text; } }catch(_){} }
-  const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:512}); return r.response; }
+// R15: 6s timeout on the appliance so a hung box can't stall the console; attribute which layer died.
+async function llm(env,messages){
+  if(env.AI_BACKEND_URL){ try{
+      const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages}),signal:AbortSignal.timeout(6000)});
+      if(r.ok){ const d=await r.json().catch(()=>null); if(d&&typeof d.text==="string") return d.text; }
+    }catch(_){}
+  }
+  try{ const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:512}); return r.response; }
+  catch(e){ const q=/4006|allocation|neuron/i.test(String((e&&e.message)||e));
+    const err=new Error(q?"quota":"cloud"); err.layer=q?"quota":"cloud"; err.ollama=!!env.AI_BACKEND_URL; throw err; }
+}
 // Car chat forces Workers AI (llama-3.3-70b) for reliable in-character roleplay — the external
 // AI_BACKEND_URL appliance under-weights the system persona and leaks its own scaffolding.
 async function chatLLM(env,messages){ if(env.AI){ const r=await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast",{messages,max_tokens:400}); return r.response; }
@@ -404,6 +467,8 @@ Disallow: /api/
 Disallow: /pass/
 Disallow: /app/
 Disallow: /dealer/
+Disallow: /creator/
+Disallow: /c/
 Disallow: /admin/
 Disallow: /ai/
 
@@ -772,6 +837,25 @@ async function stripeWebhook(request, env){
   }
   return json({ok:true,received:true});
 }
+// R7: auto sold-detection for link-ingested cars — re-check the source page ~daily, archive ONLY on strong
+// signals (404/410 or an explicit sold/no-longer-available marker). Network trouble never archives a car.
+async function checkSourceListings(env){
+  const rows=await env.DB.prepare("SELECT id,source_url FROM vdps WHERE active=1 AND source_url IS NOT NULL AND (source_checked_at IS NULL OR source_checked_at<datetime('now','-1 day')) LIMIT 5").all().catch(()=>({results:[]}));
+  for(const v of (rows.results||[])){
+    const now=new Date().toISOString();
+    await env.DB.prepare("UPDATE vdps SET source_checked_at=? WHERE id=?").bind(now,v.id).run().catch(()=>{});
+    let host=""; try{ host=new URL(v.source_url).hostname.toLowerCase(); }catch(_){ continue; }
+    if(host==="localhost"||/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host)||/^172\.(1[6-9]|2\d|3[01])\./.test(host)||/\.(internal|local)$/.test(host)) continue;
+    let gone=false;
+    try{ const r=await fetch(v.source_url,{headers:{"user-agent":"Mozilla/5.0 CarNimbusBot"},redirect:"follow"});
+      if(r.status===404||r.status===410) gone=true;
+      else if(r.ok){ const t=(await r.text()).slice(0,300000);
+        if(/\b(sold|no longer available|no longer in stock|vehicle not found)\b/i.test(t.replace(/<script[\s\S]*?<\/script>/gi,""))) gone=true; }
+    }catch(_){ continue; }
+    if(gone){ await env.DB.prepare("UPDATE vdps SET active=0, deactivated_at=?, embedding_synced=0 WHERE id=? AND active=1").bind(now,v.id).run().catch(()=>{});
+      await logEvent(env,{action:"inv.auto_archived",source:"source-check"}).catch(()=>{}); }
+  }
+}
 async function syncDealerFeeds(env){
   // Per-dealer staleness (NOT a global gate) so no dealer starves past the first 10: each tick pulls the 10
   // most-stale subscribed feeds (synced >24h ago or never), oldest first, cycling through all of them.
@@ -1061,6 +1145,9 @@ function aprFor(fico){ if(APR_FICO[fico]!=null) return APR_FICO[fico];
   return lo>=800?6.4:lo>=770?6.8:lo>=740?7.1:lo>=710?8.2:lo>=680?9.3:lo>=650?11.4:lo>=620?13.5:17.9; }
 function monthlyFor(price,down,aprPct,term){ term=term||72; const P=Math.max(0,(+price||0)-(+down||0)), r=(+aprPct||0)/1200;
   return r? Math.round(P*r*Math.pow(1+r,term)/(Math.pow(1+r,term)-1)) : Math.round(P/term); }
+// R4: which buyer credit tier a dealer would aim a car at — pricier/newer → stronger credit. Price-tier heuristic.
+function bandForCar(v){ const p=(+v.price)|| ((+v.price_mo||0)*72) || 0;
+  return p>=55000?"800+":p>=38000?"740-799":p>=25000?"670-739":p>=15000?"580-669":"under 580"; }
 // AJ: per-car APR estimate for the match card. Anonymous scanner ⇒ no FICO, no credit pull ⇒ this is an ESTIMATE
 // and is labelled as one. Only real rate mechanisms are inputs: base band, vehicle age (used rates step by model
 // year), a >100k-mile surcharge, and LTV from the buyer's down payment — the LTV step and the 3.9 floor are the
@@ -1678,6 +1765,10 @@ ${t.status!=="cancelled"?`<div class="row noprint" style="gap:8px;margin-top:8px
 </div></div>
 </body></html>`,{headers:{"content-type":"text/html"}}); }
 function cidFor(id){ const n=100000000+(id*7919)%900000000; const s=String(n); return s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }
+// R3: deterministic per-buyer CID for web leads (no users row). Same normalized contact ⇒ same CID ⇒ auto dedupe.
+function leadCid(email,phone){ const key=String(email||"").trim().toLowerCase()||String(phone||"").replace(/\D/g,""); if(!key) return "";
+  let h=2166136261; for(let i=0;i<key.length;i++){ h^=key.charCodeAt(i); h=Math.imul(h,16777619); }
+  const n=100000000+(Math.abs(h)%900000000), s=String(n); return "CN "+s.slice(0,3)+" "+s.slice(3,6)+" "+s.slice(6,9); }
 // ===== Wave C: Nimbus Phase 0 event spine (append-only). =====
 const EVENT_PREFIXES=["discovery","intent","finance","action","social","ai","dealer"];
 function readAnon(request){ const m=(request.headers.get("Cookie")||"").match(/cn_anon=([^;]+)/); return m?m[1]:null; }
@@ -1707,13 +1798,13 @@ async function eventsTail(request,env){ const n=Math.min(200,parseInt(new URL(re
 async function withDealer(request,env,fn){
   // T-102: email+password dealer session (cn_dlr) takes precedence; phone-OTP stays as fallback.
   const did=await readDealerSession(env,request);
-  if(did){ const dd=await env.DB.prepare("SELECT id,name,dealership,client_no,status FROM dealer_leads WHERE id=?").bind(did).first();
+  if(did){ const dd=await env.DB.prepare("SELECT id,name,dealership,client_no,status,logo,is_demo,commission_pct,holding_per_day,pack_fee FROM dealer_leads WHERE id=?").bind(did).first();
     if(dd&&dd.status==="active"&&dd.client_no) return fn(request,env,did,dd);
     return json({ok:false,error:"pending"},403); }
   const uid=await readSession(env,request); if(!uid) return json({ok:false,error:"auth"},401);
   const u=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(uid).first();
   const digits=String(u&&u.phone||"").replace(/\D/g,"").slice(-10);
-  const d=await env.DB.prepare("SELECT id,name,dealership,client_no,status FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1")
+  const d=await env.DB.prepare("SELECT id,name,dealership,client_no,status,logo,is_demo FROM dealer_leads WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'-',''),' ',''),'(',''),')','') LIKE ? ORDER BY id DESC LIMIT 1")
     .bind("%"+digits).first();
   if(!d||!digits) return json({ok:false,error:"not_dealer"},403);
   if(d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
@@ -1723,6 +1814,10 @@ async function withDealer(request,env,fn){
 // OR NULL (legacy/demo, unowned). Real dealer uploads carry dealer_id and are isolated.
 const DSCOPE="(v.dealer_id=? OR v.dealer_id IS NULL)";
 async function dealerConsole(request,env,uid,dealer){
+  // R19: ?meta=1 returns ONLY the dealer header — the MATCHES tab no longer downloads 77KB of inventory
+  // it never displays. Inventory is fetched lazily when that tab is actually opened.
+  if(new URL(request.url).searchParams.get("meta")==="1")
+    return json({ok:true,dealer:{id:dealer.id,name:dealer.name,dealership:dealer.dealership,client_no:dealer.client_no,logo:dealer.logo,is_demo:dealer.is_demo,commission_pct:dealer.commission_pct,holding_per_day:dealer.holding_per_day,pack_fee:dealer.pack_fee},listings:[],archived:[],meta:true});
   const tds=await env.DB.prepare(
     "SELECT td.id,td.center,td.slot,td.status,td.created_at,u.phone,u.handle,v.year,v.make,v.model,v.trim,v.price_mo,v.photos "+
     "FROM test_drives td JOIN users u ON u.id=td.user_id JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE+" ORDER BY td.id DESC LIMIT 12").bind(dealer.id).all();
@@ -1733,31 +1828,54 @@ async function dealerConsole(request,env,uid,dealer){
   const today=new Date().toISOString().slice(0,10), yd=new Date(Date.now()-864e5).toISOString().slice(0,10);
   const rt=await env.DB.prepare("SELECT SUM(CASE WHEN substr(td.created_at,1,10)=? THEN 1 ELSE 0 END) t, SUM(CASE WHEN substr(td.created_at,1,10)=? THEN 1 ELSE 0 END) y "+
     "FROM test_drives td JOIN vdps v ON v.id=td.vdp_id WHERE "+DSCOPE).bind(today,yd,dealer.id).first();
-  const ls=await env.DB.prepare("SELECT v.id,v.year,v.make,v.model,v.trim,v.price_mo,v.active,v.photos,v.drivetrain, s.engine,s.exterior_color,s.interior_color FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE "+DSCOPE+" ORDER BY v.id DESC LIMIT 40").bind(dealer.id).all();
+  const ls=await env.DB.prepare("SELECT v.id,v.vin,v.year,v.make,v.model,v.trim,v.price,v.price_mo,v.miles,v.description,v.active,v.photos,v.drivetrain,v.unit_cost,v.lot_date, s.engine,s.exterior_color,s.interior_color,s.fuel_type,s.body_style,s.drivetrain_detail,s.mileage_exact,s.doors,s.seating,s.cylinders,s.horsepower,s.torque,s.transmission,s.mpg_city,s.mpg_hwy,s.range_mi,s.condition_grade,s.certified,s.title_status,s.owners_count,s.accident_count,s.warranty_remaining,s.options_json,s.market_price_avg,s.price_vs_market FROM vdps v LEFT JOIN vdp_specs s ON s.vin=v.vin WHERE "+DSCOPE+" AND v.active=1 ORDER BY v.id DESC LIMIT 300").bind(dealer.id).all();
+  // R7: archived (sold/removed) cars — restorable from the portal.
+  const ar=await env.DB.prepare("SELECT id,year,make,model,trim,price_mo,photos,deactivated_at FROM vdps WHERE dealer_id=? AND active=0 ORDER BY deactivated_at DESC LIMIT 50").bind(dealer.id).all().catch(()=>({results:[]}));
+  // Creator Network reach-back: what NIMBUS did with each of this dealer's cars. This is the line that
+  // makes dealer. and creator. read as one system — "sent to the network at $90 · 4 claimed · 2 leads".
+  const dropRows=await env.DB.prepare(
+    "SELECT d.id,d.vdp_id,d.rate_cents,d.status, "+
+    "(SELECT COUNT(*) FROM creator_claims x WHERE x.drop_id=d.id) claims, "+
+    "(SELECT COUNT(*) FROM creator_posts p WHERE p.drop_id=d.id AND p.status='approved') posts, "+
+    "(SELECT COUNT(*) FROM web_leads w JOIN creator_claims cc ON cc.id=w.creator_claim_id WHERE cc.drop_id=d.id) leads "+
+    "FROM creator_drops d WHERE d.dealer_id=?").bind(dealer.id).all().catch(()=>({results:[]}));
+  const dropBy={}; for(const d of (dropRows.results||[])) dropBy[d.vdp_id]={rate_cents:d.rate_cents,status:d.status,claims:d.claims||0,posts:d.posts||0,leads:d.leads||0};
   return json({ok:true,dealer:dealer,kpis:k,deltas:{today:rt.t||0,yesterday:rt.y||0},
     appointments:(tds.results||[]).map(t=>({...t,who:t.handle||("Rider •••-"+String(t.phone).slice(-4)),cid:cidFor(t.id),phone:"•••-"+String(t.phone).slice(-4),photos:JSON.parse(t.photos||"[]")})),
-    listings:(ls.results||[]).map(v=>({...v,photos:JSON.parse(v.photos||"[]")}))});
+    listings:(ls.results||[]).map(v=>({...v,photos:JSON.parse(v.photos||"[]"),drop:dropBy[v.id]||null})),
+    archived:(ar.results||[]).map(v=>({...v,photos:JSON.parse(v.photos||"[]")}))});
 }
 async function dealerListing(request,env,uid,dealer){
   const c=await request.json().catch(()=>({}));
   const pm=parseInt(c.price_mo,10);
-  if(!c.year||!c.make||!c.model||!Number.isFinite(pm)) return json({ok:false,error:"bad_request"},400);
-  if(pm<50||pm>5000) return json({ok:false,error:"price_out_of_range"},422);   // server-authoritative price bounds
+  // R4: publish needs only make+model; year + monthly are optional (auto-bucket prices unpriced cars).
+  if(!c.make||!c.model) return json({ok:false,error:"bad_request"},400);
+  if(Number.isFinite(pm)&&pm>0&&(pm<50||pm>5000)) return json({ok:false,error:"price_out_of_range"},422);   // bounds only when a price is given
+  const price_mo=(Number.isFinite(pm)&&pm>0)?pm:0;
   const now=new Date().toISOString();
-  const F=[+c.year,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),pm,
+  const F=[+c.year||0,String(c.make).slice(0,40),String(c.model).slice(0,60),String(c.trim||"").slice(0,60),price_mo,
     String(c.miles||"").slice(0,20),String(c.drivetrain||"").slice(0,20),String(c.body||"").slice(0,20),
     JSON.stringify(c.features||[]),String(c.description||"").slice(0,1000),JSON.stringify(c.photos||[])];
+  // R7: keep the ingest source URL so the cron can re-check the page for sold/removed.
+  const src=/^https?:\/\//i.test(String(c.source_url||""))?String(c.source_url).slice(0,300):null;
+  // R14: dealer-entered economics (optional) — power the commission/savings KPIs on leads.
+  const ucost=parseInt(c.unit_cost,10)>0?parseInt(c.unit_cost,10):null;
+  const ldate=/^\d{4}-\d{2}-\d{2}$/.test(String(c.lot_date||""))?String(c.lot_date):null;
   const editId=parseInt(c.id,10)||0; let vin;
   if(editId){   // T-102: edit path (was INSERT-only) — scoped to the dealer's own cars
     const own=await env.DB.prepare("SELECT vin FROM vdps WHERE id=? AND dealer_id=?").bind(editId,dealer.id).first();
     if(!own) return json({ok:false,error:"not_yours"},403);
     vin=own.vin;
-    await env.DB.prepare("UPDATE vdps SET year=?,make=?,model=?,trim=?,price_mo=?,miles=?,drivetrain=?,body=?,features=?,description=?,photos=?,active=1,embedding_synced=0,updated_at=? WHERE id=? AND dealer_id=?")
-      .bind(...F,now,editId,dealer.id).run();
+    await env.DB.prepare("UPDATE vdps SET year=?,make=?,model=?,trim=?,price_mo=?,miles=?,drivetrain=?,body=?,features=?,description=?,photos=?,active=1,embedding_synced=0,updated_at=?,source_url=COALESCE(?,source_url),unit_cost=?,lot_date=? WHERE id=? AND dealer_id=?")
+      .bind(...F,now,src,ucost,ldate,editId,dealer.id).run();
   } else {
     vin=c.vin?String(c.vin).slice(0,17):("DLR-"+dealer.id+"-"+Date.now());
-    await env.DB.prepare("INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)")
-      .bind(vin,...F,dealer.id,now).run();
+    const ins=await env.DB.prepare("INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,active,embedding_synced,dealer_id,updated_at,source_url,unit_cost,lot_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?,?,?,?)")
+      .bind(vin,...F,dealer.id,now,src,ucost,ldate).run();
+    // Slide-4 step 2: a NEWLY uploaded VIN is blasted to the Creator Network. Insert branch only —
+    // the edit branch above must never re-drop, or every re-save would mint a duplicate campaign.
+    // Fire-and-forget: a creator-network failure must NEVER fail a dealer's upload.
+    await dropForListing(env,{id:ins.meta.last_row_id,vin,price:+c.price||0,price_mo,lot_date:ldate},dealer.id,now).catch(()=>{});
   }
   // T-102: brief-synopsis specs (engine · color · interior) — dealer card only; options/days-on-lot excluded.
   const eng=String(c.engine||"").slice(0,60), exc=String(c.exterior_color||"").slice(0,40), inc=String(c.interior_color||"").slice(0,40);
@@ -1813,48 +1931,327 @@ async function dealerIngestUrl(request,env,uid,dealer){
     return json({ok:false,error:"blocked_host"},400);
   let html=""; try{ const r=await fetch(url,{headers:{"user-agent":"Mozilla/5.0 CarNimbusBot"},redirect:"follow"}); html=(await r.text()).slice(0,600000); }catch(_){ return json({ok:false,error:"fetch_failed"},502); }
   const draft={photos:[]};
+  const pushPhotos=function(arr){ for(const u of arr){ if(u) draft.photos.push(String(u)); } };
   for(const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)){
     try{ for(const o of [].concat(JSON.parse(m[1].trim()))){ if(!o||!/Vehicle|Car|Product/i.test(String(o["@type"]))) continue;
-      if(o.image) draft.photos.push(...[].concat(o.image).map(x=>(x&&x.url)||x));
+      if(o.image) pushPhotos([].concat(o.image).map(x=>(x&&x.url)||x));
       draft.description=draft.description||o.description; draft.make=draft.make||(o.brand&&o.brand.name)||o.manufacturer;
       draft.model=draft.model||o.model; draft.year=draft.year||o.vehicleModelDate||o.modelDate;
       draft.miles=draft.miles||(o.mileageFromOdometer&&o.mileageFromOdometer.value);
       draft.exterior_color=draft.exterior_color||o.color; draft.engine=draft.engine||(o.vehicleEngine&&o.vehicleEngine.name);
       const off=[].concat(o.offers||[])[0]; if(off) draft.price=draft.price||off.price; } }catch(_){}
   }
-  for(const m of html.matchAll(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/gi)) draft.photos.push(m[1]);
+  // R4: pull photos from more sources so thumbnails render (og / twitter / lazy <img data-src>).
+  for(const m of html.matchAll(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/gi)) draft.photos.push(m[1]);
+  for(const m of html.matchAll(/<img[^>]+data-src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi)) draft.photos.push(m[1]);
   const md=html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i); if(md) draft.description=draft.description||md[1];
+  // R4: title tags help year/make/model when JSON-LD is absent.
+  const tt=html.match(/<meta[^>]+(?:property|name)=["'](?:og:title|twitter:title)["'][^>]+content=["']([^"']+)["']/i)||html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if(tt){ const ym=tt[1].match(/\b(19|20)\d{2}\b/); if(ym&&!draft.year) draft.year=ym[0]; }
   draft.photos=[...new Set(draft.photos.filter(Boolean))].slice(0,12);
-  if(!draft.year||!draft.make||!draft.model){
-    const text=html.replace(/<script[\s\S]*?<\/script>/gi,"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").slice(0,6000);
-    const j=await llm(env,[{role:"system",content:"Extract car listing fields as strict JSON {year,make,model,trim,price,miles,engine,exterior_color,interior_color,wheels,drivetrain,description}. Use null if unknown. Output ONLY JSON."},{role:"user",content:text}]).catch(()=>null);
-    try{ const o=JSON.parse(String(j).replace(/```json|```/g,"").trim()); for(const k in o){ if(o[k]!=null&&draft[k]==null) draft[k]=o[k]; } }catch(_){}
-  }
+  // R4: ALWAYS run the AI fill (not only when Y/M/M missing) so trim/colors/drivetrain/description/photos fill in.
+  const text=html.replace(/<script[\s\S]*?<\/script>/gi,"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").slice(0,6000);
+  const j=await llm(env,[{role:"system",content:"Extract car listing fields as strict JSON {year,make,model,trim,price,miles,engine,exterior_color,interior_color,wheels,drivetrain,description,photos}. photos = array of full image URLs if present in the text, else []. Use null if unknown. Output ONLY JSON."},{role:"user",content:(tt?("Title: "+tt[1]+"\n"):"")+text}]).catch(()=>null);
+  try{ const o=JSON.parse(String(j).replace(/```json|```/g,"").trim());
+    for(const k in o){ if(k==="photos"){ if(Array.isArray(o.photos)) pushPhotos(o.photos); continue; }
+      if(o[k]!=null&&o[k]!==""&&(draft[k]==null||draft[k]==="")) draft[k]=o[k]; } }catch(_){}
+  draft.photos=[...new Set(draft.photos.filter(Boolean))].slice(0,12);
+  // R4: monthly is never on a listing page — derive an estimate so the field isn't blank (dealer/auto can reprice).
+  if(draft.price && !draft.price_mo){ draft.price_mo=monthlyFor(+draft.price, Math.round(+draft.price*0.1), aprFor("670-739"), 72); draft.price_mo_est=1; }
+  draft.source_url=url;   // R7: persisted on publish so the cron can re-check the page for sold/removed
   return json({ok:true,draft});
 }
 // T-102: drag-drop credit/price placements. One car → many bands (credit-tier pre-staging). rate_markup is dealer-facing only.
 async function dealerPlacements(request,env,uid,dealer){
   if(request.method==="GET"){
-    const r=await env.DB.prepare("SELECT p.id,p.vdp_id,p.credit_band,p.category,p.monthly,p.down,p.rate_markup, v.year,v.make,v.model,v.trim,v.photos FROM listing_placements p JOIN vdps v ON v.id=p.vdp_id WHERE p.dealer_id=? ORDER BY p.category,p.credit_band").bind(dealer.id).all().catch(()=>({results:[]}));
+    // R6: match_ct/match_score let the client rank each bucket's "top pick" (most matched by the AI engine).
+    const r=await env.DB.prepare("SELECT p.id,p.vdp_id,p.credit_band,p.category,p.monthly,p.down,p.rate_markup,p.locked, v.year,v.make,v.model,v.trim,v.photos, (SELECT COUNT(*) FROM matches m WHERE m.vdp_id=p.vdp_id) match_ct, (SELECT MAX(score) FROM matches m2 WHERE m2.vdp_id=p.vdp_id) match_score FROM listing_placements p JOIN vdps v ON v.id=p.vdp_id WHERE p.dealer_id=? ORDER BY p.category,p.credit_band").bind(dealer.id).all().catch(()=>({results:[]}));
     return json({ok:true,placements:(r.results||[]).map(x=>({...x,photos:JSON.parse(x.photos||"[]")}))}); }
   if(request.method==="POST"){
     const b=await request.json().catch(()=>({}));
-    const vid=parseInt(b.vdp_id,10), band=String(b.credit_band||"").slice(0,12), cat=String(b.category||"").slice(0,20);
-    const mo=parseInt(b.monthly,10)||0, dn=parseInt(b.down,10)||0, mk=parseFloat(b.rate_markup)||0;
+    const vid=parseInt(b.vdp_id,10), band=String(b.credit_band||"").slice(0,12);
+    const mk=parseFloat(b.rate_markup)||0;
     if(!vid||!band) return json({ok:false,error:"bad_request"},400);
+    const cat=(String(b.category||"").slice(0,20))||band;   // lane label = credit band by default
     if(!(await env.DB.prepare("SELECT 1 FROM vdps WHERE id=? AND dealer_id=?").bind(vid,dealer.id).first())) return json({ok:false,error:"not_yours"},403);
+    // R3: dealer just drops the car into a credit bucket → AI auto-prices for that band. Manual override still honored.
+    let mo=parseInt(b.monthly,10)||0, dn=parseInt(b.down,10)||0;
+    if(!mo){
+      const v=await env.DB.prepare("SELECT price,price_mo FROM vdps WHERE id=?").bind(vid).first().catch(()=>null);
+      const price=(v&&+v.price)||0;
+      if(price){ if(!dn) dn=Math.round(price*0.1); mo=monthlyFor(price,dn,aprFor(band),72); }
+      else mo=(v&&+v.price_mo)||0;
+    }
     const now=new Date().toISOString();
     const ex=await env.DB.prepare("SELECT id FROM listing_placements WHERE dealer_id=? AND vdp_id=? AND credit_band=?").bind(dealer.id,vid,band).first();
-    if(ex) await env.DB.prepare("UPDATE listing_placements SET category=?,monthly=?,down=?,rate_markup=?,updated_at=? WHERE id=?").bind(cat,mo,dn,mk,now,ex.id).run();
-    else await env.DB.prepare("INSERT INTO listing_placements (dealer_id,vdp_id,credit_band,category,monthly,down,rate_markup,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(dealer.id,vid,band,cat,mo,dn,mk,now,now).run();
+    // R4: a manual placement is the dealer's deliberate choice → locked=1 so AI auto-bucketing won't move it.
+    if(ex) await env.DB.prepare("UPDATE listing_placements SET category=?,monthly=?,down=?,rate_markup=?,locked=1,updated_at=? WHERE id=?").bind(cat,mo,dn,mk,now,ex.id).run();
+    else await env.DB.prepare("INSERT INTO listing_placements (dealer_id,vdp_id,credit_band,category,monthly,down,rate_markup,locked,created_at,updated_at) VALUES (?,?,?,?,?,?,?,1,?,?)").bind(dealer.id,vid,band,cat,mo,dn,mk,now,now).run();
     return json({ok:true}); }
   if(request.method==="DELETE"){ const id=parseInt(new URL(request.url).searchParams.get("id"),10)||0;
     await env.DB.prepare("DELETE FROM listing_placements WHERE id=? AND dealer_id=?").bind(id,dealer.id).run(); return json({ok:true}); }
   return json({ok:false,error:"method"},405); }
-// T-102: inbound leads for this dealer's cars.
+// R4: AI auto-bucket — place every un-placed active car into its credit tier (locked=0 so the dealer can override).
+async function dealerAutoPlace(request,env,uid,dealer){
+  const cars=await env.DB.prepare(
+    "SELECT v.id,v.price,v.price_mo FROM vdps v WHERE v.dealer_id=? AND v.active=1 "+
+    "AND NOT EXISTS (SELECT 1 FROM listing_placements p WHERE p.vdp_id=v.id AND p.dealer_id=?)"
+  ).bind(dealer.id,dealer.id).all().catch(()=>({results:[]}));
+  const now=new Date().toISOString(); let placed=0;
+  for(const c of (cars.results||[])){
+    const band=bandForCar(c); const dn=Math.round(((+c.price)||0)*0.1);
+    const mo=(+c.price)?monthlyFor(c.price,dn,aprFor(band),72):(+c.price_mo||0);
+    await env.DB.prepare("INSERT INTO listing_placements (dealer_id,vdp_id,credit_band,category,monthly,down,rate_markup,locked,created_at,updated_at) VALUES (?,?,?,?,?,?,?,0,?,?)")
+      .bind(dealer.id,c.id,band,band,mo,dn,0,now,now).run().catch(()=>{}); placed++;
+  }
+  return json({ok:true,placed}); }
+// R7: dealer marks a car sold/removed (archive) or restores it. Buyer surfaces gate on active=1 already.
+async function dealerListingStatus(request,env,uid,dealer){
+  const b=await request.json().catch(()=>({}));
+  const id=parseInt(b.id,10)||0, on=(b.active===1||b.active==="1"||b.active===true)?1:0;
+  if(!id) return json({ok:false,error:"bad_request"},400);
+  const r=await env.DB.prepare("UPDATE vdps SET active=?, deactivated_at=?, embedding_synced=0 WHERE id=? AND dealer_id=?")
+    .bind(on, on?null:new Date().toISOString(), id, dealer.id).run();
+  if(!(r.meta&&r.meta.changes)) return json({ok:false,error:"not_yours"},403);
+  await logEvent(env,{action:on?"inv.restored":"inv.archived",source:"dealer-portal"}).catch(()=>{});
+  return json({ok:true,active:on}); }
+// R8: the lead's live AI↔buyer conversation (sms_log) — populates the funnel in real time once SMS is on.
+async function dealerLeadThread(request,env,uid,dealer){
+  const id=parseInt(new URL(request.url).searchParams.get("lead_id"),10)||0;
+  if(!id) return json({ok:false,error:"bad_request"},400);
+  const L=await env.DB.prepare("SELECT phone FROM web_leads WHERE id=? AND dealer_id=?").bind(id,dealer.id).first();
+  if(!L) return json({ok:false,error:"not_found"},404);
+  // R13: dealers see CONVERSATION only — OTP codes, pass links and check-in codes are backend/admin noise.
+  // Covers: "[verify] code", "Drive Now pass: …/pass/…", "CarNimbus code: 524366. Expires in 10 min."
+  // Deliberately anchored to OUR sender wording — a bare /code \d+/ would swallow real buyer texts like
+  // "my zip code 90210". Hiding a genuine customer message is worse than showing a system one.
+  const SYSTEM_MSG=/^\[verify\]|Drive Now pass:|carnimbus\.com\/pass\/|carnimbus code:?\s*\d{3,8}/i;
+  const rr=await env.DB.prepare("SELECT direction,body,created_at FROM sms_log WHERE phone=? ORDER BY id ASC LIMIT 200").bind(L.phone).all().catch(()=>({results:[]}));
+  const all=rr.results||[];
+  const thread=all.filter(function(m){ return !SYSTEM_MSG.test(String(m.body||"")); });
+  return json({ok:true,thread:thread,hidden:all.length-thread.length}); }
+// T-102: inbound leads for this dealer's cars. R13: carries computed deal math + status.
 async function dealerLeads(request,env,uid,dealer){
-  const r=await env.DB.prepare("SELECT created_at,first_name,last_name,dream_car,deal_type,monthly,down,zip,appt_slot,matched_car,phone,email FROM web_leads WHERE dealer_id=? ORDER BY id DESC LIMIT 100").bind(dealer.id).all().catch(()=>({results:[]}));
-  return json({ok:true,leads:r.results||[]}); }
+  const r=await env.DB.prepare("SELECT w.id,w.created_at,w.first_name,w.last_name,w.dream_car,w.deal_type,w.monthly,w.down,w.zip,w.appt_slot,w.matched_car,w.phone,w.email,w.address,w.cid,w.credit_band,w.trade_in,w.status,w.status_ts,w.is_demo, v.photos,v.price,v.year,v.miles,v.unit_cost,v.lot_date,v.make car_make,v.model car_model, p.monthly band_monthly, p.down band_down, s.price_vs_market pvm, s.condition_grade, s.certified, s.mileage_exact FROM web_leads w LEFT JOIN vdps v ON v.id=w.vdp_id LEFT JOIN vdp_specs s ON s.vin=v.vin LEFT JOIN listing_placements p ON p.vdp_id=w.vdp_id AND p.credit_band=w.credit_band AND p.dealer_id=w.dealer_id WHERE w.dealer_id=? ORDER BY w.id DESC LIMIT 100").bind(dealer.id).all().catch(()=>({results:[]}));
+  return json({ok:true,leads:(r.results||[]).map(function(x){
+    var ph=[]; try{ph=JSON.parse(x.photos||"[]");}catch(_){}
+    x.photo0=ph[0]||"";
+    var price=+x.price||0, wantsDown=+x.down||0, wantsMo=+x.monthly||0;
+    var apr = price? aprEst(price,wantsDown,x.year,x.miles,x.credit_band) : 0;
+    var moHis = price? monthlyFor(price,wantsDown,apr,72) : 0;
+    x.deal={ price:price, miles:x.miles||"", apr:apr, moHis:moHis, wantsMo:wantsMo, wantsDown:wantsDown,
+      bandMonthly:+x.band_monthly||0, bandDown:+x.band_down||0,
+      delta: (wantsMo&&moHis)? moHis-wantsMo : 0,
+      downGap: (+x.band_down||0)-wantsDown,
+      pvm:x.pvm||"", cond:x.condition_grade||"", certified:x.certified?1:0 };
+    // R20: economics computed from THIS store's real figures (dealer Settings). Defaults stay labeled (EST).
+    var commPct=(dealer.commission_pct!=null?+dealer.commission_pct:25),
+        holdDay=(dealer.holding_per_day!=null?+dealer.holding_per_day:32),
+        packFee=(+dealer.pack_fee||0),
+        econReal=(dealer.commission_pct!=null||dealer.holding_per_day!=null);
+    if(x.unit_cost&&price&&price>(+x.unit_cost+packFee)){
+      x.deal.gross=price-(+x.unit_cost)-packFee;
+      x.deal.commission=Math.round(x.deal.gross*commPct/100); }
+    if(x.lot_date){
+      x.deal.daysOnLot=Math.max(0,Math.round((Date.now()-Date.parse(x.lot_date))/864e5));
+      x.deal.holdingSaved=x.deal.daysOnLot*holdDay; }
+    x.deal.econReal=econReal;
+    x.deal.mileageExact=x.mileage_exact||null;
+    x.deal.closeProb=closeProb(x.deal,x);
+    x.deal.move=theMove(x.deal,x);
+    x.status=x.status||"confirmed";
+    x.car_short=[x.year,x.car_make,x.car_model].filter(Boolean).join(' ')||x.matched_car||x.dream_car||'';
+    delete x.photos; delete x.price; delete x.year; delete x.miles; delete x.car_make; delete x.car_model;
+    delete x.band_monthly; delete x.band_down;
+    delete x.unit_cost; delete x.lot_date; delete x.pvm; delete x.condition_grade; delete x.certified;
+    return x; })}); }
+// R14: probability of close — additive scoring over the real signals, clamped 5..95.
+// R16: emits the scored factor list (d.why) so the UI SHOWS ITS WORK — the dealer sees exactly why it's 90%,
+// and can never be handed a number the app invented. The factors always sum to the displayed score.
+function closeProb(d,L){
+  let p=35; const why=[["Booked test drive",35]];
+  if(d.moHis&&d.wantsMo){ const v=d.delta<=0?25:(d.delta<=50?10:-15); p+=v;
+    why.push([d.delta<=0?("Payment fits — $"+d.moHis+"/mo vs his $"+d.wantsMo+" ceiling")
+                        :("Payment $"+Math.abs(d.delta)+"/mo over his ceiling"),v]); }
+  if(+d.wantsDown>0){ p+=8; why.push(["$"+(+d.wantsDown).toLocaleString()+" down committed",8]); }
+  if(L.trade_in){ p+=10; why.push(["Trade-in to leverage",10]); }
+  if(L.status==="confirmed"){ p+=5; why.push(["Appointment confirmed",5]); }
+  if(L.credit_band==="under 580"){ p-=8; why.push(["Sub-580 credit — funding risk",-8]); }
+  if(d.pvm&&/below market|savings/i.test(d.pvm)){ p+=7; why.push(["Priced below market",7]); }
+  const raw=p, clamped=Math.max(5,Math.min(95,p));
+  if(clamped!==raw) why.push([clamped>raw?"Floor applied":"Ceiling applied",clamped-raw]);
+  d.why=why;
+  return clamped;
+}
+// R16: RFM lead-heat baseline (T5 step 1). Ships now behind the same interface an LTC would later fill —
+// per the founder's own gate: the neural model only earns its place once it beats this on held-out data.
+function leadHeat(ev,L){
+  if(!ev||!ev.length) return null;
+  const now=Date.now(), last=Math.max(...ev.map(e=>Date.parse(e.ts)||0));
+  const hoursSince=Math.max(0,(now-last)/3600000);
+  const recency=Math.exp(-hoursSince/72);                                  // τ = the 72h window
+  const sessions=new Set(ev.map(e=>String(e.ts||"").slice(0,10))).size;
+  const freq=Math.min(1,sessions/4);
+  const tier=Math.min(1,(+L.monthly||0)/800);
+  const heat=Math.round(100*(0.55*recency+0.30*freq+0.15*tier));
+  return {heat, why:[["Recency — last touch "+(hoursSince<1?"<1":Math.round(hoursSince))+"h ago",Math.round(55*recency)],
+                     ["Frequency — "+sessions+" session day(s)",Math.round(30*freq)],
+                     ["Budget tier — $"+(+L.monthly||0)+"/mo",Math.round(15*tier)]]};
+}
+// R16: Behavior Brief — the "nuggets", derived ONLY from first-party consented telemetry we already hold.
+// Every line is omitted when its signal is absent; nothing here is inferred or invented.
+async function behaviorBrief(env,L){
+  const key=L.anon_id||null, cid=L.cid||null;
+  if(!key&&!cid) return null;
+  const r=await env.DB.prepare(
+    "SELECT action,ts,duration_ms,vehicle_id FROM events WHERE "+(key?"anon_id=?":"cid=?")+" ORDER BY id DESC LIMIT 400"
+  ).bind(key||cid).all().catch(()=>({results:[]}));
+  const ev=r.results||[]; if(!ev.length) return null;
+  const lines=[];
+  // Dwell over ~10 min is an abandoned tab, not attention — exclude it rather than hand the salesman a
+  // number he'd repeat and be wrong about. Report in human units.
+  const IDLE=600000;
+  const dur=n=>n>=90000?(Math.round(n/60000)+" min"):(Math.round(n/1000)+"s");
+  const dwell=ev.filter(e=>e.action==="discovery.dwell"&&e.duration_ms>0&&e.duration_ms<IDLE);
+  if(dwell.length){
+    const longest=Math.max(...dwell.map(e=>+e.duration_ms));
+    const total=dwell.reduce((a,e)=>a+(+e.duration_ms||0),0);
+    if(longest>=20000) lines.push("Sat "+dur(longest)+" on a single listing — that's real intent, not a browse.");
+    if(total>=120000) lines.push(dur(total)+" of engaged time across "+dwell.length+" views.");
+  }
+  const days=new Set(ev.map(e=>String(e.ts||"").slice(0,10)));
+  if(days.size>1) lines.push("Came back "+days.size+" separate days — still shopping this, keep it warm.");
+  const calc=ev.filter(e=>e.action==="intent.opened_calculator").length;
+  if(calc>0) lines.push("Ran the payment calculator "+calc+" times — he's watching the monthly, so lead with the payment.");
+  const hours=ev.map(e=>+String(e.ts||"").slice(11,13)).filter(h=>!isNaN(h));
+  if(hours.length>=3){ const late=hours.filter(h=>h>=18||h<=1).length/hours.length;
+    if(late>0.5) lines.push("Shops in the evening — call him after 6, not at lunch."); }
+  // R20: scans = how many cars he actually pulled up on CarNimbus (never "visits" — he hasn't been to a lot).
+  const scans=ev.filter(e=>e.action==="intent.search_results"||e.action==="intent.match_click").length;
+  const heat=leadHeat(ev,L);
+  return (lines.length||heat||scans) ? {lines,heat,scans} : null;
+}
+// R13/R14: the one call the salesman needs — driven by the math + the car's real market position. Never blank.
+function theMove(d,L){
+  var trade=L.trade_in? String(L.trade_in).split("—")[0].trim() : "";
+  var $=function(n){ return "$"+Math.abs(+n||0).toLocaleString(); };
+  var aging=d.daysOnLot?(" This unit has sat "+d.daysOnLot+" days — every day it stays is "+$(32)+" gone."):"";
+  var mkt=/below market/i.test(d.pvm||"")?" It's priced under market with below-average miles — say that out loud, it's true.":"";
+  if(d.moHis && d.wantsMo && d.delta<=0)
+    return "He walks at "+$(d.moHis)+"/mo — "+$(d.delta)+" under the ceiling he set. Write it at his "+$(d.wantsDown)+
+      " down; don't re-open the down payment."+
+      (trade?" Appraise the "+trade+" while he drives — found equity drops the payment further.":"")+mkt+aging;
+  if(d.delta>0 && trade)
+    return "He's "+$(d.delta)+"/mo over his number. The "+trade+" appraisal IS the deal — get it done before the drive ends."+mkt+aging;
+  if(d.delta>0)
+    return "He's "+$(d.delta)+"/mo over. Longer term or a cheaper unit — decide before he arrives."+aging;
+  return "Confirm the payment and go straight to paperwork."+mkt+aging;
+}
+// R3: on-demand AI intel brief per lead (inference from platform data — NOT open-web OSINT). Cached on the row.
+async function dealerLeadBrief(request,env,uid,dealer){
+  const body=await request.json().catch(()=>({}));
+  const id=parseInt(body.lead_id,10)||0; if(!id) return json({ok:false,error:"bad_request"},400);
+  const refresh=!!body.refresh;   // R10: force fresh when asked
+  const L=await env.DB.prepare("SELECT * FROM web_leads WHERE id=? AND dealer_id=?").bind(id,dealer.id).first();
+  if(!L) return json({ok:false,error:"not_found"},404);
+  // R16: behavior nuggets are computed on BOTH paths — the cached-brief return must not skip them.
+  if(L.intel_brief && !refresh)
+    return json({ok:true,brief:L.intel_brief,cached:true,behavior:await behaviorBrief(env,L).catch(()=>null)});
+  // R13: just the human hook — theMove() carries the substance, so this is one opener line and never blank.
+  const trade=L.trade_in? String(L.trade_in).split("—")[0].trim() : "";
+  const fallback = trade
+    ? 'Open with: "You\'re coming out of a '+trade+' — let me show you what this one actually costs you a month."'
+    : 'Open with: "Let me show you what this one actually costs you a month."';
+  const msgs=[{role:"system",content:"Write ONE sentence a car salesperson says to open the conversation, starting with: Open with: followed by the quoted line. Warm, specific, under 30 words. Use only the facts given. No preamble."},
+    {role:"user",content:"Buyer: "+[L.first_name,L.last_name].filter(Boolean).join(" ")+" | Car: "+(L.matched_car||"")+" | Trade-in: "+(L.trade_in||"none")+" | Budget: $"+(L.monthly||"?")+"/mo"}];
+  const out=await chatLLM(env,msgs).catch(()=>null);
+  const brief=(out&&String(out).trim())||fallback;
+  await env.DB.prepare("UPDATE web_leads SET intel_brief=? WHERE id=?").bind(brief,id).run().catch(()=>{});
+  const behavior=await behaviorBrief(env,L).catch(()=>null);   // R16: first-party nuggets
+  return json({ok:true,brief,behavior}); }
+// R14: one-tap export to the dealer's own calendar (Outlook/Apple via .ics; Google gets a render link client-side).
+async function dealerLeadIcs(request,env,uid,dealer){
+  const id=parseInt(new URL(request.url).searchParams.get("lead_id"),10)||0;
+  const L=await env.DB.prepare("SELECT * FROM web_leads WHERE id=? AND dealer_id=?").bind(id,dealer.id).first();
+  if(!L||!L.appt_slot) return json({ok:false,error:"not_found"},404);
+  const m=String(L.appt_slot).match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/); if(!m) return json({ok:false,error:"bad_slot"},400);
+  const S=m[1]+m[2]+m[3]+"T"+m[4]+m[5]+"00";
+  const endH=String(+m[4]+(m[5]==="30"?1:0)).padStart(2,"0"), endM=m[5]==="30"?"00":"30";
+  const E=m[1]+m[2]+m[3]+"T"+endH+endM+"00";
+  // RFC 5545 §3.3.11 TEXT escaping + hard CRLF strip — lead fields are buyer-supplied (webLead is public),
+  // so a name like "John\r\nSUMMARY:Fake" must never become its own ICS line (calendar-spoofing vector).
+  const esc=v=>String(v==null?"":v).replace(/[\r\n]+/g," ").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").slice(0,200);
+  const name=esc([L.first_name,L.last_name].filter(Boolean).join(" "))||"Buyer";
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//CarNimbus//Dealer//EN","BEGIN:VEVENT",
+    "UID:cn-lead-"+L.id+"@carnimbus.com","DTSTART:"+S,"DTEND:"+E,
+    "SUMMARY:Test Drive — "+name+" — "+esc(L.matched_car),
+    "DESCRIPTION:CID "+esc(L.cid)+"\\nPhone "+esc(L.phone)+"\\n"+(L.trade_in?("Trade-in: "+esc(L.trade_in)):""),
+    "END:VEVENT","END:VCALENDAR"].join("\r\n");
+  return new Response(ics,{headers:{"content-type":"text/calendar","content-disposition":'attachment; filename="testdrive-'+L.id+'.ics"',...SEC}}); }
+// R13: the only lifecycle control a dealer needs — confirmed -> sold | no_show. Ownership-scoped.
+async function dealerSettings(request,env,uid,dealer){
+  const b=await request.json().catch(()=>({}));
+  const pct=Math.max(0,Math.min(100,+b.commission_pct||0)), hold=Math.max(0,+b.holding_per_day||0), pack=Math.max(0,+b.pack_fee||0);
+  await env.DB.prepare("UPDATE dealer_leads SET commission_pct=?, holding_per_day=?, pack_fee=? WHERE id=?").bind(pct,hold,pack,dealer.id).run();
+  return json({ok:true,commission_pct:pct,holding_per_day:hold,pack_fee:pack}); }
+// ==================== R23: lead lifecycle protocol (docs/lead-lifecycle-policies.md) ====================
+const LEAD_STATUSES={confirmed:1,sold:1,no_show:1,cancelled:1};
+// P9: texts land 9:00–20:00 PT only — outside that, push to the next 9am PT.
+function quietClamp(ms){ const d=new Date(ms);
+  const h=+new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hour:"numeric",hour12:false}).format(d);
+  if(h>=9&&h<20) return d.toISOString();
+  const add=(h<9?(9-h):(24-h+9))*3600e3;
+  return new Date(ms+add).toISOString(); }
+// The ONLY status mutator: stamps status_ts, writes the permanent lead_events ledger row, logs the
+// events-spine action, and runs the automated effects matrix. Twilio-dark safe: queue rows still record
+// intent (P15) — runQueue no-ops sends until secrets exist.
+async function leadTransition(env,lead,to,source,note){
+  if(!LEAD_STATUSES[to]||!lead||!lead.id) return {ok:false,error:"bad_status"};
+  const now=new Date().toISOString(), from=lead.status||"confirmed";
+  await env.DB.prepare("UPDATE web_leads SET status=?, status_ts=?, followup_stage=0 WHERE id=?").bind(to,now,lead.id).run();
+  await env.DB.prepare("INSERT INTO lead_events (lead_id,dealer_id,from_status,to_status,source,note,ts) VALUES (?,?,?,?,?,?,?)")
+    .bind(lead.id,lead.dealer_id||null,from,to,source||"system",String(note||"").slice(0,200)||null,now).run().catch(()=>{});
+  await logEvent(env,{action:"dealer.lead_"+to,source:source||"system"}).catch(()=>{});
+  const car=String(lead.matched_car||lead.dream_car||"your match").split("—")[0].trim(),
+        fn=String(lead.first_name||"").trim();
+  const q=async(pol,body,delayMs)=>{ if(!lead.phone) return;
+    await env.DB.prepare("INSERT INTO sms_queue (phone,template,body,send_at,recurring,sent,created_at) VALUES (?,?,?,?,'',0,?)")
+      .bind(lead.phone,"lead_followup:"+pol,body,quietClamp(Date.now()+delayMs),now).run().catch(()=>{}); };
+  // P11: any transition first clears the pending machine — no stale follow-ups ever fire.
+  if(lead.phone) await env.DB.prepare("DELETE FROM sms_queue WHERE phone=? AND sent=0 AND template LIKE 'lead_followup:%'")
+    .bind(lead.phone).run().catch(()=>{});
+  if(to==="sold"){                                   // P2: one thank-you, then silence forever.
+    await q("P2","Congrats on the "+car+(fn?", "+fn:"")+" — I'm here if any question pops up.",2*3600e3); }
+  if(to==="no_show"){
+    const prior=await env.DB.prepare("SELECT COUNT(*) c FROM lead_events WHERE lead_id=? AND to_status='no_show'")
+      .bind(lead.id).first().catch(()=>({c:0}));
+    if(((prior&&prior.c)||0)<2){                      // P13: 2nd no-show → no auto-texts, call personally.
+      await q("P4","We had the "+car+" out front for you"+(fn?", "+fn:"")+" — want me to grab another time that works better?",3600e3);
+      await q("P5a","Still holding your "+car+" match. Reply with a day that works and I'll set the drive up.",864e5);
+      await q("P5b","I'll keep your match saved — text me whenever you're ready.",3*864e5); } }
+  if(to==="cancelled"){                               // P7: one gentle win-back at T+2d, then stop.
+    await q("P7","Your "+car+" match is still reserved. Reply with a day that works and I'll get you back on the books.",2*864e5); }
+  return {ok:true,status:to,ts:now}; }
+async function dealerLeadStatus(request,env,uid,dealer){
+  const b=await request.json().catch(()=>({}));
+  const id=parseInt(b.lead_id,10)||0, st=String(b.status||"");
+  if(!id||!LEAD_STATUSES[st]) return json({ok:false,error:"bad_request"},400);
+  const lead=await env.DB.prepare("SELECT id,dealer_id,status,phone,first_name,matched_car,dream_car FROM web_leads WHERE id=? AND dealer_id=?")
+    .bind(id,dealer.id).first();
+  if(!lead) return json({ok:false,error:"not_found"},404);
+  const r=await leadTransition(env,lead,st,"dealer",null);
+  return json(r,r.ok?200:400); }
+// The salesman's (and NIMBUS's) view of where the machine left off: ledger + follow-ups for one lead.
+async function dealerLeadHistory(request,env,uid,dealer){
+  const id=parseInt(new URL(request.url).searchParams.get("lead_id"),10)||0;
+  if(!id) return json({ok:false,error:"bad_request"},400);
+  const lead=await env.DB.prepare("SELECT id,phone FROM web_leads WHERE id=? AND dealer_id=?").bind(id,dealer.id).first();
+  if(!lead) return json({ok:false,error:"not_found"},404);
+  const ev=(await env.DB.prepare("SELECT from_status,to_status,source,note,ts FROM lead_events WHERE lead_id=? ORDER BY ts DESC LIMIT 40")
+    .bind(id).all().catch(()=>({results:[]}))).results||[];
+  const fu=lead.phone?((await env.DB.prepare("SELECT template,body,send_at,sent FROM sms_queue WHERE phone=? AND template LIKE 'lead_followup:%' ORDER BY send_at DESC LIMIT 20")
+    .bind(lead.phone).all().catch(()=>({results:[]}))).results||[]):[];
+  return json({ok:true,events:ev,followups:fu}); }
 // N7: dealer post-test-drive voice feedback — transcribe with Workers AI whisper, store, list.
 async function dealerFeedback(request,env,uid,dealer){
   if(request.method==="GET"){ const rows=await env.DB.prepare("SELECT id,drive_id,transcript,created_at FROM dealer_feedback WHERE dealer_id=? ORDER BY id DESC LIMIT 20").bind(dealer.id).all().catch(()=>({results:[]}));
@@ -1957,44 +2354,250 @@ async function aiPulse(env){
   let degraded=0;
   const q=async(sql,...b)=>{ try{ const r=await env.DB.prepare(sql).bind(...b).first(); return r?r.c:0; }catch(_){ degraded++; return null; } };
   const scansToday     = await q("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)=?", today);
-  const driveNowsToday = await q("SELECT COUNT(*) c FROM web_leads WHERE substr(created_at,1,10)=?", today);
+  // R7-D: demo-tenant traffic (is_demo=1) never counts toward ops/investor metrics.
+  const driveNowsToday = await q("SELECT COUNT(*) c FROM web_leads WHERE substr(created_at,1,10)=? AND COALESCE(is_demo,0)=0", today);
   const body={ ok:true, today,
     scansToday, scansYesterday: await q("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)=?", yday),
     scansTotal:  await q("SELECT COUNT(*) c FROM scans"),
-    driveNowsToday, driveNowsTotal: await q("SELECT COUNT(*) c FROM web_leads"),
+    driveNowsToday, driveNowsTotal: await q("SELECT COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0"),
     convRate: (scansToday&&driveNowsToday!=null)? Math.round(driveNowsToday/scansToday*100) : 0,
     liveInventory: await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
     inToday:  await q("SELECT COUNT(*) c FROM vdps WHERE substr(updated_at,1,10)=? AND active=1", today),
     outToday: await q("SELECT COUNT(*) c FROM vdps WHERE substr(deactivated_at,1,10)=?", today),
     apptsToday: 0, appt_pending: true,
+    // Creator Network — NIMBUS is the decision-maker on creator. too, so it has to SEE creator. here.
+    activeCreators: await q("SELECT COUNT(*) c FROM creators WHERE status='approved'"),
+    pendingCreators:await q("SELECT COUNT(*) c FROM creators WHERE status='pending'"),
+    openDrops:      await q("SELECT COUNT(*) c FROM creator_drops WHERE status='open'"),
+    postsPending:   await q("SELECT COUNT(*) c FROM creator_posts WHERE status='submitted'"),
+    owedCents:     (await q("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status='approved'"))||0,
+    accruedCents:  (await q("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status='accrued'"))||0,
+    creatorLeads:   await q("SELECT COUNT(*) c FROM web_leads WHERE creator_claim_id IS NOT NULL AND COALESCE(is_demo,0)=0"),
     // legacy (not shown on the new console, retained for compatibility)
     cars: await q("SELECT COUNT(*) c FROM vdps WHERE active=1"),
-    leadsToday: driveNowsToday, leadsTotal: await q("SELECT COUNT(*) c FROM web_leads") };
+    leadsToday: driveNowsToday, leadsTotal: await q("SELECT COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0") };
   body.degraded=degraded>0; return json(body); }
+async function aiVerify(request,env){ return json({ok:true}); }   // R5: side-effect-free key check — adminOnly gates it (403 vs 200)
 async function aiTrends(env){
-  // BI: aggregates for the console's trend charts — models/types/zips coming through the portal.
+  // BI: aggregates for the console's trend charts — last 14 days only (R5: real window + zero-filled timeline).
+  const W14="date('now','-14 days')";
   const rows=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]})); return (r.results||[]).map(x=>({t:String(x.t??""),c:x.c})); };
+  // Build 14 contiguous calendar days (zero-filled) so the sparkline reads as a real timeline.
+  const rawDays=((await env.DB.prepare("SELECT substr(first_ts,1,10) d, COUNT(*) c FROM scans WHERE substr(first_ts,1,10)>="+W14+" GROUP BY d").all().catch(()=>({results:[]}))).results||[]);
+  const dayMap={}; for(const r of rawDays) dayMap[r.d]=r.c;
+  const overTime=[]; for(let i=13;i>=0;i--){ const d=new Date(Date.now()-i*864e5).toISOString().slice(0,10); overTime.push({d,c:dayMap[d]||0}); }
   return json({ ok:true,
-    byType:  await rows("SELECT dream_car t, COUNT(*) c FROM scans WHERE dream_car<>'' GROUP BY dream_car ORDER BY c DESC"),
-    byDeal:  await rows("SELECT deal_type t, COUNT(*) c FROM scans WHERE deal_type IS NOT NULL AND deal_type<>'' GROUP BY deal_type ORDER BY c DESC"),
-    topCars: await rows("SELECT matched_car t, COUNT(*) c FROM web_leads WHERE matched_car IS NOT NULL AND matched_car<>'' GROUP BY matched_car ORDER BY c DESC LIMIT 8"),
-    byZip:   await rows("SELECT zip t, COUNT(*) c FROM scans WHERE zip IS NOT NULL AND zip<>'' GROUP BY zip ORDER BY c DESC LIMIT 10"),
-    overTime:((await env.DB.prepare("SELECT substr(first_ts,1,10) d, COUNT(*) c FROM scans GROUP BY d ORDER BY d DESC LIMIT 14").all().catch(()=>({results:[]}))).results||[]).reverse()
+    byType:  await rows("SELECT dream_car t, COUNT(*) c FROM scans WHERE dream_car<>'' AND substr(first_ts,1,10)>="+W14+" GROUP BY dream_car ORDER BY c DESC LIMIT 8"),
+    byDeal:  await rows("SELECT deal_type t, COUNT(*) c FROM scans WHERE deal_type IS NOT NULL AND deal_type<>'' AND substr(first_ts,1,10)>="+W14+" GROUP BY deal_type ORDER BY c DESC"),
+    topCars: await rows("SELECT matched_car t, COUNT(*) c FROM web_leads WHERE matched_car IS NOT NULL AND matched_car<>'' AND COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14+" GROUP BY matched_car ORDER BY c DESC LIMIT 8"),
+    byZip:   await rows("SELECT zip t, COUNT(*) c FROM scans WHERE zip IS NOT NULL AND zip<>'' AND substr(first_ts,1,10)>="+W14+" GROUP BY zip ORDER BY c DESC LIMIT 10"),
+    // R17: when buyers actually shop — proves (or disproves) the 6-9pm activation window.
+    byHour:  await rows("SELECT substr(created_at,12,2) t, COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0 GROUP BY t ORDER BY t"),
+    byBand:  await rows("SELECT COALESCE(credit_band,'unknown') t, COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0 GROUP BY t ORDER BY c DESC"),
+    funnel:  { scans:(await env.DB.prepare("SELECT COUNT(*) c FROM scans WHERE substr(first_ts,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+               leads:(await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0 },
+    // R23: outcomes — sold / no-show / cancelled counts + leads won back (ledger no_show|cancelled → confirmed).
+    outcomes: { byStatus: await rows("SELECT status t, COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0 AND status IS NOT NULL GROUP BY status ORDER BY c DESC"),
+                winBacks:(await env.DB.prepare("SELECT COUNT(DISTINCT lead_id) c FROM lead_events WHERE to_status='confirmed' AND from_status IN ('no_show','cancelled') AND substr(ts,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0 },
+    // Creator Network funnel: drops → claims → posts → clicks → attributed leads. The last number
+    // divided by spend is the only honest verdict on whether the network works.
+    creator: {
+      drops:  (await env.DB.prepare("SELECT COUNT(*) c FROM creator_drops WHERE substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      claims: (await env.DB.prepare("SELECT COUNT(*) c FROM creator_claims WHERE substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      posts:  (await env.DB.prepare("SELECT COUNT(*) c FROM creator_posts WHERE substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      clicks: (await env.DB.prepare("SELECT COALESCE(SUM(clicks),0) c FROM creator_claims").first().catch(()=>({c:0})))?.c||0,
+      leads:  (await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE creator_claim_id IS NOT NULL AND COALESCE(is_demo,0)=0 AND substr(created_at,1,10)>="+W14).first().catch(()=>({c:0})))?.c||0,
+      spentCents:(await env.DB.prepare("SELECT COALESCE(SUM(amount_cents),0) c FROM creator_earnings WHERE status IN ('approved','paid')").first().catch(()=>({c:0})))?.c||0,
+      topCreators: await rows("SELECT c.handle t, COUNT(w.id) c FROM creators c JOIN creator_claims cc ON cc.creator_id=c.id LEFT JOIN web_leads w ON w.creator_claim_id=cc.id GROUP BY c.id ORDER BY c DESC LIMIT 8")
+    },
+    overTime
   }); }
 async function adminBuyers(env){
-  // BI: the new one-line buyer record (zip + selections + picked car + email), from web_leads. Old name/phone
-  // profiles are archived (0045) and no longer shown.
-  const r=await env.DB.prepare("SELECT created_at, zip, dream_car, deal_type, monthly, down, matched_car, email FROM web_leads ORDER BY id DESC LIMIT 500").all().catch(()=>({results:[]}));
+  // R5: one row PER BUYER (dedupe on CID → email → phone), latest booking, with full contact fields.
+  const r=await env.DB.prepare(
+    "SELECT cid,first_name,last_name,phone,email,address,zip,matched_car,dream_car,deal_type,monthly,down,appt_slot,created_at,is_demo "+
+    "FROM web_leads w WHERE id=(SELECT MAX(id) FROM web_leads w2 WHERE COALESCE(w2.cid,w2.email,w2.phone)=COALESCE(w.cid,w.email,w.phone)) "+
+    "ORDER BY id DESC LIMIT 500").all().catch(()=>({results:[]}));
   return json({ok:true, buyers:r.results||[]}); }
 // ===== BI: Nimbus conversational ops brain — insights (aiAsk) + guarded actions (aiAct). =====
 const NIMBUS_ACTIONS = { dealer_engine:"turn a dealer's inventory engine on/off (args: dealer_id, on)",
   reindex:"re-embed inventory + profiles into search (no args)",
   activate_vin:"put a car back in inventory (args: vin)",
-  deactivate_vin:"take a car out of inventory (args: vin)" };
+  deactivate_vin:"take a car out of inventory (args: vin)",
+  purge_test:"purge all is_demo test rows (confirm required)",
+  hide_lead:"soft-hide one lead from ops metrics (args: lead_id)",
+  hide_leads:"soft-hide several leads at once (args: ids CSV)",
+  // Creator Network. NIMBUS is the decision-maker on dealer. AND creator. — same allowlist, same
+  // confirm gate. Every one of these is reversible EXCEPT creator_payout.
+  creator_approve_post:"approve a creator post and release its earning for payout (args: post_id)",
+  creator_reject_post:"reject a creator post (args: post_id)",
+  creator_suspend:"suspend a creator from claiming drops (args: creator_id)",
+  creator_reinstate:"reinstate a suspended creator (args: creator_id)",
+  creator_clawback:"reverse an accrued or approved earning (args: earning_id)",
+  creator_payout:"IRREVERSIBLE - send an approved earning to the creator's Stripe account (args: earning_id)",
+  drop_rate:"set a drop's per-post rate in cents and lock it from re-pricing (args: drop_id, cents)",
+  close_drop:"stop a drop from being claimed (args: drop_id)",
+  open_drop:"reopen a closed drop (args: drop_id)" };
+// R16: lifetime demand map — real ZIP counts only, no external tile service, no API key.
+async function aiMap(request,env){
+  const w=String(new URL(request.url).searchParams.get("w")||"life");
+  const since=w==="today"?new Date(Date.now()-864e5).toISOString():w==="30d"?new Date(Date.now()-30*864e5).toISOString():"1970";
+  const r=await env.DB.prepare(
+    "SELECT zip, COUNT(DISTINCT COALESCE(cid,email,phone)) n, MAX(created_at) last FROM web_leads WHERE COALESCE(is_demo,0)=0 AND zip IS NOT NULL AND zip<>'' AND created_at>? GROUP BY zip ORDER BY n DESC LIMIT 400"
+  ).bind(since).all().catch(()=>({results:[]}));
+  const rows=r.results||[];
+  const total=rows.reduce((a,x)=>a+(+x.n||0),0);
+  return json({ok:true,window:w,total,points:rows}); }
+// R15: heartbeat — appliance reachability only. No AI.run ping (that would burn neurons every 30s).
+async function aiHealth(request,env){
+  let appliance="off", why="", host="";
+  if(env.AI_BACKEND_URL){
+    try{ host=new URL(env.AI_BACKEND_URL).host; }catch(_){ host="(malformed AI_BACKEND_URL)"; }
+    try{
+      const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:"ping"}]}),signal:AbortSignal.timeout(3000)});
+      appliance=r.ok?"up":"err"; if(!r.ok) why="reachable but returned HTTP "+r.status+" — the tunnel is up, Ollama isn't answering /chat";
+    }catch(e){ appliance="down";
+      // R17: name the actual failure so the fix is obvious instead of a generic "offline".
+      const m=String((e&&(e.message||e.name))||"");
+      why=/abort|timeout|timed out/i.test(m) ? "no answer in 3s — box asleep, Ollama not running, or the tunnel is dead"
+        : /enotfound|dns|getaddrinfo/i.test(m) ? "hostname does not resolve — the tunnel URL is stale/changed"
+        : /refused|econnrefused/i.test(m) ? "connection refused — tunnel is up but nothing is listening on that port"
+        : ("could not connect ("+m.slice(0,80)+")"); } }
+  return json({ok:true,appliance,host,why,cloud:env.AI?"bound":"absent",build:"R17",ts:Date.now()}); }
+// R15: deterministic verb layer (build-list #3/#11/#15) — answers instantly, survives total model loss.
+// All SQL parameterized; purge_test touches is_demo=1 rows only; remove proposes, never executes.
+async function nimbusVerb(env,q,p){
+  // R16: real speech, not command line. Strip politeness/filler so "Can you remove X please" hits the verb.
+  q=String(q||"").toLowerCase().replace(/[?.!]+$/,"").trim()
+     .replace(/^(hey|ok|okay|so|and|now|yo)[\s,]+/g,"")
+     .replace(/^(can|could|will|would|do)\s+(you|u)\s+(please\s+)?/,"")
+     .replace(/^(please|pls)\s+/,"")
+     .replace(/^(i\s+(want|need|would like)\s+(you\s+)?to\s+|go\s+ahead\s+and\s+|let'?s\s+)/,"")
+     .replace(/\s+(please|thanks|thank you|for me)$/,"")
+     .trim();
+  const rows=async(sql,...b)=>{const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]}));return r.results||[];};
+  const carLine=v=>`${v.year} ${v.make} ${v.model}${v.trim?" "+v.trim:""} · $${v.price_mo||"?"}/mo${v.miles?" · "+v.miles+" mi":""}`;
+  const leadLine=w=>`${w.cid||"—"} · ${[w.first_name,w.last_name].filter(Boolean).join(" ")||"?"} · ${w.matched_car||w.dream_car||"?"} · $${w.monthly||"?"}/mo · ${w.zip||"?"}${w.is_demo?" · TEST":""}`;
+  let m;
+  if(/^(show |list |raw |view )?(me )?(the )?(inventory|cars)$/.test(q)){
+    const n=/^raw /.test(q)?50:15;
+    const v=await rows("SELECT year,make,model,trim,price_mo,miles FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT ?",n);
+    return {answer:(v.map(carLine).join("\n")||"No active inventory.")+(v.length>=n?"\n…say 'export inventory' for the full CSV.":"")};
+  }
+  if(/^(show |list |raw |view )?(me )?(the )?(buyers|leads)$/.test(q)){
+    const n=/^raw /.test(q)?50:15;
+    const w=await rows("SELECT cid,first_name,last_name,matched_car,dream_car,monthly,zip,is_demo FROM web_leads ORDER BY id DESC LIMIT ?",n);
+    return {answer:w.map(leadLine).join("\n")||"No buyers yet."};
+  }
+  // ---- Creator Network verbs. Read-only ones answer instantly; anything that pays PROPOSES. ----
+  if(/^(show |list |view )?(me )?(the )?creators$/.test(q)){
+    const c=await rows("SELECT handle,status,score,followers_declared,(SELECT COUNT(*) FROM creator_posts p WHERE p.creator_id=creators.id) posts FROM creators ORDER BY score DESC LIMIT 25");
+    return {answer:c.map(x=>`${x.handle||"—"} · ${x.status} · score ${x.score}/100 · ${x.posts} post(s) · ${x.followers_declared||0} declared followers (unverified)`).join("\n")||"No creators yet."};
+  }
+  if(/^(show |list |view )?(me )?(the )?(open )?drops$/.test(q)){
+    const d=await rows("SELECT d.id,d.rate_cents,d.status,v.year,v.make,v.model,(SELECT COUNT(*) FROM creator_claims x WHERE x.drop_id=d.id) claims FROM creator_drops d JOIN vdps v ON v.id=d.vdp_id WHERE d.status='open' ORDER BY d.id DESC LIMIT 25");
+    return {answer:d.map(x=>`#${x.id} · ${x.year} ${x.make} ${x.model} · $${((x.rate_cents||0)/100).toFixed(0)}/post · ${x.claims} claimed`).join("\n")||"No open drops."};
+  }
+  if(/^(show |list |view )?(me )?(the )?(pending |submitted )?posts( pending| for review)?$/.test(q)){
+    const ps=await rows("SELECT p.id,p.reach_declared,p.disclosure_confirmed,c.handle,cc.clicks FROM creator_posts p JOIN creators c ON c.id=p.creator_id JOIN creator_claims cc ON cc.id=p.claim_id WHERE p.status='submitted' ORDER BY p.id ASC LIMIT 25");
+    return {answer:ps.map(x=>`post #${x.id} · ${x.handle} · ${x.clicks} clicks / ${x.reach_declared||0} reach${x.disclosure_confirmed?"":" · ⚠ NO DISCLOSURE"}`).join("\n")||"Nothing awaiting review."};
+  }
+  if(/^(show |list |view )?(me )?(the )?(payout|payouts|payout queue|what (do )?(we|i) owe)$/.test(q)){
+    const e=await rows("SELECT e.id,e.amount_cents,c.handle,c.payouts_enabled FROM creator_earnings e JOIN creators c ON c.id=e.creator_id WHERE e.status='approved' ORDER BY e.id ASC LIMIT 25");
+    const tot=e.reduce((a,x)=>a+(+x.amount_cents||0),0);
+    return {answer:(e.map(x=>`earning #${x.id} · ${x.handle} · $${((x.amount_cents||0)/100).toFixed(2)}${x.payouts_enabled?"":" · ⚠ Stripe onboarding incomplete"}`).join("\n")||"Nothing approved for payout.")+
+      (e.length?`\n\nTotal owed: $${(tot/100).toFixed(2)}. Say "pay earning <id>" to propose a transfer.`:"")};
+  }
+  if((m=q.match(/^approve post #?(\d+)$/))){
+    return {answer:`Approving post #${m[1]} releases its earning for payout.`,proposed_action:{name:"creator_approve_post",args:{post_id:m[1]}}};
+  }
+  if((m=q.match(/^reject post #?(\d+)$/))){
+    return {answer:`Rejecting post #${m[1]} claws back its accrued earning.`,proposed_action:{name:"creator_reject_post",args:{post_id:m[1]}}};
+  }
+  if((m=q.match(/^pay (?:earning )?#?(\d+)$/))){
+    // Never executed here. Irreversible actions are L1 forever — aiAct requires confirm:true.
+    const e=await rows("SELECT e.id,e.amount_cents,e.status,c.handle,c.payouts_enabled FROM creator_earnings e JOIN creators c ON c.id=e.creator_id WHERE e.id=?",+m[1]);
+    if(!e.length) return {answer:`No earning #${m[1]}.`};
+    const x=e[0];
+    if(x.status!=="approved") return {answer:`Earning #${x.id} is "${x.status}", not approved — approve its post first.`};
+    if(!x.payouts_enabled) return {answer:`${x.handle} hasn't finished Stripe onboarding, so no transfer can be sent yet.`};
+    return {answer:`⚠ This moves real money and cannot be undone. Pay ${x.handle} $${((x.amount_cents||0)/100).toFixed(2)} for earning #${x.id}?`,
+      proposed_action:{name:"creator_payout",args:{earning_id:String(x.id)}}};
+  }
+  if(/^(status|system status|full status)$/.test(q)){
+    let appliance="not configured";
+    if(env.AI_BACKEND_URL){ try{
+        const r=await fetch(env.AI_BACKEND_URL+"/chat",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:"ping"}]}),signal:AbortSignal.timeout(3000)});
+        appliance=r.ok?"UP":"ERROR "+r.status; }catch(_){ appliance="DOWN (didn't answer in 3s — check the box + tunnel)"; } }
+    const cars=await rows("SELECT COUNT(*) c FROM vdps WHERE active=1");
+    const leads=await rows("SELECT COUNT(*) c FROM web_leads WHERE COALESCE(is_demo,0)=0");
+    const dlrs=await rows("SELECT COUNT(*) c FROM dealer_leads WHERE status='active' AND COALESCE(is_demo,0)=0");
+    return {answer:"MODEL  appliance: "+appliance+"\n       cloud: "+(env.AI?"bound (free tier — dies daily at 10k neurons; Workers Paid removes the cap)":"ABSENT")+
+      "\nDATA   "+(cars[0]?cars[0].c:0)+" active cars · "+(leads[0]?leads[0].c:0)+" live leads · "+(dlrs[0]?dlrs[0].c:0)+" dealers active"+
+      "\nTODAY  "+(p.scansToday||0)+" scans · "+(p.driveNowsToday||0)+" drive-nows"};
+  }
+  // R23: outcome verbs — deterministic, model-free views of the lifecycle ledger.
+  if((m=/^(show |list |view )?(me )?(the )?(no.?shows?|cancel(led|lations)?|win.?backs?)$/.exec(q))){
+    const kind=/no.?show/.test(m[4])?"no_show":/cancel/.test(m[4])?"cancelled":"winback";
+    if(kind==="winback"){
+      const wbs=await rows("SELECT e.ts,e.lead_id,w.cid,w.first_name,w.last_name,w.matched_car,w.dream_car FROM lead_events e JOIN web_leads w ON w.id=e.lead_id WHERE e.to_status='confirmed' AND e.from_status IN ('no_show','cancelled') ORDER BY e.ts DESC LIMIT 15");
+      return {answer:wbs.map(x=>String(x.ts||"").slice(0,16).replace("T"," ")+" · "+(x.cid||"—")+" · "+([x.first_name,x.last_name].filter(Boolean).join(" ")||"?")+" · "+(x.matched_car||x.dream_car||"?")).join("\n")||"No win-backs yet."};
+    }
+    const ws=await rows("SELECT cid,first_name,last_name,matched_car,dream_car,status_ts,followup_stage FROM web_leads WHERE status=? ORDER BY status_ts DESC LIMIT 15",kind);
+    return {answer:ws.map(x=>String(x.status_ts||"").slice(0,16).replace("T"," ")+" · "+(x.cid||"—")+" · "+([x.first_name,x.last_name].filter(Boolean).join(" ")||"?")+" · "+(x.matched_car||x.dream_car||"?")+(x.followup_stage===99?" · texts stopped":"")).join("\n")||("No "+kind.replace("_","-")+"s.")};
+  }
+  if(/^export (the )?(inventory|cars)$/.test(q)) return {answer:"EXPORT_READY:/api/admin/export?pool=vdps"};
+  if(/^export (the )?(buyers|leads)$/.test(q))   return {answer:"EXPORT_READY:/api/admin/export?pool=web_leads"};
+  if(/^(purge|remove|delete) (the )?test data$/.test(q)||/^purge tests?$/.test(q)){
+    const t=await rows("SELECT COUNT(*) c FROM web_leads WHERE is_demo=1");
+    return {answer:"Found "+(t[0]?t[0].c:0)+" test lead(s) plus the demo tenant's cars. Shall I purge them, sir?",
+      proposed_action:{name:"purge_test",args:{}}};
+  }
+  // R16: multi-target removes — "remove the jordan rivera test & the smoke test". Test rows resolve first so
+  // a live customer is never silently surfaced for hiding; if one is, it's called out loudly.
+  if((m=/^(remove|delete|hide|get rid of|clear)\s+(.+)$/.exec(q))){
+    const targets=m[2].split(/\s*(?:&|,|\band\b|\+)\s*/)
+      .map(s=>s.replace(/^(the|that|a)\s+/,"").replace(/\s+(test|tests|record|records|lead|leads|row|rows|data)$/,"").trim())
+      .filter(Boolean).slice(0,5);
+    const hits=[], misses=[];
+    for(const tRaw of targets){
+      const t="%"+tRaw+"%";
+      let w=await rows("SELECT id,cid,first_name,last_name,matched_car,dream_car,monthly,zip,is_demo FROM web_leads WHERE is_demo=1 AND (first_name||' '||last_name) LIKE ? ORDER BY id DESC LIMIT 1",t);
+      if(!w.length) w=await rows("SELECT id,cid,first_name,last_name,matched_car,dream_car,monthly,zip,is_demo FROM web_leads WHERE COALESCE(is_demo,0)=0 AND (first_name||' '||last_name) LIKE ? ORDER BY id DESC LIMIT 1",t);
+      if(w.length) hits.push(w[0]); else misses.push(tRaw);
+    }
+    if(!hits.length){
+      const v=await rows("SELECT vin,year,make,model,trim,price_mo,miles FROM vdps WHERE active=1 AND (year||' '||make||' '||model||' '||COALESCE(trim,'')) LIKE ? ORDER BY id DESC LIMIT 1","%"+(targets[0]||"")+"%");
+      if(v.length) return {answer:"Found: "+carLine(v[0])+" (VIN "+v[0].vin+")\nDeactivate this listing?",proposed_action:{name:"deactivate_vin",args:{vin:v[0].vin}}};
+      return {answer:"No buyer or listing matches "+misses.map(x=>'"'+x+'"').join(" or ")+", sir."};
+    }
+    const live=hits.filter(h=>!h.is_demo);
+    return {answer:hits.map(h=>"• "+leadLine(h)).join("\n")+
+      (live.length?"\n⚠ "+live.length+" of these is a LIVE customer, not a test row.":"")+
+      (misses.length?"\n(no match for "+misses.map(x=>'"'+x+'"').join(", ")+")":"")+
+      "\nHide "+(hits.length>1?("all "+hits.length):"this")+" from operations?",
+      proposed_action:{name:"hide_leads",args:{ids:hits.map(h=>h.id).join(",")}}};
+  }
+  if(/^(help|what can you do|commands|verbs)$/.test(q))
+    return {answer:"COMMANDS (these work even with the model offline, sir)\n"+
+      "  status                    full system report\n"+
+      "  show inventory | cars     15 newest active listings\n"+
+      "  show buyers | leads       15 newest leads\n"+
+      "  show no-shows | cancellations | win-backs   lifecycle ledger views\n"+
+      "  raw inventory | buyers    50 rows, zero inference\n"+
+      "  export inventory|buyers   CSV download\n"+
+      "  remove <name> [& <name>]  find + confirm hide\n"+
+      "  purge test data           clear all TEST rows\n"+
+      "  lock                      end session"};
+  return null;   // fall through to the LLM
+}
 async function aiAsk(request,env){
   const {question,history}=await request.json().catch(()=>({}));
   if(!question) return json({ok:false,error:"bad_request"},400);
   const p=await aiPulse(env).then(r=>r.json()).catch(()=>({}));
+  // R15: deterministic verbs answer instantly and survive total model loss.
+  const det=await nimbusVerb(env,String(question),p);
+  if(det) return json({ok:true,answer:det.answer,proposed_action:det.proposed_action||null,deterministic:true});
   const t=await aiTrends(env).then(r=>r.json()).catch(()=>({}));
   const state=`STATE (live): scansToday=${p.scansToday} driveNowsToday=${p.driveNowsToday} convRate=${p.convRate}% liveInventory=${p.liveInventory} in=${p.inToday} out=${p.outToday}. `+
     `topTypes=${(t.byType||[]).map(x=>x.t+":"+x.c).join(", ")}. topCars=${(t.topCars||[]).slice(0,5).map(x=>x.t+":"+x.c).join(", ")}. topZips=${(t.byZip||[]).slice(0,5).map(x=>x.t+":"+x.c).join(", ")}.`;
@@ -2006,7 +2609,19 @@ async function aiAsk(request,env){
     "emit placeholder tokens like NAME, arg1, or v1. Available actions: "+
     Object.entries(NIMBUS_ACTIONS).map(([k,v])=>k+" — "+v).join("; ")+". "+state;
   const msgs=[{role:"system",content:sys},...((history||[]).slice(-8)),{role:"user",content:String(question).slice(0,600)}];
-  let text; try{ text=await llm(env,msgs); }catch(_){ try{ text=await llm(env,msgs); }catch(e){ return json({ok:false,error:"nimbus_unavailable"},503); } }  // one retry: Workers AI cold-start
+  let text; try{ text=await llm(env,msgs); }
+  catch(_){ try{ text=await llm(env,msgs); }
+    catch(e){ const why=(e&&e.layer==="quota")
+        ? "Workers AI daily quota is exhausted (resets midnight UTC; Workers Paid removes the cap)"
+        : "the cloud model errored";
+      const ol=(e&&e.ollama)?"Your Ollama appliance didn't answer within 6s — check the box and its tunnel. Then: ":"";
+      const ql=String(question||"").toLowerCase();   // R16: never dead-end — point at the verb that would have worked
+      const hint=/remove|delete|hide|get rid/.test(ql)?" Try: remove <name>."
+        :/test/.test(ql)?" Try: purge test data."
+        :/inventory|car/.test(ql)?" Try: show inventory."
+        :/buyer|lead/.test(ql)?" Try: show buyers."
+        :" Say 'help' for the full command list.";
+      return json({ok:false,error:"nimbus_unavailable",detail:ol+why+"."+hint},503); } }
   let proposed=null; const m=/<ACTION\s+name=(\w+)([^>]*)>/i.exec(text||"");
   if(m){ const args={}; (m[2]||"").trim().split(/\s+/).filter(Boolean).forEach(kv=>{ const [k,...rest]=kv.split("="); if(k) args[k]=rest.join("="); });
     // Reject the model echoing the prompt's template (placeholder arg names/values) rather than a real action.
@@ -2027,6 +2642,70 @@ async function aiAct(request,env){
     else if(action==="activate_vin"||action==="deactivate_vin"){ const on=action==="activate_vin"?1:0; const vin=String(a.vin||"").trim();
       if(!vin) return json({ok:false,error:"bad_vin"},400);
       await env.DB.prepare("UPDATE vdps SET active=?, deactivated_at=? WHERE vin=?").bind(on, on?null:new Date().toISOString(), vin).run(); result=`${vin} ${on?"activated":"deactivated"}`; }
+    else if(action==="purge_test"){   // R15: confirm-gated; scoped strictly to is_demo rows
+      const n=await env.DB.prepare("DELETE FROM web_leads WHERE is_demo=1").run();
+      await env.DB.prepare("UPDATE vdps SET active=0, deactivated_at=? WHERE dealer_id IN (SELECT id FROM dealer_leads WHERE is_demo=1)").bind(new Date().toISOString()).run();
+      result=(n.meta.changes||0)+" test lead(s) purged; demo-tenant cars archived"; }
+    else if(action==="hide_lead"){ const lid=parseInt(a.lead_id,10);   // R15: soft + reversible
+      if(!lid) return json({ok:false,error:"bad_lead"},400);
+      await env.DB.prepare("UPDATE web_leads SET is_demo=1 WHERE id=?").bind(lid).run(); result="lead "+lid+" hidden from ops (soft — reversible)"; }
+    else if(action==="hide_leads"){   // R16: multi-target, soft + reversible, capped
+      const ids=String(a.ids||"").split(",").map(x=>parseInt(x,10)).filter(x=>x>0).slice(0,25);
+      if(!ids.length) return json({ok:false,error:"bad_lead"},400);
+      for(const id of ids) await env.DB.prepare("UPDATE web_leads SET is_demo=1 WHERE id=?").bind(id).run();
+      result=ids.length+" lead(s) hidden from ops (soft — reversible)"; }
+    // ---- Creator Network. NIMBUS decides on creator. exactly as it does on dealer.: same allowlist,
+    // ---- same confirm gate, same event log. All reversible EXCEPT creator_payout.
+    else if(action==="creator_approve_post"||action==="creator_reject_post"){
+      const pid=parseInt(a.post_id,10); if(!pid) return json({ok:false,error:"bad_post"},400);
+      const ok=action==="creator_approve_post";
+      const p=await env.DB.prepare("SELECT id,disclosure_confirmed FROM creator_posts WHERE id=?").bind(pid).first();
+      if(!p) return json({ok:false,error:"bad_post"},400);
+      // FTC 16 CFR 255: an undisclosed paid post can never be approved, whatever the operator asks for.
+      if(ok&&!p.disclosure_confirmed) return json({ok:false,error:"no_disclosure"},422);
+      await env.DB.prepare("UPDATE creator_posts SET status=?, reviewed_at=? WHERE id=?")
+        .bind(ok?"approved":"rejected",new Date().toISOString(),pid).run();
+      await env.DB.prepare("UPDATE creator_earnings SET status=? WHERE post_id=? AND status IN ('accrued','approved')")
+        .bind(ok?"approved":"clawed_back",pid).run();
+      result="post "+pid+" "+(ok?"approved — earning released for payout":"rejected; earning clawed back"); }
+    else if(action==="creator_suspend"||action==="creator_reinstate"){
+      const cid2=parseInt(a.creator_id,10); if(!cid2) return json({ok:false,error:"bad_creator"},400);
+      await env.DB.prepare("UPDATE creators SET status=? WHERE id=?").bind(action==="creator_suspend"?"suspended":"approved",cid2).run();
+      result="creator "+cid2+" "+(action==="creator_suspend"?"suspended":"reinstated")+" (soft — reversible)"; }
+    else if(action==="creator_clawback"){
+      const eid=parseInt(a.earning_id,10); if(!eid) return json({ok:false,error:"bad_earning"},400);
+      const e=await env.DB.prepare("SELECT status FROM creator_earnings WHERE id=?").bind(eid).first();
+      if(!e) return json({ok:false,error:"bad_earning"},400);
+      if(e.status==="paid") return json({ok:false,error:"already_paid"},422);   // money already left — reverse in Stripe, not here
+      await env.DB.prepare("UPDATE creator_earnings SET status='clawed_back' WHERE id=?").bind(eid).run();
+      result="earning "+eid+" clawed back"; }
+    else if(action==="creator_payout"){
+      // ⚠ THE ONLY IRREVERSIBLE ACTION IN THE SET. AUTONOMY-POLICY.md caps irreversible actions at L1
+      // permanently — "no accuracy score buys past it". NIMBUS proposes; the confirm gate above is a human.
+      if(!env.STRIPE_SECRET_KEY) return json({ok:false,error:"stripe_unconfigured"},503);
+      const eid=parseInt(a.earning_id,10); if(!eid) return json({ok:false,error:"bad_earning"},400);
+      const e=await env.DB.prepare("SELECT e.id,e.amount_cents,e.status,c.id cid,c.stripe_account_id,c.payouts_enabled FROM creator_earnings e JOIN creators c ON c.id=e.creator_id WHERE e.id=?").bind(eid).first();
+      if(!e) return json({ok:false,error:"bad_earning"},400);
+      if(e.status!=="approved") return json({ok:false,error:"not_approved"},422);
+      if(!e.stripe_account_id||!e.payouts_enabled) return json({ok:false,error:"payouts_not_enabled"},422);
+      const t=await stripeApi(env,"transfers",{amount:e.amount_cents,currency:"usd",destination:e.stripe_account_id,
+        "metadata[earning_id]":String(eid),"metadata[creator_id]":String(e.cid)});
+      if(!t.ok||!t.data.id) return json({ok:false,error:"stripe_failed"},502);
+      await env.DB.prepare("UPDATE creator_earnings SET status='paid', stripe_transfer_id=?, paid_at=? WHERE id=?")
+        .bind(t.data.id,new Date().toISOString(),eid).run();
+      result="paid $"+(e.amount_cents/100).toFixed(2)+" — transfer "+t.data.id; }
+    else if(action==="drop_rate"){
+      const did2=parseInt(a.drop_id,10), cents=parseInt(a.cents,10);
+      if(!did2||!(cents>=0)) return json({ok:false,error:"bad_drop"},400);
+      const capped=Math.min(CREATOR_MAX_RATE_CENTS,cents);
+      // locked=1: a human fixed this number. creatorAgent never re-prices a locked drop.
+      await env.DB.prepare("UPDATE creator_drops SET rate_cents=?, rate_why=?, locked=1 WHERE id=?")
+        .bind(capped,JSON.stringify([{f:"set by operator",cents:capped}]),did2).run();
+      result="drop "+did2+" set to $"+(capped/100).toFixed(2)+" and locked from re-pricing"; }
+    else if(action==="close_drop"||action==="open_drop"){
+      const did2=parseInt(a.drop_id,10); if(!did2) return json({ok:false,error:"bad_drop"},400);
+      await env.DB.prepare("UPDATE creator_drops SET status=? WHERE id=?").bind(action==="close_drop"?"closed":"open",did2).run();
+      result="drop "+did2+" "+(action==="close_drop"?"closed":"reopened"); }
   }catch(e){ return json({ok:false,error:"act_failed"},500); }
   await logEvent(env,{action:"admin.nimbus_act",source:action+" "+JSON.stringify(a)}).catch(()=>{});
   return json({ok:true, result}); }
@@ -2039,14 +2718,25 @@ async function aiGraph(env){
   const cars=await all("SELECT id,year,make,model,dealer_id FROM vdps WHERE active=1 ORDER BY updated_at DESC LIMIT 80");
   cars.forEach(c=>{ add("c"+c.id,"car",(c.year||"")+" "+(c.make||"")+" "+(c.model||""),3);
     if(c.dealer_id&&seen.has("d"+c.dealer_id)) EDGES.push({a:"c"+c.id,b:"d"+c.dealer_id,w:1}); });
-  const ms=await all("SELECT user_id,vdp_id,score FROM matches ORDER BY score DESC LIMIT 120");
+  // R21: only real users — a match node must trace to a person with real contact info, labeled by
+  // anonymized CID (never a raw "Rider N" for a seed row). Few real matches → few nodes. Honest.
+  const ms=await all("SELECT m.user_id,m.vdp_id,m.score,u.email,u.phone FROM matches m JOIN users u ON u.id=m.user_id "+
+    "WHERE (u.email IS NOT NULL AND u.email!='') OR (u.phone IS NOT NULL AND u.phone!='') ORDER BY m.score DESC LIMIT 120");
   const riders=new Set();
   ms.forEach(m=>{ if(!seen.has("c"+m.vdp_id))return; riders.add(m.user_id);
-    add("u"+m.user_id,"rider","Rider "+m.user_id,3);
+    add("u"+m.user_id,"rider",leadCid(m.email,m.phone)||("User "+m.user_id),3);
     EDGES.push({a:"c"+m.vdp_id,b:"u"+m.user_id,w:Math.max(1,Math.round((m.score||0)/20))}); });
   if(riders.size){ const ids=[...riders].slice(0,60), ph=ids.map(()=>"?").join(",");
     const ps=await all("SELECT user_id FROM profiles WHERE user_id IN ("+ph+")",...ids);
     ps.forEach(p=>{ add("p"+p.user_id,"profile","Twin "+p.user_id,2); EDGES.push({a:"u"+p.user_id,b:"p"+p.user_id,w:1}); }); }
+  // Creator Network edges: creator → the car they claimed. Creators are labeled by handle (their own
+  // public identity, not a buyer's), and the edge stops at the CAR — a creator node never touches a
+  // rider or profile node, which is fence 1 expressed in the graph itself.
+  const crs=await all("SELECT c.id,c.handle,c.score, cc.drop_id, d.vdp_id FROM creator_claims cc "+
+    "JOIN creators c ON c.id=cc.creator_id JOIN creator_drops d ON d.id=cc.drop_id ORDER BY cc.id DESC LIMIT 60");
+  crs.forEach(x=>{ if(!seen.has("c"+x.vdp_id))return;
+    add("k"+x.id,"creator",x.handle||("Creator "+x.id),Math.max(2,Math.round((x.score||0)/20)));
+    EDGES.push({a:"k"+x.id,b:"c"+x.vdp_id,w:2}); });
   return json({ok:true, nodes:NODES.slice(0,200), edges:EDGES}); }
 async function dealerActivate(request,env){ const {leadId}=await request.json().catch(()=>({}));
   if(!leadId) return json({ok:false,error:"bad_request"},400);
@@ -2195,6 +2885,383 @@ async function routeLead(env, L){
   if(!env.CRM_ENDPOINT) return "unrouted";
   try{ const r=await fetch(env.CRM_ENDPOINT,{method:"POST",headers:{"content-type":"application/xml"},body:adfFor(L)});
     return r.ok?"routed":("crm_"+r.status); }catch(_){ return "crm_error"; } }
+// ===================================================================================================
+// ===== CREATOR NETWORK (creator.carnimbus.com) — slide-4 step 2 ====================================
+// ===================================================================================================
+// Dealer uploads a VIN -> NIMBUS prices a "drop" -> approved creators see it ranked -> they claim a
+// tracked link -> a buyer clicks it -> the lead carries creator_claim_id -> the post earns.
+//
+// THREE FENCES, all load-bearing:
+//  1. PRIVACY. TWIN-SCHEMA says dealer.*-facing surfaces never see T2. A creator surface is
+//     third-party-facing with no clause, so the stricter reading applies: creators see CAR data and
+//     THEIR OWN numbers. Never a buyer's identity, band, or lead contents. Attribution tells a creator
+//     THAT they produced a lead, never WHO it was. Every SELECT below is written to that rule.
+//  2. NO NEW EVENT PREFIX. EVENT-TAXONOMY freezes the seven. Creator activity emits social.*,
+//     drops emit dealer.*, NIMBUS decisions emit ai.*. No creator.* prefix is introduced.
+//  3. NO CREATOR SMS. runQueue() resolves consent via `SELECT sms_consent FROM waitlist WHERE phone=?`;
+//     a creator has no waitlist row, so a queued text is marked sent and silently never delivered.
+//     Creator notification is email only.
+const CREATOR_MIN_FOLLOWERS=10000;      // self-declared; nothing here can verify it — see creatorScore()
+const CREATOR_MIN_CTR=0.05;             // measured from OUR tracked links, so this gate is real
+const CREATOR_BASE_RATE_CENTS=5000;     // $50 floor
+const CREATOR_MAX_RATE_CENTS=15000;     // $150 cap
+
+// ---- NIMBUS decision core -------------------------------------------------------------------------
+// Same contract as closeProb()/leadHeat(): deterministic, and the factors ALWAYS sum to the number
+// shown. No LLM produces a figure a dealer or creator acts on.
+
+// What a post on this unit is worth. Aging metal is worth more to move — that IS slide 4's headline.
+function rateForDrop(v){
+  const why=[]; let c=CREATOR_BASE_RATE_CENTS; why.push({f:"base",cents:CREATOR_BASE_RATE_CENTS});
+  const price=(+v.price)|| ((+v.price_mo||0)*72) || 0;
+  if(price>=55000){ c+=4000; why.push({f:"value 55k+",cents:4000}); }
+  else if(price>=38000){ c+=2500; why.push({f:"value 38k+",cents:2500}); }
+  else if(price>=25000){ c+=1000; why.push({f:"value 25k+",cents:1000}); }
+  if(v.lot_date&&/^\d{4}-\d{2}-\d{2}$/.test(String(v.lot_date))){
+    const days=Math.floor((Date.now()-Date.parse(v.lot_date+"T00:00:00Z"))/864e5);
+    if(days>90){ c+=2500; why.push({f:days+"d on lot",cents:2500}); }
+    else if(days>60){ c+=1500; why.push({f:days+"d on lot",cents:1500}); }
+    else if(days>30){ c+=500; why.push({f:days+"d on lot",cents:500}); }
+  }
+  return {cents:Math.min(CREATOR_MAX_RATE_CENTS,c),why};
+}
+
+// A creator's MEASURED standing, 0-100. Declared followers contribute exactly nothing: no social API
+// exists in this codebase, so a follower count is a claim, not a fact. Saying so in code is the honest
+// form — the score moves only on things we watched happen.
+function creatorScore(stats){
+  const why=[]; let s=0;
+  const posts=+stats.posts||0, approved=+stats.approved||0, rejected=+stats.rejected||0;
+  const clicks=+stats.clicks||0, reach=+stats.reach||0, leads=+stats.leads||0;
+  if(posts>0){
+    const rate=approved/posts, pts=Math.round(rate*40);
+    s+=pts; why.push({f:approved+"/"+posts+" posts approved",pts});
+    if(reach>0){ const ctr=clicks/reach, pts2=Math.min(30,Math.round((ctr/CREATOR_MIN_CTR)*15));
+      s+=pts2; why.push({f:(ctr*100).toFixed(1)+"% CTR",pts:pts2}); }
+    const pts3=Math.min(25,leads*5); if(pts3){ s+=pts3; why.push({f:leads+" lead"+(leads===1?"":"s")+" attributed",pts:pts3}); }
+    if(rejected){ const pen=Math.min(20,rejected*5); s-=pen; why.push({f:rejected+" rejected",pts:-pen}); }
+  } else { s=25; why.push({f:"new creator — nothing measured yet",pts:25}); }
+  return {score:Math.max(0,Math.min(100,s)),why};
+}
+
+// How well this drop fits this creator, 0-100. Ranks their feed; never hides a drop from them.
+function dropFit(drop,affinity,claimCount){
+  const why=[]; let s=40; why.push({f:"open drop",pts:40});
+  const price=(+drop.price)|| ((+drop.price_mo||0)*72) || 0;
+  const body=String(drop.body||"").toLowerCase();
+  if(body&&affinity.bodies&&affinity.bodies[body]){ const pts=Math.min(25,affinity.bodies[body]*8);
+    s+=pts; why.push({f:"you convert on "+body,pts}); }
+  if(price&&affinity.priceHi&&price>=affinity.priceLo&&price<=affinity.priceHi){ s+=15; why.push({f:"your price lane",pts:15}); }
+  const pay=+drop.rate_cents||0;
+  if(pay>CREATOR_BASE_RATE_CENTS){ const pts=Math.min(15,Math.round((pay-CREATOR_BASE_RATE_CENTS)/1000)*2);
+    s+=pts; why.push({f:"pays $"+(pay/100).toFixed(0),pts}); }
+  if(claimCount>=8){ s-=15; why.push({f:claimCount+" creators already on it",pts:-15}); }
+  else if(claimCount>=4){ s-=7; why.push({f:claimCount+" creators already on it",pts:-7}); }
+  return {score:Math.max(0,Math.min(100,s)),why};
+}
+
+// Should this post be paid? Deterministic; NIMBUS proposes, a human confirms the money.
+function postVerdict(post,claim,stats){
+  const why=[];
+  if(!post.disclosure_confirmed) return {verdict:"reject",why:[{f:"no FTC disclosure — required to pay"}]};
+  why.push({f:"disclosure confirmed"});
+  const priorPosts=(+stats.posts||0)-1;                       // this post is already counted
+  const reach=+post.reach_declared||0, clicks=+claim.clicks||0;
+  if(priorPosts<=0){ why.push({f:"first post — no measured CTR yet, reviewing on disclosure alone"});
+    return {verdict:"review",why}; }
+  if(reach<=0){ why.push({f:"no reach reported — cannot compute CTR"}); return {verdict:"review",why}; }
+  const ctr=clicks/reach; why.push({f:(ctr*100).toFixed(1)+"% CTR vs "+(CREATOR_MIN_CTR*100)+"% floor"});
+  return {verdict: ctr>=CREATOR_MIN_CTR ? "approve" : "review", why};
+}
+
+// Create the drop for a freshly uploaded VIN. Called fire-and-forget from dealerListing().
+async function dropForListing(env,v,dealerId,now){
+  const r=rateForDrop(v);
+  await env.DB.prepare("INSERT INTO creator_drops (vin,vdp_id,dealer_id,rate_cents,rate_why,locked,status,created_at) VALUES (?,?,?,?,?,0,'open',?)")
+    .bind(v.vin,v.id,dealerId,r.cents,JSON.stringify(r.why),now).run();
+  await logEvent(env,{action:"dealer.drop_created",vehicle_id:v.id,source:"dealer-portal",confidence:r.cents/100});
+}
+
+// ---- Creator session ------------------------------------------------------------------------------
+// Mirrors makeDealerSession/readDealerSession (cn_dlr) with a "c" prefix and its own cookie.
+async function makeCreatorSession(env,id){ const exp=Date.now()+30*864e5, p="c"+id+"."+exp; return p+"."+await hmac(env,p); }
+async function readCreatorSession(env,request){ const m=(request.headers.get("Cookie")||"").match(/cn_crt=([^;]+)/); if(!m) return null;
+  const t=decodeURIComponent(m[1]), i=t.lastIndexOf("."); if(i<0) return null;
+  const p=t.slice(0,i), sig=t.slice(i+1); if(!ctEq(await hmac(env,p),sig)) return null;
+  const [idp,exp]=p.split("."); if(!idp||idp[0]!=="c"||Date.now()>+exp) return null;
+  return parseInt(idp.slice(1),10)||null; }
+function creatorCookie(tok){ return "cn_crt="+tok+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400); }
+async function withCreator(request,env,fn){
+  const cid=await readCreatorSession(env,request);
+  if(!cid) return json({ok:false,error:"auth"},401);
+  const c=await env.DB.prepare("SELECT id,email,handle,status,followers_declared,score,score_why,stripe_account_id,payouts_enabled FROM creators WHERE id=?").bind(cid).first();
+  if(!c) return json({ok:false,error:"auth"},401);
+  if(c.status!=="approved") return json({ok:false,error:"pending"},403);
+  return fn(request,env,cid,c);
+}
+
+// ---- Creator auth ---------------------------------------------------------------------------------
+async function creatorSignup(request,env){
+  const b=await request.json().catch(()=>({}));
+  const em=String(b.email||"").trim().toLowerCase().slice(0,120);
+  const handle=String(b.handle||"").trim().slice(0,60), platform=String(b.platform||"").trim().slice(0,20);
+  const followers=parseInt(b.followers_declared,10)||0;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)||String(b.password||"").length<8||!handle||!platform)
+    return json({ok:false,error:"bad_request"},400);
+  if(await env.DB.prepare("SELECT 1 FROM creators WHERE email=?").bind(em).first().catch(()=>null)) return json({ok:false,error:"exists"},409);
+  // Auto-approve above the declared-follower threshold. The number is UNVERIFIED — Stripe's own KYC is
+  // what actually gates money leaving, and every accrual stays reversible (creator_earnings.clawed_back).
+  const approved=followers>=CREATOR_MIN_FOLLOWERS;
+  const salt=newSalt(), hash=await hashPw(String(b.password),salt), now=new Date().toISOString();
+  const seed=creatorScore({});
+  const ins=await env.DB.prepare("INSERT INTO creators (email,pw_hash,pw_salt,handle,status,followers_declared,score,score_why,audience_tags,scored_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(em,hash,salt,handle,approved?"approved":"pending",followers,seed.score,JSON.stringify(seed.why),platform,now,now).run();
+  const id=ins.meta.last_row_id;
+  await env.DB.prepare("INSERT INTO creator_socials (creator_id,platform,handle,url,followers_declared,verified,created_at) VALUES (?,?,?,?,?,0,?)")
+    .bind(id,platform,handle,String(b.url||"").slice(0,300),followers,now).run().catch(()=>{});
+  if(!approved) return json({ok:true,pending:true});
+  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":creatorCookie(await makeCreatorSession(env,id)),...SEC}});
+}
+async function creatorLogin(request,env){
+  const {email,password}=await request.json().catch(()=>({}));
+  const em=String(email||"").trim().toLowerCase().slice(0,120);
+  if(!em||!password) return json({ok:false,error:"bad_request"},400);
+  const c=await env.DB.prepare("SELECT id,pw_hash,pw_salt,status FROM creators WHERE email=?").bind(em).first().catch(()=>null);
+  if(c && await verifyPw(String(password),c.pw_salt,c.pw_hash)){
+    if(c.status!=="approved") return json({ok:false,error:"pending"},403);
+    return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":creatorCookie(await makeCreatorSession(env,c.id)),...SEC}});
+  }
+  // One credential, both portals: dealer staff sign in here with their existing dealer email+password.
+  // Same lookup order as dealerLogin — dealer_logins (multi-staff) first, then legacy login_email.
+  // Nothing is copied: the dealer's own hash is verified, and the creator row stores its own.
+  const did=await dealerIdForCredentials(env,em,String(password));
+  if(!did) return json({ok:false,error:"bad_credentials"},401);
+  const d=await env.DB.prepare("SELECT id,status,client_no,name,dealership FROM dealer_leads WHERE id=?").bind(did).first();
+  if(!d||d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
+  let row=await env.DB.prepare("SELECT id,status FROM creators WHERE email=?").bind(em).first().catch(()=>null);
+  if(!row){
+    const salt=newSalt(), hash=await hashPw(String(password),salt), now=new Date().toISOString();
+    const seed=creatorScore({});
+    const ins=await env.DB.prepare("INSERT INTO creators (email,pw_hash,pw_salt,handle,status,followers_declared,score,score_why,audience_tags,scored_at,created_at,dealer_id) VALUES (?,?,?,?, 'approved', 0,?,?, 'dealer-linked', ?,?,?)")
+      .bind(em,hash,salt,"@"+em.split("@")[0].slice(0,40),seed.score,JSON.stringify(seed.why),now,now,did).run();
+    row={id:ins.meta.last_row_id,status:"approved"};
+  } else if(row.status!=="approved"){
+    // A dealer-verified identity clears a pending self-serve signup for the same address.
+    await env.DB.prepare("UPDATE creators SET status='approved', dealer_id=COALESCE(dealer_id,?) WHERE id=?").bind(did,row.id).run();
+  }
+  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":creatorCookie(await makeCreatorSession(env,row.id)),...SEC}});
+}
+// Shared credential check: returns the dealer_id for a valid email+password, else null.
+async function dealerIdForCredentials(env,em,password){
+  const L=await env.DB.prepare("SELECT dealer_id,pw_hash,pw_salt FROM dealer_logins WHERE email=?").bind(em).first().catch(()=>null);
+  if(L && await verifyPw(password,L.pw_salt,L.pw_hash)) return L.dealer_id;
+  const d0=await env.DB.prepare("SELECT id,pw_hash,pw_salt FROM dealer_leads WHERE lower(login_email)=? ORDER BY id DESC LIMIT 1").bind(em).first().catch(()=>null);
+  if(d0 && await verifyPw(password,d0.pw_salt,d0.pw_hash)) return d0.id;
+  return null;
+}
+
+// A creator's own measured stats — used by creatorScore, dropFit, and postVerdict.
+async function creatorStats(env,cid){
+  const s=await env.DB.prepare(
+    "SELECT COUNT(*) posts, SUM(CASE WHEN p.status='approved' THEN 1 ELSE 0 END) approved, "+
+    "SUM(CASE WHEN p.status='rejected' THEN 1 ELSE 0 END) rejected, SUM(p.reach_declared) reach "+
+    "FROM creator_posts p WHERE p.creator_id=?").bind(cid).first().catch(()=>null);
+  const k=await env.DB.prepare("SELECT SUM(clicks) clicks FROM creator_claims WHERE creator_id=?").bind(cid).first().catch(()=>null);
+  // COUNT of leads only — never the lead rows themselves. Fence 1.
+  const l=await env.DB.prepare("SELECT COUNT(*) leads FROM web_leads w JOIN creator_claims cc ON cc.id=w.creator_claim_id WHERE cc.creator_id=?").bind(cid).first().catch(()=>null);
+  return {posts:(s&&s.posts)||0,approved:(s&&s.approved)||0,rejected:(s&&s.rejected)||0,
+    reach:(s&&s.reach)||0,clicks:(k&&k.clicks)||0,leads:(l&&l.leads)||0};
+}
+// What this creator has historically converted on — feeds dropFit(). Their own data only.
+async function creatorAffinity(env,cid){
+  const r=await env.DB.prepare(
+    "SELECT v.body, v.price FROM creator_posts p JOIN creator_drops d ON d.id=p.drop_id JOIN vdps v ON v.id=d.vdp_id "+
+    "WHERE p.creator_id=? AND p.status='approved' LIMIT 100").bind(cid).all().catch(()=>({results:[]}));
+  const bodies={}; let lo=Infinity,hi=0;
+  for(const x of (r.results||[])){ const b=String(x.body||"").toLowerCase(); if(b) bodies[b]=(bodies[b]||0)+1;
+    const p=+x.price||0; if(p){ lo=Math.min(lo,p*0.7); hi=Math.max(hi,p*1.4); } }
+  return {bodies,priceLo:lo===Infinity?0:lo,priceHi:hi};
+}
+
+// ---- Creator feed / claim / post ------------------------------------------------------------------
+async function creatorFeed(request,env,cid,me){
+  const rows=await env.DB.prepare(
+    "SELECT d.id,d.vin,d.vdp_id,d.rate_cents,d.rate_why,d.created_at, v.year,v.make,v.model,v.trim,v.body,v.price,v.price_mo,v.photos, "+
+    "(SELECT COUNT(*) FROM creator_claims x WHERE x.drop_id=d.id) claims, "+
+    "(SELECT cc.token FROM creator_claims cc WHERE cc.drop_id=d.id AND cc.creator_id=?) mine, "+
+    "(SELECT cc.id FROM creator_claims cc WHERE cc.drop_id=d.id AND cc.creator_id=?) claim_id, "+
+    "(SELECT p.status FROM creator_posts p JOIN creator_claims cc ON cc.id=p.claim_id WHERE cc.drop_id=d.id AND cc.creator_id=?) post_status "+
+    "FROM creator_drops d JOIN vdps v ON v.id=d.vdp_id WHERE d.status='open' AND v.active=1 ORDER BY d.id DESC LIMIT 60")
+    .bind(cid,cid,cid).all().catch(()=>({results:[]}));
+  const aff=await creatorAffinity(env,cid);
+  const drops=(rows.results||[]).map(function(d){
+    const fit=dropFit(d,aff,+d.claims||0);
+    return {id:d.id,vin:d.vin,year:d.year,make:d.make,model:d.model,trim:d.trim,body:d.body,
+      price:d.price,price_mo:d.price_mo,photos:JSON.parse(d.photos||"[]"),
+      rate_cents:d.rate_cents,rate_why:JSON.parse(d.rate_why||"[]"),
+      claims:+d.claims||0,claimed:!!d.mine,token:d.mine||null,claim_id:d.claim_id||null,
+      post_status:d.post_status||null,link:d.mine?(SEO_ORIGIN+"/c/"+d.mine):null,
+      fit:fit.score,fit_why:fit.why};
+  }).sort(function(a,b){return b.fit-a.fit;});
+  return json({ok:true,creator:{handle:me.handle,score:me.score,payouts_enabled:me.payouts_enabled},drops});
+}
+async function creatorClaim(request,env,cid,me){
+  const {drop_id}=await request.json().catch(()=>({}));
+  const id=parseInt(drop_id,10); if(!id) return json({ok:false,error:"bad_request"},400);
+  const d=await env.DB.prepare("SELECT id,status FROM creator_drops WHERE id=?").bind(id).first().catch(()=>null);
+  if(!d||d.status!=="open") return json({ok:false,error:"drop_closed"},409);
+  const ex=await env.DB.prepare("SELECT token FROM creator_claims WHERE drop_id=? AND creator_id=?").bind(id,cid).first().catch(()=>null);
+  if(ex) return json({ok:true,token:ex.token,link:SEO_ORIGIN+"/c/"+ex.token});
+  const token=genCode("CR").replace(/[^A-Za-z0-9]/g,"");
+  await env.DB.prepare("INSERT INTO creator_claims (drop_id,creator_id,token,clicks,status,created_at) VALUES (?,?,?,0,'claimed',?)")
+    .bind(id,cid,token,new Date().toISOString()).run();
+  await logEvent(env,{action:"social.claimed",source:"creator-network",confidence:1}).catch(()=>{});
+  return json({ok:true,token,link:SEO_ORIGIN+"/c/"+token});
+}
+async function creatorPost(request,env,cid,me){
+  const b=await request.json().catch(()=>({}));
+  // FTC 16 CFR Part 255. A paid-post network without this is the legal exposure — hard 400, not a nudge.
+  if(!(b.disclosure_confirmed===true||b.disclosure_confirmed===1||b.disclosure_confirmed==="1"))
+    return json({ok:false,error:"disclosure_required"},400);
+  const url=String(b.post_url||"").trim().slice(0,300);
+  if(!/^https?:\/\//i.test(url)) return json({ok:false,error:"bad_url"},400);
+  const claimId=parseInt(b.claim_id,10)||0;
+  const cl=await env.DB.prepare("SELECT id,drop_id,clicks FROM creator_claims WHERE id=? AND creator_id=?").bind(claimId,cid).first().catch(()=>null);
+  if(!cl) return json({ok:false,error:"not_yours"},403);
+  if(await env.DB.prepare("SELECT 1 FROM creator_posts WHERE claim_id=?").bind(cl.id).first().catch(()=>null))
+    return json({ok:false,error:"already_submitted"},409);
+  const d=await env.DB.prepare("SELECT rate_cents FROM creator_drops WHERE id=?").bind(cl.drop_id).first().catch(()=>null);
+  const now=new Date().toISOString();
+  const ins=await env.DB.prepare("INSERT INTO creator_posts (claim_id,creator_id,drop_id,post_url,platform,reach_declared,disclosure_confirmed,status,created_at) VALUES (?,?,?,?,?,?,1,'submitted',?)")
+    .bind(cl.id,cid,cl.drop_id,url,String(b.platform||"").slice(0,20),parseInt(b.reach_declared,10)||0,now).run();
+  const postId=ins.meta.last_row_id;
+  await env.DB.prepare("INSERT INTO creator_earnings (creator_id,post_id,amount_cents,status,created_at) VALUES (?,?,?,'accrued',?)")
+    .bind(cid,postId,(d&&d.rate_cents)||CREATOR_BASE_RATE_CENTS,now).run();
+  await logEvent(env,{action:"social.posted",source:"creator-network"}).catch(()=>{});
+  // NIMBUS's read, recorded now so the ai. review queue shows its reasoning, not just the row.
+  const stats=await creatorStats(env,cid);
+  const v=postVerdict({disclosure_confirmed:1,reach_declared:parseInt(b.reach_declared,10)||0},cl,stats);
+  await logEvent(env,{action:"ai.recommendation_shown",source:"post-verdict:"+v.verdict,confidence:1}).catch(()=>{});
+  return json({ok:true,post_id:postId,verdict:v.verdict,why:v.why});
+}
+async function creatorEarnings(request,env,cid,me){
+  const rows=await env.DB.prepare(
+    "SELECT e.id,e.amount_cents,e.status,e.paid_at,e.created_at, d.vin, v.year,v.make,v.model "+
+    "FROM creator_earnings e LEFT JOIN creator_posts p ON p.id=e.post_id LEFT JOIN creator_drops d ON d.id=p.drop_id "+
+    "LEFT JOIN vdps v ON v.id=d.vdp_id WHERE e.creator_id=? ORDER BY e.id DESC LIMIT 100").bind(cid).all().catch(()=>({results:[]}));
+  const t={accrued:0,approved:0,paid:0};
+  for(const r of (rows.results||[])) if(t[r.status]!==undefined) t[r.status]+=(+r.amount_cents||0);
+  const stats=await creatorStats(env,cid); const sc=creatorScore(stats);
+  return json({ok:true,totals:t,rows:rows.results||[],stats,score:sc.score,score_why:sc.why,
+    payouts_enabled:!!me.payouts_enabled,connected:!!me.stripe_account_id});
+}
+
+// ---- Stripe Connect Express (no SDK — plain fetch, honouring the no-npm/no-build rule) -------------
+async function stripeApi(env,path,form){
+  const body=new URLSearchParams(); for(const k in form) if(form[k]!==undefined&&form[k]!==null) body.set(k,String(form[k]));
+  const r=await fetch("https://api.stripe.com/v1/"+path,{method:"POST",
+    headers:{"Authorization":"Bearer "+env.STRIPE_SECRET_KEY,"content-type":"application/x-www-form-urlencoded"},body});
+  const d=await r.json().catch(()=>({})); return {ok:r.ok,data:d};
+}
+async function creatorConnectStart(request,env,cid,me){
+  if(!env.STRIPE_SECRET_KEY) return json({ok:false,error:"stripe_unconfigured"},503);
+  let acct=me.stripe_account_id;
+  if(!acct){
+    const a=await stripeApi(env,"accounts",{type:"express",email:me.email,"capabilities[transfers][requested]":"true"});
+    if(!a.ok||!a.data.id) return json({ok:false,error:"stripe_failed"},502);
+    acct=a.data.id;
+    await env.DB.prepare("UPDATE creators SET stripe_account_id=? WHERE id=?").bind(acct,cid).run();
+  }
+  const base="https://creator.carnimbus.com";
+  const l=await stripeApi(env,"account_links",{account:acct,refresh_url:base+"/earnings",return_url:base+"/earnings?connected=1",type:"account_onboarding"});
+  if(!l.ok||!l.data.url) return json({ok:false,error:"stripe_failed"},502);
+  return json({ok:true,url:l.data.url});
+}
+async function creatorConnectReturn(request,env,cid,me){
+  if(!env.STRIPE_SECRET_KEY) return json({ok:false,error:"stripe_unconfigured"},503);
+  if(!me.stripe_account_id) return json({ok:false,error:"not_connected"},400);
+  const r=await fetch("https://api.stripe.com/v1/accounts/"+me.stripe_account_id,
+    {headers:{"Authorization":"Bearer "+env.STRIPE_SECRET_KEY}}).catch(()=>null);
+  const d=r&&r.ok?await r.json().catch(()=>({})):{};
+  const pe=d.payouts_enabled?1:0, ce=d.charges_enabled?1:0;
+  await env.DB.prepare("UPDATE creators SET payouts_enabled=?, charges_enabled=? WHERE id=?").bind(pe,ce,cid).run();
+  return json({ok:true,payouts_enabled:!!pe,charges_enabled:!!ce});
+}
+
+// ---- The tracked link: /c/<token> -----------------------------------------------------------------
+// Host-agnostic (added to the PREFIX passthrough). Records the click, drops a 90d first-party cookie,
+// and sends the visitor to the car. No creator identity is exposed to the buyer.
+async function creatorRedirect(request,env,token){
+  const t=String(token||"").slice(0,40);
+  const cl=await env.DB.prepare(
+    "SELECT cc.id, v.id vid, v.year, v.make, v.model FROM creator_claims cc "+
+    "JOIN creator_drops d ON d.id=cc.drop_id JOIN vdps v ON v.id=d.vdp_id WHERE cc.token=?").bind(t).first().catch(()=>null);
+  if(!cl) return Response.redirect(SEO_ORIGIN+"/browse",302);
+  await env.DB.prepare("UPDATE creator_claims SET clicks=clicks+1 WHERE id=?").bind(cl.id).run().catch(()=>{});
+  await logEvent(env,{action:"social.referred",vehicle_id:cl.vid,source:"creator-link"}).catch(()=>{});
+  return new Response(null,{status:302,headers:{
+    "Location":SEO_ORIGIN+vdpPath({year:cl.year,make:cl.make,model:cl.model,id:cl.vid}),
+    "Set-Cookie":"cn_ref="+t+"; Path=/; Secure; SameSite=Lax; Max-Age=7776000",
+    "Cache-Control":"no-store"}});
+}
+function readRef(request){ const m=(request.headers.get("Cookie")||"").match(/cn_ref=([^;]+)/); return m?m[1]:null; }
+async function claimIdForRef(env,request){
+  const t=readRef(request); if(!t) return null;
+  const r=await env.DB.prepare("SELECT id FROM creator_claims WHERE token=?").bind(String(t).slice(0,40)).first().catch(()=>null);
+  return r?r.id:null;
+}
+
+// ---- creatorAgent: cron, L2, reversible actions ONLY ----------------------------------------------
+// Per LIVING-AGENTS.md: one KPI (attributed leads per dollar accrued), self-bounding, logs everything.
+// It may close expired drops, re-score creators, and re-price UNLOCKED drops as cars age.
+// It never approves a post, never moves money, never suspends anyone — those are L1 confirm-gated.
+async function creatorAgent(env){
+  const now=new Date().toISOString();
+  // 1. Close drops whose car is gone. Reversible: reopening is a row update.
+  await env.DB.prepare("UPDATE creator_drops SET status='closed' WHERE status='open' AND vdp_id IN (SELECT id FROM vdps WHERE active=0)").run().catch(()=>{});
+  // 2. Re-price unlocked open drops as they age. locked=1 is a human's number — never touched.
+  const dr=await env.DB.prepare("SELECT d.id,v.price,v.price_mo,v.lot_date FROM creator_drops d JOIN vdps v ON v.id=d.vdp_id WHERE d.status='open' AND d.locked=0 LIMIT 20").all().catch(()=>({results:[]}));
+  for(const d of (dr.results||[])){ const r=rateForDrop(d);
+    await env.DB.prepare("UPDATE creator_drops SET rate_cents=?, rate_why=? WHERE id=? AND locked=0")
+      .bind(r.cents,JSON.stringify(r.why),d.id).run().catch(()=>{}); }
+  // 3. Re-score the 20 stalest creators.
+  const cs=await env.DB.prepare("SELECT id FROM creators WHERE status='approved' ORDER BY COALESCE(scored_at,'') ASC LIMIT 20").all().catch(()=>({results:[]}));
+  for(const c of (cs.results||[])){ const sc=creatorScore(await creatorStats(env,c.id));
+    await env.DB.prepare("UPDATE creators SET score=?, score_why=?, scored_at=? WHERE id=?")
+      .bind(sc.score,JSON.stringify(sc.why),now,c.id).run().catch(()=>{}); }
+}
+
+// ---- The ai. review queue: what NIMBUS wants a human to decide -----------------------------------
+// adminOnly. Feeds the #creators panel: creators with their measured score, open drops with the rate
+// NIMBUS set and why, posts awaiting review with NIMBUS's verdict, and the payout queue whose Confirm
+// button is the L1 gate on irreversible money.
+async function creatorQueue(request,env){
+  const all=async(sql,...b)=>{ const r=await env.DB.prepare(sql).bind(...b).all().catch(()=>({results:[]})); return r.results||[]; };
+  const creators=await all(
+    "SELECT c.id,c.handle,c.email,c.status,c.followers_declared,c.score,c.score_why,c.payouts_enabled, "+
+    "(SELECT COUNT(*) FROM creator_posts p WHERE p.creator_id=c.id) posts, "+
+    "(SELECT COUNT(*) FROM web_leads w JOIN creator_claims cc ON cc.id=w.creator_claim_id WHERE cc.creator_id=c.id) leads "+
+    "FROM creators c ORDER BY c.score DESC, c.id DESC LIMIT 100");
+  const drops=await all(
+    "SELECT d.id,d.vin,d.rate_cents,d.rate_why,d.locked,d.status, v.year,v.make,v.model,v.lot_date, "+
+    "(SELECT COUNT(*) FROM creator_claims x WHERE x.drop_id=d.id) claims "+
+    "FROM creator_drops d JOIN vdps v ON v.id=d.vdp_id ORDER BY d.id DESC LIMIT 60");
+  const rawPosts=await all(
+    "SELECT p.id,p.post_url,p.platform,p.reach_declared,p.disclosure_confirmed,p.created_at, "+
+    "c.id creator_id,c.handle, cc.clicks, cc.id claim_id, e.id earning_id, e.amount_cents "+
+    "FROM creator_posts p JOIN creators c ON c.id=p.creator_id JOIN creator_claims cc ON cc.id=p.claim_id "+
+    "LEFT JOIN creator_earnings e ON e.post_id=p.id WHERE p.status='submitted' ORDER BY p.id ASC LIMIT 50");
+  const posts=[];
+  for(const p of rawPosts){
+    const v=postVerdict(p,{clicks:p.clicks},await creatorStats(env,p.creator_id));
+    posts.push(Object.assign({},p,{verdict:v.verdict,why:v.why}));
+  }
+  const payouts=await all(
+    "SELECT e.id,e.amount_cents,e.status,c.id creator_id,c.handle,c.payouts_enabled,c.stripe_account_id "+
+    "FROM creator_earnings e JOIN creators c ON c.id=e.creator_id WHERE e.status='approved' ORDER BY e.id ASC LIMIT 50");
+  return json({ok:true,creators,drops,posts,payouts,stripe_ready:!!env.STRIPE_SECRET_KEY});
+}
+
 async function webLead(request,env){ const b=await request.json().catch(()=>({}));
   if(b.website) return json({ok:true});                                    // honeypot: swallow silently
   if(env.TURNSTILE_SECRET && !(await verifyTurnstile(b.cf_token, request.headers.get("CF-Connecting-IP")||"", env.TURNSTILE_SECRET))) return json({ok:true});   // bot: swallow silently
@@ -2210,17 +3277,32 @@ async function webLead(request,env){ const b=await request.json().catch(()=>({})
   const emailOk=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
   if(!car||!/^\d{5}$/.test(zip)||!/^[2-9]\d{9}$/.test(ph)||!emailOk||!consent||!first||!last)
     return json({ok:false,error:"bad_request"},400);   // T-101: phone + email + consent now required at Drive Now
-  const mc=String(b.matched_car||"").trim().slice(0,120);
+  let mc=String(b.matched_car||"").trim().slice(0,120);
   const ip=request.headers.get("CF-Connecting-IP")||"";
   const since=new Date(Date.now()-3600e3).toISOString();
   const rc=await env.DB.prepare("SELECT COUNT(*) c FROM web_leads WHERE ip=? AND created_at>?").bind(ip,since).first().catch(()=>({c:0}));
   if(rc&&rc.c>=5){ await logEvent(env,{action:"intent.web_lead_ratelimited",location:zip,source:"drive-now"}); return json({ok:true}); }   // per-IP cap: silent to the client, visible internally
   const mo=String(b.monthly||"").replace(/\D/g,"").slice(0,6), dn=String(b.down||"").replace(/\D/g,"").slice(0,6), rad=String(b.radius||"").replace(/\D/g,"").slice(0,3)||"25";
-  // T-102: route the lead to the matched car's dealer so it renders in their portal.
-  let dealerId=null; { const vid=parseInt(b.vdp_id,10)||0;
-    if(vid){ const vr=await env.DB.prepare("SELECT dealer_id FROM vdps WHERE id=?").bind(vid).first().catch(()=>null); dealerId=(vr&&vr.dealer_id)||null; } }
-  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent,dealer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,new Date().toISOString(),first,last,email,addr,slot,consent,dealerId).run();
+  // T-102/R3: route the lead to the matched car's dealer AND derive the matched car server-side from the vdp
+  // (client matched_car is a free string and was showing the wrong car — vdp is authoritative). Persist vdp_id + a
+  // stable per-buyer CID (same contact ⇒ same CID ⇒ auto unique-visitor dedupe).
+  let dealerId=null, isDemo=0; const vid=parseInt(b.vdp_id,10)||0;
+  if(vid){ const vr=await env.DB.prepare("SELECT v.dealer_id, v.year, v.make, v.model, v.trim, d.is_demo FROM vdps v LEFT JOIN dealer_leads d ON d.id=v.dealer_id WHERE v.id=?").bind(vid).first().catch(()=>null);
+    if(vr){ dealerId=vr.dealer_id||null; isDemo=vr.is_demo?1:0;   // R7-D: demo-tenant cars tag the lead as demo
+      mc=[vr.year,vr.make,vr.model,vr.trim].filter(Boolean).join(" ").slice(0,120)||mc; } }
+  const cid=leadCid(email,"+1"+ph);
+  // R15 compliance (build-list #35/#37): honor the suppression list BEFORE insert (CCPA/DROP deletion means
+  // re-ingestion must be blocked), and stamp consent provenance so TCPA proof exists from day one.
+  const sup=await env.DB.prepare("SELECT 1 FROM suppression WHERE email_hash=? OR phone_hash=? LIMIT 1")
+    .bind(leadCid(email,""),leadCid("","+1"+ph)).first().catch(()=>null);
+  if(sup){ await logEvent(env,{action:"intent.web_lead_suppressed",location:zip,source:"suppression"}).catch(()=>{}); return json({ok:true}); }
+  const nowIso=new Date().toISOString();
+  const consentTs=consent?nowIso:null, consentUrl=String(request.headers.get("Referer")||"").slice(0,300)||null;
+  // Creator attribution: the cn_ref cookie set by /c/<token> resolves to the claim that produced this
+  // lead. This is the row that makes a creator's post provably worth money.
+  const refClaim=await claimIdForRef(env,request).catch(()=>null);
+  await env.DB.prepare("INSERT INTO web_leads (dream_car,deal_type,monthly,down,zip,radius,phone,ip,matched_car,created_at,first_name,last_name,email,address,appt_slot,consent,dealer_id,vdp_id,cid,is_demo,consent_ts,consent_url,anon_id,creator_claim_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(car,deal,mo,dn,zip,rad,"+1"+ph,ip,mc,nowIso,first,last,email,addr,slot,consent,dealerId,vid||null,cid,isDemo,consentTs,consentUrl,readAnon(request),refClaim).run();
   // AI/TASK-006: drop-in CRM seam. No-op ("unrouted") until CRM_ENDPOINT exists, so this changes nothing today.
   const routed=await routeLead(env,{matched_car:mc,vin:String(b.vin||"").slice(0,17),phone:"+1"+ph,
     dream_car:car,deal_type:deal,monthly:mo,down:dn,budget:String(b.budget||"").replace(/\D/g,"").slice(0,7),zip,radius:rad});

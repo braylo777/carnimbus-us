@@ -17,6 +17,7 @@
 | **Qualify**   | Handles FICO-band pre-qualification and soft checks. | `ai.carnimbus.com` | Profile DB (Hetzner) |
 | **Schedule**  | Books test drives at neighboring showrooms. | `ai.carnimbus.com` | Profile DB & Dealer DB |
 | **Notify**    | Issues SMS test-drive alerts and transaction receipts. | `ai.carnimbus.com` | Profile DB |
+| **Creator**   | Creator Network upkeep: closes drops whose car is gone, re-prices **unlocked** drops as units age, re-scores creators on measured performance. **KPI: attributed leads per dollar accrued.** | `ai.carnimbus.com` | Creator tables & Inventory DB |
 | **Attribute** | Computes lead generation ROI and dealer ad-tier slots. | `ai.carnimbus.com` | Profile DB & Inventory DB |
 
 ---

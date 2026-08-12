@@ -96,7 +96,7 @@ document.addEventListener("DOMContentLoaded",function(){
         '<div style="font:600 11px Manrope;color:#aebfdf;margin-top:4px" id="cg-fin"></div>'+
         '</div></div>'+
       '<a href="'+passUrl+'" target="_blank" rel="noopener" class="btn primary md" style="text-decoration:none;width:100%;max-width:400px">🎟️ View my Drive Now Pass</a>'+
-      '<a href="https://app.carnimbus.com/profile" class="btn ghost md" style="text-decoration:none;width:100%;max-width:400px">Go to my profile →</a>';
+      '<a href="/browse" class="btn ghost md" style="text-decoration:none;width:100%;max-width:400px">Go to my profile →</a>';
     document.body.appendChild(o);
     var f=o.querySelector("a.btn"); if(f)f.focus();   // move focus into the dialog
     var cg=document.getElementById("cg-car"); if(cg&&CAR)cg.textContent=CAR.year+" "+CAR.make+" "+CAR.model;
@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded",function(){
     af.disabled=true;af.textContent="Posting…";
     var lg=(function(){try{return localStorage.cn_lang==="es"?"?lang=es":"";}catch(_){return "";}})();
     try{var r=await fetch("/api/feed/ask"+lg,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:CAR.id})}); var d=await r.json().catch(function(){return{};});
-      if(d&&d.ok){ af.textContent="Posted ✓"; var vw=document.createElement("a"); vw.href="https://app.carnimbus.com/feed"; vw.className="btn primary sm"; vw.style.cssText="flex:none;text-decoration:none;margin-left:6px"; vw.textContent="View"; af.parentNode.insertBefore(vw,af.nextSibling); return; }
+      if(d&&d.ok){ af.textContent="Posted ✓"; var vw=document.createElement("a"); vw.href="/browse"; vw.className="btn primary sm"; vw.style.cssText="flex:none;text-decoration:none;margin-left:6px"; vw.textContent="View"; af.parentNode.insertBefore(vw,af.nextSibling); return; }
     }catch(e){}
     af.disabled=false; af.textContent="💬 Ask the Feed";
   });

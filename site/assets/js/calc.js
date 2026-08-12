@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded",function(){
       var showingText = es ? " · mostrando los mejores " : " · showing top ";
       $("calc-out").innerHTML=bHtml+'<div style="font:600 11px Manrope;color:#8ca0c4;margin:2px 0 8px">'+(d.count!=null?d.count:cars.length)+countText+((d.count||0)>cars.length?showingText+cars.length:'')+' →</div>'+
         '<div style="display:flex;gap:12px;overflow-x:auto;padding:4px 0">'+cars.map(function(c){
-        return '<a href="https://app.carnimbus.com/signin?next=/talk/'+slug(c)+'" style="text-decoration:none;flex:none;width:180px"><div style="background:#0a1f4d;border:1px solid rgba(24,200,255,.2);border-radius:14px;overflow:hidden">'+
+        return '<a href="/used/'+slug(c)+'-'+c.id+'" style="text-decoration:none;flex:none;width:180px"><div style="background:#0a1f4d;border:1px solid rgba(24,200,255,.2);border-radius:14px;overflow:hidden">'+
           '<div style="height:100px;background:#06163b '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></div>'+
           '<div style="padding:10px"><div style="font:700 12px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</div>'+
           '<div style="font:700 13px Manrope;color:#18C8FF;margin-top:3px">$'+esc(c.price_mo)+'/mo</div>'+

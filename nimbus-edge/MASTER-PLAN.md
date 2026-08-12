@@ -16,7 +16,7 @@ here touches the live Worker, its D1 data, or any public DNS.
    power, ISP NAT, a dynamic IP, no redundancy. The real version of "own the stack" is a controlled always-on box
    (a cheap VPS gives a static IP, better uptime, and a clean firewall). Same independence from Cloudflare/GitHub,
    without betting uptime on a laptop under a desk.
-2. **Serve a NON-production hostname** — e.g. `edge.carnimbus.us` — pointed at that host. Run `static` + `balancer`
+2. **Serve a NON-production hostname** — e.g. `edge.carnimbus.com` — pointed at that host. Run `static` + `balancer`
    in front of a copy of the `nimbus-local` gateway. No customer traffic yet.
 3. **Compare against prod** for a week: latency, error rate, correctness of the 48 API routes. Fix what diverges.
 

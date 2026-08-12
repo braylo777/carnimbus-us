@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded",function(){
     fetch("/api/profile",{method:"POST",keepalive:true,headers:{"content-type":"application/json"},body:JSON.stringify({answers:A})}).catch(function(){});
     // N2: if they came in on a clicked car, drop them straight into that chat; otherwise land in matches.
     var nx=""; try{ nx=localStorage.cn_next||""; }catch(_){}
-    if(nx){ try{localStorage.removeItem("cn_next");}catch(_){} location.replace(/^https?:/.test(nx)?nx:("https://app.carnimbus.com"+nx)); }
-    else location.replace("https://app.carnimbus.com/matches");
+    if(nx){ try{localStorage.removeItem("cn_next");}catch(_){} location.replace(/^https?:/.test(nx)?nx:nx); }
+    else location.replace("/browse");
   });
 });

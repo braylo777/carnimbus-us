@@ -33,9 +33,26 @@ at ingest.
 | `intent.*` | Signals of buying intent | `liked` · `saved` · `shared` · `compared` · `returned_to_vehicle` · `opened_calculator` |
 | `finance.*` | Financing & qualification | `opened_financing` · `started_qualification` · `completed_qualification` |
 | `action.*` | Real-world commitments | `scheduled_test_drive` · `completed_test_drive` · `purchased_vehicle` |
-| `social.*` | Community activity | `posted` · `commented` · `referred` · `reviewed` |
+| `social.*` | Community activity | `posted` · `commented` · `referred` · `reviewed` · **`claimed`** |
 | `ai.*` | Agent-originated events | `asked_nimbus` · `conversation_turn` · `recommendation_shown` · `recommendation_clicked` |
-| `dealer.*` | Dealer / Drive Now lifecycle | `lead_delivered` · `lead_contacted` · `lead_converted` · `lead_lost` |
+| `dealer.*` | Dealer / Drive Now lifecycle | `lead_delivered` · `lead_contacted` · `lead_converted` · `lead_lost` · **`drop_created`** |
+
+### Creator Network additions (2026-07-28)
+
+The Creator Network (`creator.carnimbus.com`) emits **no new prefix**. It reuses the locked set, which is
+exactly what extension rule 1 below permits:
+
+| Event | Action | Emitted by |
+|---|---|---|
+| A dealer VIN upload mints a drop | `dealer.drop_created` | `dropForListing()` — `confidence` carries the rate in dollars |
+| A creator claims a drop | `social.claimed` | `creatorClaim()` |
+| A creator submits a post | `social.posted` | `creatorPost()` |
+| A buyer clicks a creator's tracked link | `social.referred` | `creatorRedirect()` — carries `vehicle_id` |
+| NIMBUS records a post verdict | `ai.recommendation_shown` | `creatorPost()` — `source` carries the verdict |
+
+**There is deliberately no `creator.*` prefix.** `logEvent()` does not gate prefixes (only `postEvents()`
+does, at ingest), so adding one would have been trivial and silently wrong — the taxonomy is frozen and
+the creator surface fits the existing vocabulary without strain.
 
 ---
 

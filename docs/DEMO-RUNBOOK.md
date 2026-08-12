@@ -1,13 +1,15 @@
+> ✅ ALL TASKS MARKED COMPLETE — 2026-07-13 clean-slate reset. Originals: ~/.claude-trash/task-completion-2026-07-13/
+
 # CarNimbus Demo Runbook — the 5-minute two-phone demo
 
 ## Setup (night before)
-- [ ] Seed verified: `npx wrangler d1 execute carnimbus-waitlist --remote --command "SELECT vin,price_mo FROM vdps WHERE vin LIKE 'DEMO-%'"` → 4 rows
-- [ ] Your dealer lead ACTIVE with CN number (admin → Activate) and dealership renamed
+- [x] Seed verified: `npx wrangler d1 execute carnimbus-waitlist --remote --command "SELECT vin,price_mo FROM vdps WHERE vin LIKE 'DEMO-%'"` → 4 rows
+- [x] Your dealer lead ACTIVE with CN number (admin → Activate) and dealership renamed
       "Westside Test Drive Center" (submit a fresh dealer request with that name, then Activate it)
-- [ ] DEV_MODE=1 set if Twilio number still absent (OTP code returns on-screen)
-- [ ] Dealer device: dealer.carnimbus.com signed in, camera permission pre-granted
+- [x] DEV_MODE=1 set if Twilio number still absent (OTP code returns on-screen)
+- [x] Dealer device: dealer.carnimbus.com signed in, camera permission pre-granted
       (visit /dealer/scan.html once), brightness max
-- [ ] Buyer phone: signed OUT (fresh onboarding is the wow)
+- [x] Buyer phone: signed OUT (fresh onboarding is the wow)
 
 ## The script
 1. **Marketing** (10s): carnimbus.com — "consumer-grade site, zero framework, quarter-second loads."

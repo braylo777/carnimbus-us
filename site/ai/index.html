@@ -72,6 +72,12 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
 #nl-file{padding:11px 24px;box-shadow:0 0 24px rgba(24,200,255,.35);transition:box-shadow .25s,transform .1s}
 #nl-file:hover{box-shadow:0 0 34px rgba(24,200,255,.6)}
 #nl-file:active{transform:translateY(1px)}
+.readout{background:rgba(24,200,255,.06);border:1px solid rgba(24,200,255,.22);border-radius:14px;padding:14px 16px;margin-bottom:14px}
+.readout h4{font:800 10px 'Space Grotesk';letter-spacing:.14em;color:#18C8FF;margin:0 0 9px}
+.readout li{font:600 14px/1.6 Manrope;color:#fff;margin-bottom:7px;list-style:none}
+.readout li b{color:#5ee6a8}
+.readout ul{margin:0;padding:0}
+.readout .none{font:600 12px Manrope;color:#8ca0c4;font-style:italic}
 </style>
 </head>
 <body>
@@ -93,17 +99,35 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
     <div class="log" id="log"></div>
     <div class="wave" id="wave"></div>
     <div class="inrow">
-      <input id="ask" type="text" placeholder="Ask Nimbus…  (e.g. how many scans today?  ·  turn dealer 3 on)" autocomplete="off">
+      <input id="ask" type="text" placeholder="What's on your mind, sir?" autocomplete="off">
       <button class="btn2" id="send" type="button">Send</button>
     </div>
   </div>
 
   <div class="nav">
     <button data-panel="inventory">◧ INVENTORY</button>
-    <button data-panel="buyers">◔ BUYERS</button>
+    <button data-panel="buyers">◔ USERS</button>
     <button data-panel="trends">▲ TRENDS</button>
     <button data-panel="graph">◕ NEURAL NET</button>
+    <button data-panel="map">◍ LIVE DEMAND</button>
+    <button data-panel="creators">◈ CREATORS</button>
   </div>
+
+  <section class="panel" id="panel-creators">
+    <div class="phead"><h2>CREATOR NETWORK</h2>
+      <span class="chip" id="cre-chip">–</span>
+      <button class="btn2 ghost sm" data-back>← Console</button>
+    </div>
+    <div class="pmsg" id="cre-msg"></div>
+    <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:14px 0 8px">POSTS AWAITING REVIEW</h3>
+    <div id="cre-posts"></div>
+    <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">PAYOUT QUEUE — CONFIRM RELEASES REAL MONEY</h3>
+    <div id="cre-payouts"></div>
+    <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">OPEN DROPS</h3>
+    <div class="tbl-wrap"><table class="t" id="cre-drops"></table></div>
+    <h3 style="font:600 11px/1 Manrope;letter-spacing:.08em;color:var(--mut);margin:18px 0 8px">CREATORS</h3>
+    <div class="tbl-wrap"><table class="t" id="cre-table"></table></div>
+  </section>
 
   <section class="panel" id="panel-inventory">
     <div class="phead"><h2>INVENTORY</h2>
@@ -120,12 +144,11 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
   </section>
 
   <section class="panel" id="panel-buyers">
-    <div class="phead"><h2>BUYERS</h2>
+    <div class="phead"><h2>USERS</h2>
       <span class="chip" id="buy-count">–</span>
       <button class="btn2 ghost sm" id="buy-dl">⇩ Export</button>
       <button class="btn2 ghost sm" data-back>← Console</button>
     </div>
-    <div style="font:500 11px Manrope;color:var(--mut);margin-bottom:8px">One-line records from the portal — zip + selections + the car picked. Email arrives with the appointment API.</div>
     <div class="pmsg" id="buy-msg"></div>
     <div class="tbl-wrap"><table class="t" id="buy-table"></table></div>
   </section>
@@ -133,7 +156,11 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
   <section class="panel" id="panel-trends">
     <div class="phead"><h2>TRENDS</h2><span class="spacer"></span><button class="btn2 ghost sm" data-back>← Console</button></div>
     <div class="pmsg" id="tr-msg"></div>
-    <div class="charts">
+    <div id="tr-read" class="readout"></div>
+    <div class="row" style="gap:8px;margin-bottom:12px"><button id="tr-more" class="btn2 ghost sm" type="button">▸ Show the charts</button><button id="tr-export" class="btn2 ghost sm" type="button">⬇ Export demand report</button></div>
+    <div class="charts" id="tr-charts" style="display:none">
+      <div class="card"><h3>WHEN THEY SHOP</h3><div id="tr-hour"></div></div>
+      <div class="card"><h3>CREDIT MIX</h3><div id="tr-band"></div></div>
       <div class="card"><h3>BODY TYPE (scans)</h3><div id="tr-type"></div></div>
       <div class="card"><h3>DEAL TYPE (scans)</h3><div id="tr-deal"></div></div>
       <div class="card"><h3>TOP CARS PICKED</h3><div id="tr-cars"></div></div>
@@ -145,6 +172,17 @@ table.t td{padding:7px 10px;border-bottom:1px solid rgba(24,200,255,.07);color:#
   <section class="panel" id="panel-graph">
     <div class="phead"><h2>NEURAL NET</h2><span class="spacer"></span><button class="btn2 ghost sm" data-back>← Console</button></div>
     <canvas id="netgraph"></canvas>
+  </section>
+  <section class="panel" id="panel-map">
+    <div class="phead"><h2>LIVE DEMAND</h2><span class="spacer"></span><button class="btn2 ghost sm" data-back>← Console</button></div>
+    <div class="row" style="gap:6px;margin-bottom:10px">
+      <button class="btn2 ghost sm mapw on" data-w="life">LIFETIME</button>
+      <button class="btn2 ghost sm mapw" data-w="30d">30 DAYS</button>
+      <button class="btn2 ghost sm mapw" data-w="today">TODAY</button>
+      <span class="spacer"></span><span id="map-total" style="font:700 11px 'IBM Plex Mono';color:#18C8FF"></span>
+    </div>
+    <canvas id="usmap" style="width:100%;height:460px;display:block;border-radius:14px"></canvas>
+    <div id="map-msg" style="font:600 11px Manrope;color:#7f93b8;margin-top:8px"></div>
   </section>
 </div>
 

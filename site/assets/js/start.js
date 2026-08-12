@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded",function(){
       $("s4-sub").textContent=cars.length? (cars.length+" cars fit $"+state.max_monthly+"/mo — pick one to schedule a drive.") : "";
       if(!cars.length){ $("results").innerHTML='<div style="color:#8ca0c4;font:600 12px Manrope;padding:14px">Nothing under that budget yet — raise your monthly and try again.</div>'; return; }
       $("results").innerHTML='<div class="col" style="gap:10px">'+cars.map(function(c){
-        return '<a href="https://app.carnimbus.com/talk/'+slug(c)+'" style="text-decoration:none"><div class="glass" style="border-radius:14px;padding:11px;display:flex;gap:11px;align-items:center">'+
+        return '<a href="/used/'+slug(c)+'-'+c.id+'" style="text-decoration:none"><div class="glass" style="border-radius:14px;padding:11px;display:flex;gap:11px;align-items:center">'+
           '<span style="width:64px;height:46px;border-radius:9px;overflow:hidden;flex:none;background:#0a1f4d '+(c.photos&&c.photos[0]?"url(\'"+esc(c.photos[0])+"\') center/cover":"")+'"></span>'+
           '<span style="flex:1;min-width:0"><span style="display:block;font:700 12px Manrope;color:#fff">'+esc(c.year+" "+c.make+" "+c.model)+'</span>'+
           '<span style="display:block;font:700 12px Manrope;color:#18C8FF;margin-top:2px">$'+esc(c.price_mo)+'/mo</span></span>'+

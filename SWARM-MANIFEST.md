@@ -58,7 +58,9 @@
 - **Objective:** Shift repository weight from HTML toward modern JS/CSS architecture.
 - **Integration Details:** 
   - Execute directives within `docs/HTML-TO-JS-MIGRATION.md`.
-  - Push UI layouts, client onboarding features, and updated matching dashboards directly to `carnimbus-us.vercel.app`.
+  - Push UI layouts, client onboarding features, and updated matching dashboards to the live Worker
+    (`carnimbus-com`, repo `braylo777/carnimbus-com`). **The old `carnimbus-us.vercel.app` target is dead** —
+    the `.us` era was archived 2026-07-28; we build only on carnimbus-com.
 - **Assignee Node:** Frontend / UI Swarm
 
 ### [CNMB-004] Phase 1 & 2 Infrastructure Orchestration

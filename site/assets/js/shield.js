@@ -17,13 +17,10 @@
     "#cn-wm{position:fixed;inset:0;z-index:2147483000;pointer-events:none;opacity:.04;overflow:hidden}";
   document.head.appendChild(st);
 
-  // per-session diagonal watermark id (the one genuinely useful anti-leak layer).
-  // cn_anon is HttpOnly (unreadable to JS by design), so mint a stable client-side trace id instead.
-  function anon(){ try{ var k=localStorage.cn_wm; if(k) return k;
-      var g=(self.crypto&&crypto.getRandomValues)?[].slice.call(crypto.getRandomValues(new Uint8Array(6))).map(function(b){return(b%36).toString(36);}).join(""):String(Date.now().toString(36));
-      localStorage.cn_wm=g; return g; }catch(_){ return "session"; } }
+  // R14: brand wordmark — founder call: screenshots should read as the trademark, not a session id.
+  // (Trade-off accepted: the old per-session trace id gave leak attribution; that's gone now.)
   var wm=document.createElement("div"); wm.id="cn-wm";
-  var tag="CarNimbus · "+anon();
+  var tag="CARNIMBUS © CARNIMBUS";
   var rows=[]; for(var i=0;i<40;i++){ rows.push('<div style="white-space:nowrap;transform:rotate(-30deg);'+
     'font:700 20px system-ui;letter-spacing:2px;color:#18C8FF;line-height:120px">'+
     (tag+" &nbsp; ").repeat(12)+'</div>'); }

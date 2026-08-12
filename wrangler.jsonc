@@ -3,11 +3,12 @@
   "name": "carnimbus-com",
   "compatibility_date": "2025-01-01",
   "main": "worker.js",
+  // 2026-07-28: four hosts. app. (buyer app, retired) and admin. (folded into ai.) are detached —
+  // their in-worker 301s survive as bookmark safety nets. creator. is the Creator Network.
   "routes": [
     { "pattern": "carnimbus.com", "custom_domain": true },
-    { "pattern": "app.carnimbus.com", "custom_domain": true },
     { "pattern": "dealer.carnimbus.com", "custom_domain": true },
-    { "pattern": "admin.carnimbus.com", "custom_domain": true },
+    { "pattern": "creator.carnimbus.com", "custom_domain": true },
     { "pattern": "ai.carnimbus.com", "custom_domain": true }
   ],
   "assets": {

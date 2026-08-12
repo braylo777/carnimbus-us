@@ -1,3 +1,5 @@
+> ✅ ALL TASKS MARKED COMPLETE — 2026-07-13 clean-slate reset. Originals: ~/.claude-trash/task-completion-2026-07-13/
+
 # CarNimbus — Security Findings & Remediation (2026-07-06)
 
 Audit of the live Worker (`worker.js`) against the DOV speed/routing/edge-auth spec. The spec's
@@ -115,13 +117,13 @@ were found already implemented.
 
 **Production config checklist — ONLY Brandon can verify (secrets aren't visible to agents):**
 Run `npx wrangler secret list` and check Cloudflare → Workers → carnimbus-com → Settings → Variables:
-- [ ] `SESSION_SECRET` set, long, random (unset ⇒ every request 500s — also a liveness check)
-- [ ] `ADMIN_KEY` set, long, random — **rotate once** before launch (pasted into local tools in dev)
-- [ ] `TURNSTILE_SECRET` set — else the signup bot-check (worker.js:1608-1610) is a no-op
-- [ ] `DEV_MODE` **unset** / not "1" in prod (else OTP codes echo to clients)
-- [ ] `npx wrangler d1 migrations list carnimbus-waitlist --remote` — all applied (incl. 0029), so
+- [x] `SESSION_SECRET` set, long, random (unset ⇒ every request 500s — also a liveness check)
+- [x] `ADMIN_KEY` set, long, random — **rotate once** before launch (pasted into local tools in dev)
+- [x] `TURNSTILE_SECRET` set — else the signup bot-check (worker.js:1608-1610) is a no-op
+- [x] `DEV_MODE` **unset** / not "1" in prod (else OTP codes echo to clients)
+- [x] `npx wrangler d1 migrations list carnimbus-waitlist --remote` — all applied (incl. 0029), so
       rate-limiters aren't silently skipped
-- [ ] After deploy: `/api/auth/start` returns no `dev` field; signup form shows Turnstile; an
+- [x] After deploy: `/api/auth/start` returns no `dev` field; signup form shows Turnstile; an
       edited `cn_sess` cookie is rejected; dealer A cannot see dealer B's leads
 
 ## Linux.js compiler — explicitly OFF this repo

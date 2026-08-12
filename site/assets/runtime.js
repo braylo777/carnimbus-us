@@ -229,7 +229,7 @@
   function L(s){ return CUR()==="es" && I18N.es[s] ? I18N.es[s] : s; }
   function go(href){ location.href=href; }
   function norm(t){ return (t||"").replace(/\s+/g," ").trim().toLowerCase().replace(/[→»]/g,"").trim(); }
-  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact","sign in":"https://app.carnimbus.com/signin" };
+  var NAV = { "how it works":"/#how-it-works","browse":"/browse","about":"/about","contact":"/contact","sign in":"/browse" };
   var CTA_WAIT = ["join waitlist","get early access","be first in line","join the waitlist","sign up"];
   var CTA_SIGNUP=["drive this","talk to this car","drive now inventory","view all","view all inventory"];
   function destFor(el){
@@ -238,7 +238,7 @@
     if(NAV[t]) return NAV[t];
     if(CTA_WAIT.indexOf(t)>=0) return "/waitlist";
     // Every product CTA funnels to signup — you can't browse into the app without an account.
-    if(CTA_SIGNUP.indexOf(t)>=0 || el.classList.contains("vcta")) return "https://app.carnimbus.com/signin";
+    if(CTA_SIGNUP.indexOf(t)>=0 || el.classList.contains("vcta")) return "/browse";
     if(t==="email the team") return "mailto:partner@carnimbus.com";
     return null;
   }
@@ -256,7 +256,7 @@
     b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
     right.appendChild(b);
     var d=document.createElement("div"); d.className="nav-drawer";
-    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="navlink" data-cngo="/about">'+L("About")+'</a><a class="navlink" data-cngo="/contact">'+L("Contact")+'</a><div class="seg" style="margin:12px 0 0;align-self:flex-start"><button'+(CUR()==="en"?' class="on"':'')+'>EN</button><button'+(CUR()==="es"?' class="on"':'')+'>ES</button></div><a class="btn primary" data-cngo="https://app.carnimbus.com/signin" style="text-decoration:none">'+L("Sign in")+'</a>';
+    d.innerHTML='<a class="navlink" data-cngo="/#how-it-works">'+L("How it works")+'</a><a class="navlink" data-cngo="/browse">'+L("Browse")+'</a><a class="navlink" data-cngo="/about">'+L("About")+'</a><a class="navlink" data-cngo="/contact">'+L("Contact")+'</a><div class="seg" style="margin:12px 0 0;align-self:flex-start"><button'+(CUR()==="en"?' class="on"':'')+'>EN</button><button'+(CUR()==="es"?' class="on"':'')+'>ES</button></div><a class="btn primary" data-cngo="/browse" style="text-decoration:none">'+L("Sign in")+'</a>';
     document.body.appendChild(d);
     function close(){ d.classList.remove("open"); b.setAttribute("aria-expanded","false"); }
     b.addEventListener("click",function(e){ e.stopPropagation(); var o=d.classList.toggle("open"); b.setAttribute("aria-expanded",o?"true":"false"); });
@@ -278,16 +278,16 @@
         el.style.zIndex="70";   // lift the whole bar above sibling .z layers so the dropdown is actually clickable
         var detail=/\/(car|talk|edit-profile)/.test(here) && !onSignin;   // N5: detail pages get a back chevron
         el.innerHTML=(detail?'<button id="appnav-back" type="button" aria-label="Back" style="background:none;border:none;color:#cbd5e1;font:700 15px Manrope;cursor:pointer;margin-right:6px">‹ Back</button>':'')+
-          '<a href="'+(onSignin?"https://carnimbus.com/":"https://app.carnimbus.com/feed")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
+          '<a href="'+(onSignin?"https://carnimbus.com/":"/browse")+'" aria-label="CarNimbus home" style="display:inline-flex;align-items:center;gap:8px">'+
           '<img src="/assets/logo-96.png" alt="" width="26" height="26" style="width:26px;height:26px"><b style="font:700 14px \'Space Grotesk\';color:#fff">CarNimbus</b></a>'+
           '<div class="row" style="margin-left:auto;align-items:center;gap:10px">'+
           (onSignin?'':'<div style="position:relative"><button class="avatar" style="width:28px;height:28px;font-size:11px;border:none;cursor:pointer" id="appnav-av" aria-label="Account menu">·</button>'+
           '<div id="appnav-menu" style="display:none;position:absolute;right:0;top:34px;z-index:60;min-width:160px;background:rgba(6,16,40,.98);border:1px solid rgba(24,200,255,.2);border-radius:12px;padding:6px">'+
-            '<a href="https://app.carnimbus.com/edit-profile" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
+            '<a href="/browse" style="display:block;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;text-decoration:none">Edit my profile</a>'+
             '<button id="appnav-out" type="button" style="display:block;width:100%;text-align:left;padding:9px 11px;font:600 12px Manrope;color:#e2e9f2;background:none;border:none;cursor:pointer">Sign out</button>'+
           '</div></div>')+'</div>';
         var bk=document.getElementById("appnav-back");
-        if(bk) bk.addEventListener("click",function(){ location.href="https://app.carnimbus.com/matches"; });
+        if(bk) bk.addEventListener("click",function(){ location.href="/browse"; });
       }
     }
     
@@ -316,7 +316,7 @@
         bkBtn.style.cssText = "position:fixed;top:12px;left:12px;z-index:999;background:rgba(6,16,40,.8);border:1px solid rgba(24,200,255,.3);color:#fff;font:700 18px Manrope;line-height:1;width:28px;height:28px;border-radius:50%;cursor:pointer;backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(24,200,255,.1)";
         bkBtn.innerHTML = "‹";
         bkBtn.addEventListener("click", function() {
-          location.href="https://app.carnimbus.com/matches";
+          location.href="/browse";
         });
         document.body.appendChild(bkBtn);
       }
@@ -347,9 +347,9 @@
     if(!/^app\./.test(location.hostname)) return;   // V1: the tab bar belongs to the app only, never the marketing/dealer/admin sites
     if(here.indexOf("/signin")>-1) return;   // not inside the app yet — no tab bar on the front door
     if(document.querySelector(".tabbar")) return;
-    var T=[["Feed","https://app.carnimbus.com/feed","feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
-           ["Match","https://app.carnimbus.com/matches","matches",'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>'],
-           ["Garage","https://app.carnimbus.com/profile","profile",'<path d="M3 11l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>']];
+    var T=[["Browse","/browse","feed",'<path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/>'],
+           ["Browse","/browse","matches",'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>'],
+           ["Browse","/browse","profile",'<path d="M3 11l9-6 9 6"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>']];
     var bar=document.createElement("nav"); bar.className="tabbar"; bar.setAttribute("aria-label","App");
     bar.innerHTML=T.map(function(t){ var key=t[2];
       var on=here.indexOf("/"+key)>-1||(key==="matches"&&(here.indexOf("/car")>-1||here.indexOf("/talk")>-1||here.indexOf("/chat")>-1))||(key==="profile"&&here.indexOf("/you")>-1);
@@ -451,7 +451,7 @@
       if(!d.ok||!d.cars||!d.cars.length){ if(empty){empty.style.display="block";empty.innerHTML='No cars yet — check back soon.';} return; }
       if(!d.authed){ var cta=document.createElement("div");
         cta.style.cssText="grid-column:1/-1;text-align:center;padding:10px;font:600 12px Manrope;color:#aebfdf";
-        cta.innerHTML='Showing newest cars. <a href="https://app.carnimbus.com/edit-profile" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
+        cta.innerHTML='Showing newest cars. <a href="/browse" style="color:#18C8FF">Answer 10 quick questions</a> to unlock your ranked matches.';
         feedEl.appendChild(cta); }
       d.cars.forEach(function(c){
         var card=document.createElement("div");
@@ -494,7 +494,7 @@
       inEl.value=""; bubble("you",msg); hist.push({role:"user",content:msg});
       var r=await fetch("/api/car-chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({vdpId:c.id,messages:hist})});
       if(r.status===401){ bubble("car",L("Sign in first so I remember you —"));
-        var a=document.createElement("a"); a.href="https://app.carnimbus.com/edit-profile"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
+        var a=document.createElement("a"); a.href="/browse"; a.textContent=L("create your profile"); a.style.cssText="align-self:flex-start;color:#18C8FF;font:700 12px Manrope"; thread.appendChild(a); return; }
       var d=await r.json();
       if(d.ok){ hist.push({role:"assistant",content:d.reply}); bubble("car",d.reply);
         if(d.pass){ var p=document.createElement("a"); p.href=d.pass; p.textContent="🎟️ "+L("Your Drive Now pass is ready →");

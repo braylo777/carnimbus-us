@@ -4,7 +4,9 @@
 human↔AI interaction flawless, clean, seamless? **Answer (from the live schemas, not theory):
 far less than assumed.** Everything below exists in `migrations/` today.
 
-## app.carnimbus.com — buyer
+## carnimbus.com — buyer
+
+*(2026-07-28: `app.carnimbus.com` was retired; the buyer surface is the apex site.)*
 
 | Field | Type | Why it's required |
 |---|---|---|
@@ -27,7 +29,9 @@ That's it. `sid` (SID-######-####) is **issued, not collected** — generated on
 
 **Dealer minimum: 4 identity fields + 5 per car.**
 
-## admin.carnimbus.com — internal (DEX-SUB-03 security model)
+## ai.carnimbus.com — internal (DEX-SUB-03 security model)
+
+*(2026-07-28: `admin.carnimbus.com` was retired; `ai.` is the single NIMBUS door. The `/admin` PATH prefix still resolves under `ai.`.)*
 
 Stores **zero data**. Every request carries `x-admin-key` = the `ADMIN_KEY` Worker secret.
 Key custody: operator copy at `~/.carnimbus-admin-key` (chmod 600, never printed/committed);
