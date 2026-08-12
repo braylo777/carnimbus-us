@@ -1040,6 +1040,11 @@ async function vdpIngest(request,env){ const body=await request.json().catch(()=
     try{
     // null = "the CSV did not mention active" → 1 for a new row, unchanged for an existing one.
     const act=(c.active==null||c.active==="")?null:(+c.active?1:0);
+    // v15: lot_date rides the CSV. This is the ONLY bulk path onto the lot-age data the whole
+    // clearance product depends on, and it was missing — so a dealer's aging report had no way in
+    // and 94 of 95 live cars had no date. Same YYYY-MM-DD gate as dealerListing(); anything else
+    // becomes null and is left alone rather than clearing a date already on the row.
+    const ldate=/^\d{4}-\d{2}-\d{2}$/.test(String(c.lot_date||""))?String(c.lot_date):null;
     await env.DB.prepare(
     // ABSENT MEANS "LEAVE IT ALONE". Until 2026-08-06 this overwrote miles, price_total, mileage
     // and location_zip from whatever the row carried — so a minimal `vin,price_mo` CSV, the
@@ -1051,8 +1056,9 @@ async function vdpIngest(request,env){ const body=await request.json().catch(()=
     // `active` is honoured rather than hardcoded, so a round-tripped export keeps archived cars
     // archived. A hand-written CSV with no `active` column still defaults to 1 — which is what a
     // dealer adding new inventory means.
-    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,dealer_id,active,embedding_synced,updated_at) "+
-    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?,1),0,?) ON CONFLICT(vin) DO UPDATE SET "+
+    "INSERT INTO vdps (vin,year,make,model,trim,price_mo,miles,drivetrain,body,features,description,photos,price_total,mileage,location_zip,lot_date,dealer_id,active,embedding_synced,updated_at) "+
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?,1),0,?) ON CONFLICT(vin) DO UPDATE SET "+
+    "lot_date=COALESCE(NULLIF(excluded.lot_date,''),vdps.lot_date), "+
     "price_mo=COALESCE(excluded.price_mo,vdps.price_mo), "+
     "miles=COALESCE(NULLIF(excluded.miles,''),vdps.miles), "+
     "price_total=COALESCE(excluded.price_total,vdps.price_total), "+
@@ -1069,7 +1075,7 @@ async function vdpIngest(request,env){ const body=await request.json().catch(()=
     .bind(c.vin,c.year||null,c.make||"",c.model||"",c.trim||"",parseInt(c.price_mo,10)||null,c.miles||"",c.drivetrain||"",c.body||"",
       JSON.stringify(c.features||[]),c.description||"",JSON.stringify(c.photos||[]),
       parseInt(c.price_total,10)||null, parseInt(String(c.mileage||c.miles||"").replace(/\D/g,""),10)||null, String(c.location_zip||"").slice(0,10),
-      cd, act, new Date().toISOString(), act, act).run();
+      ldate, cd, act, new Date().toISOString(), act, act).run();
     count++; }catch(_){ failed++; } }
   return json({ok:true,count,skipped,failed}); }
 // ===== AF: Dealer Engine — Stripe billing → inventory on/off, per-dealer feed sync, compliant outreach =====
@@ -2162,7 +2168,19 @@ async function dealerListing(request,env,uid,dealer){
   const src=/^https?:\/\//i.test(String(c.source_url||""))?String(c.source_url).slice(0,300):null;
   // R14: dealer-entered economics (optional) — power the commission/savings KPIs on leads.
   const ucost=parseInt(c.unit_cost,10)>0?parseInt(c.unit_cost,10):null;
+  // v15: lot_date is REQUIRED, not optional. The company sells aging-inventory liquidity and the
+  // clearance advisor is the product; without a date it falls through to first_seen, an observed
+  // floor that by construction understates age and therefore under-recommends the discount. Left
+  // optional, 94 of 95 live cars carried no date and the engine was guessing on all of them.
+  // The dealer has this number on their aging report — asking is one field, not a burden.
   const ldate=/^\d{4}-\d{2}-\d{2}$/.test(String(c.lot_date||""))?String(c.lot_date):null;
+  if(!ldate) return json({ok:false,error:"lot_date_required",
+    reason:"When did this unit land on the lot? It's on your aging report. Without it we can't tell you what it's costing you to hold."},422);
+  // Bounds, not format. A future date makes daysOnLot negative and holdingSaved nonsense; a date
+  // before ~2000 is a typo that would flag a 25-year-old unit as the lot's most urgent clearance.
+  const lms=Date.parse(ldate+"T00:00:00Z");
+  if(!Number.isFinite(lms)||lms>Date.now()+864e5) return json({ok:false,error:"lot_date_future",reason:"That lot date is in the future."},422);
+  if(lms<Date.parse("2000-01-01T00:00:00Z")) return json({ok:false,error:"lot_date_range",reason:"That lot date looks like a typo."},422);
   const editId=parseInt(c.id,10)||0; let vin;
   if(editId){   // T-102: edit path (was INSERT-only) — scoped to the dealer's own cars
     const own=await env.DB.prepare("SELECT vin FROM vdps WHERE id=? AND dealer_id=?").bind(editId,dealer.id).first();
@@ -2200,19 +2218,30 @@ async function dealerLogin(request,env){
   if(!d||d.status!=="active"||!d.client_no) return json({ok:false,error:"pending"},403);
   const cookie="cn_dlr="+await makeDealerSession(env,d.id)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400);
   return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}}); }
-// T-102: self-serve dealer signup — email + password → creates their store + logs them in. Super simple, no marketing gate.
+// Dealer signup — email + password → creates their store PENDING. Was self-serve and instantly
+// active (status='active' + a minted client_no + a session cookie), which meant anyone on the
+// internet could mint a live dealer account on a surface where /api/app/* is a money path: title
+// upload, deal creation, adjudication. The v15 pilot has named dealers, so approval is the gate.
+//
+// Nothing new enforces this. withDealer() already requires status='active' AND a client_no, and
+// adminDealerCred() already flips both. Signup just stops granting them. An operator activates
+// from NIMBUS, which is also where they set the staff credential.
 async function dealerSignup(request,env){
   const {email,password}=await request.json().catch(()=>({}));
   const em=String(email||"").trim().toLowerCase().slice(0,120);
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)||String(password||"").length<8) return json({ok:false,error:"bad_request"},400);
   if(await env.DB.prepare("SELECT 1 FROM dealer_logins WHERE email=?").bind(em).first().catch(()=>null)) return json({ok:false,error:"exists"},409);
   const salt=newSalt(), hash=await hashPw(String(password),salt), now=new Date().toISOString();
+  // status='pending', client_no NULL. Both are what withDealer() checks; either one absent is a 403.
   const ins=await env.DB.prepare("INSERT INTO dealer_leads (name,dealership,email,status,client_no,created_at) VALUES (?,?,?,?,?,?)")
-    .bind(em.split("@")[0].slice(0,40),"",em,"active",genCode("CN"),now).run();
+    .bind(em.split("@")[0].slice(0,40),"",em,"pending",null,now).run();
   const did=ins.meta.last_row_id;
   await env.DB.prepare("INSERT INTO dealer_logins (email,dealer_id,pw_hash,pw_salt,created_at) VALUES (?,?,?,?,?)").bind(em,did,hash,salt,now).run();
-  const cookie="cn_dlr="+await makeDealerSession(env,did)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+(30*86400);
-  return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","Set-Cookie":cookie,...SEC}}); }
+  // No session cookie. Handing out a session for an account that 403s on every call reads as a
+  // broken product; saying "pending" reads as a process.
+  await logEvent(env,{action:"dealer.signup_pending",source:"app"}).catch(()=>{});
+  return json({ok:true,pending:true,
+    reason:"Thanks — your account is pending review. We'll email you when it's live."},202); }
 // T-102: admin provisions a dealer staff email+password → dealer_logins (many emails per store). Behind adminOnly.
 async function adminDealerCred(request,env){
   const {dealer_id,email,password}=await request.json().catch(()=>({}));

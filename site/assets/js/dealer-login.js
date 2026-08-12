@@ -19,6 +19,10 @@ document.addEventListener("DOMContentLoaded",function(){
       if(r.status===409){done();return msg("That email already has an account — log in instead.");}
       if(r.status===400){done();return msg("Check your email and use an 8+ character password.");}
       var d=await r.json().catch(function(){return{};});
+      // Signup no longer logs you in — accounts start pending and an operator activates them.
+      // This must be checked BEFORE the d.ok redirect below, or a pending dealer gets bounced to
+      // /clear and straight back to this page, which looks like a login that silently failed.
+      if(d&&d.pending){done();return msg(d.reason||"Your account is pending — we'll email you when it's live.");}
       // Honor ?next=. worker.js:170 bounces a signed-out dealer here with the page they wanted, and
       // every app-*.js builds one — this line used to throw it away, so a dealer who clicked a link
       // to their clearance queue landed on the legacy console instead. The regex requires a single

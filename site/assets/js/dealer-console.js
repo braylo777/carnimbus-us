@@ -142,6 +142,9 @@ document.addEventListener("DOMContentLoaded",function(){
     $("ig-engine").value=o.engine||""; $("ig-dt").value=o.drivetrain||""; $("ig-ext").value=o.exterior_color||"";
     $("ig-int").value=o.interior_color||""; $("ig-wheels").value=o.wheels||""; $("ig-price").value=o.price||"";
     $("ig-cost").value=o.unit_cost||""; $("ig-lotdate").value=(o.lot_date||"").slice(0,10);
+    // Cap the picker at today. A future lot date makes daysOnLot negative and holdingSaved
+    // nonsense; stopping it in the picker beats rejecting it after the dealer has filled the sheet.
+    $("ig-lotdate").max=new Date().toISOString().slice(0,10);
     $("ig-desc").value=o.description||""; $("ig-photos").value=(o.photos||[]).join("\n");
     $("ig-thumbs").innerHTML=(o.photos||[]).slice(0,8).map(function(u){return '<img src="'+e(u)+'" alt="">';}).join('');
     var pl=PLACEMENTS.filter(function(p){return String(p.vdp_id)===String(vdp);})[0];
@@ -164,11 +167,13 @@ document.addEventListener("DOMContentLoaded",function(){
         $("dc-demo").style.display=DEALER.is_demo?"":"none";
         return null; }
       LISTINGS=d.listings||[];ARCHIVED=d.archived||[];
-      // Creators earn more for moving aged units, and that math needs a real lot date.
-      // Absent stays absent — we never guess one. This nudge is the only place that asks.
+      // v15: lot date is what the clearance engine runs on. Without it a car cannot be aged, cannot
+      // be recommended for clearance, and its holding cost cannot be shown. Absent stays absent —
+      // we never guess one. New listings now require a date; this nudge covers the existing backlog.
       if(d.no_lot_date>0){ var ln=$s("lotnudge");
         ln.innerHTML="<b>"+d.no_lot_date+" car"+(d.no_lot_date===1?"":"s")+" have no lot date.</b> "+
-          "Creators earn more for moving older units — add dates so yours qualify. Tap a car → Lot date.";
+          "We can't tell you what those are costing you to hold, and they can't show up in Clearance. "+
+          "Tap a car → Lot date.";
         ln.style.display=""; }
       $("dc-store").textContent=DEALER.dealership||"Console";
       if(DEALER.logo){ var lg=$("dc-logo"); lg.src=DEALER.logo; lg.style.display=""; }
@@ -267,11 +272,20 @@ document.addEventListener("DOMContentLoaded",function(){
       source_url:$("ig-url").value.trim(),
       unit_cost:+num("ig-cost")||null,lot_date:$("ig-lotdate").value||null};   // R14: KPI economics   // R7: kept for auto sold-detection
     if(!p.make||!p.model)return($("ig-msg").textContent="Make and model are required.");   // price_mo optional → auto-bucket prices it
+    // v15: lot date is required. The server rejects without it too — this is the friendly copy,
+    // not the enforcement. Asking here keeps the dealer in the sheet instead of bouncing a 422.
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(p.lot_date||"")){
+      $("ig-lotdate").focus();
+      return($("ig-msg").textContent="Lot date is required — when did this unit land? It's on your aging report.");
+    }
     if(EDIT_ID)p.id=EDIT_ID;                                     // R5: same sheet edits an existing car
     $("ig-msg").textContent=EDIT_ID?"Saving…":"Publishing…";
     F("/api/dealer/listing",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(p)})
       .then(function(r){return r.json().catch(function(){return{};});}).then(function(d){
-        if(!d.ok)return($("ig-msg").textContent="Couldn't save — try again.");
+        // Surface the server's own reason when it sends one. A validation rejection the dealer can
+        // act on ("lot date is required") must not read as "try again", which invites the same
+        // failing submit and teaches them the tool is flaky.
+        if(!d.ok)return($("ig-msg").textContent=d.reason||"Couldn't save — try again.");
         // R5: on edit, apply the chosen credit bucket too (locks it as the dealer's choice).
         var done=function(){$("ingest-bg").style.display="none";loadConsole();};
         if(EDIT_ID){ F("/api/dealer/placements",{method:"POST",headers:{"content-type":"application/json"},
